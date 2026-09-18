@@ -1,0 +1,5 @@
+.venv/
+__pycache__/
+*.pyc
+route.html
+orders.json

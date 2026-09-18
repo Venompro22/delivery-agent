@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Delivery Route</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    html, body, #map { height: 100%; margin: 0; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <script>
+    const points = [{"lat": 31.2304, "lng": 121.4737, "label": "🚚 Driver 1 (start)", "type": "driver"}, {"lat": 31.224, "lng": 121.445, "label": "1. Customer C — ETA 15:37", "type": "stop"}, {"lat": 31.229, "lng": 121.475, "label": "2. Customer B — ETA 15:53", "type": "stop"}, {"lat": 31.2397, "lng": 121.4998, "label": "3. Customer A — ETA 16:08", "type": "stop"}];
+    const map = L.map('map').setView([points[0].lat, points[0].lng], 13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap'
+    }).addTo(map);
+
+    const latlngs = [];
+    points.forEach((p, i) => {
+      latlngs.push([p.lat, p.lng]);
+      const color = p.type === 'driver' ? 'green' : 'red';
+      L.circleMarker([p.lat, p.lng], {
+        radius: 9, color: color, fillColor: color, fillOpacity: 0.9
+      }).addTo(map).bindPopup(p.label);
+    });
+
+    // Draw the route line between stops
+    L.polyline(latlngs, { color: 'blue', weight: 3, opacity: 0.7 }).addTo(map);
+    map.fitBounds(latlngs, { padding: [40, 40] });
+  </script>
+</body>
+</html>
