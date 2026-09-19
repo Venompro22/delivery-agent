@@ -10,13 +10,14 @@ from flask import Flask, request, jsonify, render_template_string
 from models import Order, Driver
 from geo import GeoService
 from optimizer import optimize_route, route_summary
+from store import OrderStore
 
 app = Flask(__name__)
 
-# One driver + one in-memory list of orders for now.
+# One driver + a persistent order store (saved to orders.json).
 driver = Driver(name="Driver 1", lat=31.2304, lng=121.4737)
 geo = GeoService(avg_speed_kmh=driver.avg_speed_kmh)
-orders: list[Order] = []
+store = OrderStore()
 
 
 def fmt(epoch):
@@ -32,7 +33,7 @@ def home():
 @app.route("/api/route")
 def api_route():
     """Return the optimized route as JSON for the map/list."""
-    route = optimize_route(driver, orders, geo)
+    route = optimize_route(driver, store.all(), geo)
     summary = route_summary(route)
     data = {
         "driver": {"lat": driver.lat, "lng": driver.lng, "name": driver.name},
@@ -65,7 +66,7 @@ def add_order():
         lng=float(body["lng"]),
         **kw,
     )
-    orders.append(order)
+    store.add(order)
     return jsonify({"ok": True, "id": order.id})
 
 
@@ -75,8 +76,8 @@ PAGE = """<!DOCTYPE html>
 <head>
   <meta charset="utf-8"/>
   <title>Delivery Dashboard</title>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css"/>
+  <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
   <style>
     body { font-family: sans-serif; margin: 0; display: flex; height: 100vh; }
     #sidebar { width: 320px; padding: 16px; background: #111; color: #eee;
@@ -103,7 +104,11 @@ PAGE = """<!DOCTYPE html>
 
   <script>
     const map = L.map('map').setView([31.2304, 121.4737], 13);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+    // Gaode / AutoNavi tiles — work reliably inside China (no VPN needed).
+    L.tileLayer('https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}', {
+      subdomains: ['1', '2', '3', '4'],
+      attribution: '&copy; AutoNavi'
+    }).addTo(map);
     let layer = L.layerGroup().addTo(map);
 
     async function addOrder() {
