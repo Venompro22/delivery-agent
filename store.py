@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import os
-from typing import List
+from typing import List, Optional
 
 from models import Order
 
@@ -36,3 +36,7 @@ class OrderStore:
 
     def all(self) -> List[Order]:
         return list(self.orders)
+
+    def get(self, order_id: str) -> Optional[Order]:
+        """Find one order by its id (or None)."""
+        return next((o for o in self.orders if o.id == order_id), None)

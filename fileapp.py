@@ -7,7 +7,7 @@ from datetime import datetime
 
 from flask import Flask, request, jsonify, render_template_string
 
-from models import Order, Driver
+from models import Order, Driver, OrderStatus
 from geo import GeoService
 from optimizer import optimize_route, route_summary
 from store import OrderStore
@@ -41,6 +41,7 @@ def api_route():
         "stops": [
             {
                 "sequence": o.sequence,
+                "id": o.id,
                 "name": o.customer_name,
                 "lat": o.lat,
                 "lng": o.lng,
@@ -70,6 +71,17 @@ def add_order():
     return jsonify({"ok": True, "id": order.id})
 
 
+@app.route("/api/orders/<order_id>/deliver", methods=["POST"])
+def deliver_order(order_id):
+    """Mark an order as delivered so it leaves the active route."""
+    order = store.get(order_id)
+    if order:
+        order.status = OrderStatus.DELIVERED
+        store.save()
+        return jsonify({"ok": True})
+    return jsonify({"ok": False}), 404
+
+
 # The dashboard HTML (map + form) lives here for now.
 PAGE = """<!DOCTYPE html>
 <html>
@@ -79,24 +91,91 @@ PAGE = """<!DOCTYPE html>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css"/>
   <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
   <style>
-    body { font-family: sans-serif; margin: 0; display: flex; height: 100vh; }
-    #sidebar { width: 320px; padding: 16px; background: #111; color: #eee;
-               overflow-y: auto; }
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, "Segoe UI", sans-serif;
+      margin: 0; display: flex; height: 100vh;
+      background: #0f1115;
+    }
+    #sidebar {
+      width: 340px; padding: 20px; overflow-y: auto;
+      background: #1a1d24; color: #e8eaed;
+      box-shadow: 2px 0 12px rgba(0,0,0,0.3);
+    }
+    .brand {
+      display: flex; align-items: center; gap: 10px;
+      padding-bottom: 16px; border-bottom: 1px solid #2a2e37;
+      margin-bottom: 16px;
+    }
+    .brand .logo {
+      width: 40px; height: 40px; border-radius: 10px;
+      background: linear-gradient(135deg, #2d6cdf, #1f9d55);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px; flex-shrink: 0;
+    }
+    .brand h2 { margin: 0; font-size: 18px; }
+    .subtitle { color: #8a8f98; font-size: 12px; }
+    #sidebar h3 {
+      font-size: 13px; text-transform: uppercase; letter-spacing: 1px;
+      color: #8a8f98; margin: 24px 0 12px;
+    }
+    .stats { display: flex; gap: 10px; margin: 16px 0; }
+    .stat {
+      flex: 1; background: #0f1115; border: 1px solid #2a2e37;
+      border-radius: 10px; padding: 12px; text-align: center;
+    }
+    .stat .num { font-size: 22px; font-weight: 700; color: #2d6cdf; }
+    .stat .label {
+      font-size: 11px; color: #8a8f98; text-transform: uppercase;
+      letter-spacing: 0.5px; margin-top: 2px;
+    }
     #map { flex: 1; }
-    input { width: 100%; padding: 8px; margin: 4px 0; box-sizing: border-box; }
-    button { width: 100%; padding: 10px; background: #2d6cdf; color: white;
-             border: none; border-radius: 6px; cursor: pointer; margin-top: 8px; }
-    .stop { padding: 8px; border-bottom: 1px solid #333; font-size: 14px; }
+    input {
+      width: 100%; padding: 11px; margin: 6px 0;
+      background: #0f1115; border: 1px solid #2a2e37; border-radius: 8px;
+      color: #e8eaed; font-size: 14px;
+    }
+    input:focus { outline: none; border-color: #2d6cdf; }
+    input::placeholder { color: #5a5f68; }
+    button {
+      width: 100%; padding: 12px; background: #2d6cdf; color: white;
+      border: none; border-radius: 8px; cursor: pointer; margin-top: 10px;
+      font-size: 14px; font-weight: 600; transition: background 0.15s;
+    }
+    button:hover { background: #245bc0; }
+    .stop {
+      padding: 12px; margin-bottom: 8px; font-size: 14px;
+      background: #0f1115; border: 1px solid #2a2e37; border-radius: 10px;
+    }
+    .stop .meta { color: #8a8f98; font-size: 12px; margin-top: 2px; }
+    .stop button {
+      width: auto; padding: 6px 12px; font-size: 12px;
+      background: #1f9d55; margin-top: 8px; border-radius: 6px;
+    }
+    .stop button:hover { background: #178045; }
   </style>
 </head>
 <body>
   <div id="sidebar">
-    <h2>🚚 Dashboard</h2>
+    <div class="brand">
+      <div class="logo">🚚</div>
+      <div>
+        <h2>Delivery Agent</h2>
+        <div class="subtitle">Smart routing dashboard</div>
+      </div>
+    </div>
+
     <input id="name" placeholder="Customer name"/>
     <input id="lat" placeholder="Latitude (e.g. 31.23)"/>
     <input id="lng" placeholder="Longitude (e.g. 121.47)"/>
     <input id="promise" placeholder="Promise in minutes (optional)"/>
     <button onclick="addOrder()">Add order</button>
+
+    <div class="stats">
+      <div class="stat"><div class="num" id="stat-stops">0</div><div class="label">Stops</div></div>
+      <div class="stat"><div class="num" id="stat-km">0</div><div class="label">Total km</div></div>
+    </div>
+
     <h3>Route</h3>
     <div id="stops"></div>
   </div>
@@ -123,6 +202,15 @@ PAGE = """<!DOCTYPE html>
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify(body),
       });
+      document.getElementById('name').value = '';
+      document.getElementById('lat').value = '';
+      document.getElementById('lng').value = '';
+      document.getElementById('promise').value = '';
+      refresh();
+    }
+
+    async function deliver(id) {
+      await fetch(`/api/orders/${id}/deliver`, {method: 'POST'});
       refresh();
     }
 
@@ -132,18 +220,28 @@ PAGE = """<!DOCTYPE html>
       layer.clearLayers();
       const pts = [[data.driver.lat, data.driver.lng]];
       L.circleMarker([data.driver.lat, data.driver.lng],
-        {radius: 9, color: 'green'}).addTo(layer).bindPopup('Start');
+        {radius: 9, color: '#1f9d55', fillColor: '#1f9d55', fillOpacity: 1})
+        .addTo(layer).bindPopup('Start');
 
       let html = '';
       data.stops.forEach(s => {
         pts.push([s.lat, s.lng]);
-        L.circleMarker([s.lat, s.lng], {radius: 8, color: 'red'})
+        L.circleMarker([s.lat, s.lng],
+          {radius: 8, color: '#e5484d', fillColor: '#e5484d', fillOpacity: 1})
           .addTo(layer).bindPopup(`${s.sequence}. ${s.name} — ETA ${s.eta}`);
-        html += `<div class="stop">${s.sequence}. ${s.name} — ETA ${s.eta}</div>`;
+        html += `<div class="stop">
+          <b>${s.sequence}. ${s.name}</b>
+          <div class="meta">ETA ${s.eta} &middot; +${s.leg_km} km</div>
+          <button onclick="deliver('${s.id}')">✓ Delivered</button>
+        </div>`;
       });
+
+      document.getElementById('stat-stops').textContent = data.summary.stops;
+      document.getElementById('stat-km').textContent = data.summary.total_km;
       document.getElementById('stops').innerHTML = html;
+
       if (pts.length > 1) {
-        L.polyline(pts, {color: 'blue'}).addTo(layer);
+        L.polyline(pts, {color: '#2d6cdf', weight: 3, opacity: 0.7}).addTo(layer);
         map.fitBounds(pts, {padding: [40, 40]});
       }
     }

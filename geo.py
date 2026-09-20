@@ -51,10 +51,12 @@ class GeoService:
         self, lat1: float, lng1: float, lat2: float, lng2: float
     ) -> Tuple[float, float]:
         """Return (km, minutes) between two points, amap if available else fallback."""
-        if self.use_amap:
-            result = self._amap_distance(lat1, lng1, lat2, lng2)
+        if self.use_ors:
+            result = self._ors_distance(lat1, lng1, lat2, lng2)
             if result is not None:
+                print("✅ ORS (real distance)")
                 return result
+        print("⚠️  estimate (fallback)")
         return self._fallback_distance(lat1, lng1, lat2, lng2)
 
     def _fallback_distance(
