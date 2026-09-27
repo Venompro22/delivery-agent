@@ -13,7 +13,7 @@ class OrderStore:
     def __init__(self, path: str = "orders.json"):
         self.path = path
         self.orders: List[Order] = []
-        self.load()
+        self.load() 
 
     def load(self) -> None:
         """Read orders from the JSON file (if it exists)."""
