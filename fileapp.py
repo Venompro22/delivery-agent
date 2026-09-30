@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import time
 from datetime import datetime
 
@@ -52,6 +53,7 @@ def api_route():
                 "sequence": o.sequence,
                 "id": o.id,
                 "name": o.customer_name,
+                "phone": o.phone,
                 "lat": o.lat,
                 "lng": o.lng,
                 "eta": fmt(o.eta_epoch),
@@ -69,12 +71,14 @@ def api_route():
 def add_order():
     body = request.get_json(silent=True) or {}
 
+    # 1) Required fields must not be empty.
     name = str(body.get("name", "")).strip()
     lat_raw = str(body.get("lat", "")).strip()
     lng_raw = str(body.get("lng", "")).strip()
     if not name or not lat_raw or not lng_raw:
         return bad_request("name, lat and lng are required")
 
+    # 2) lat/lng must be real numbers in a valid range.
     try:
         lat = float(lat_raw)
         lng = float(lng_raw)
@@ -83,6 +87,12 @@ def add_order():
     if not (-90 <= lat <= 90 and -180 <= lng <= 180):
         return bad_request("lat/lng out of range")
 
+    # 3) Phone is optional, but if given it must look like a phone number.
+    phone = str(body.get("phone", "")).strip()
+    if phone and not re.fullmatch(r"[0-9+\-\s()]{6,20}", phone):
+        return bad_request("phone looks invalid")
+
+    # 4) Promise is optional, but if given it must be a positive number.
     kw = {}
     promise_raw = str(body.get("promise_minutes", "")).strip()
     if promise_raw:
@@ -94,7 +104,7 @@ def add_order():
             return bad_request("promise must be positive")
         kw["promised_by"] = time.time() + minutes * 60
 
-    order = Order(customer_name=name, lat=lat, lng=lng, **kw)
+    order = Order(customer_name=name, lat=lat, lng=lng, phone=phone, **kw)
     store.add(order)
     print(f"📦 New order: {order.customer_name} ({order.lat}, {order.lng})", flush=True)
     return jsonify({"ok": True, "id": order.id})
@@ -213,13 +223,25 @@ PAGE = """<!DOCTYPE html>
       background: #1f9d55; margin-top: 8px; border-radius: 6px;
     }
     .stop button:hover { background: #178045; }
-    .stop .actions { display: flex; gap: 6px; margin-top: 8px; }
+    .stop .actions { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
     .stop .actions button, .stop .actions a { margin-top: 0; }
     .stop .nav {
       display: inline-block; padding: 6px 12px; font-size: 12px; font-weight: 600;
       background: #2d6cdf; color: #fff; border-radius: 6px; text-decoration: none;
     }
     .stop .nav:hover { background: #245bc0; }
+    .stop .call { background: #f0a020; color: #0f1115; }
+    .stop .call:hover { background: #d88e14; }
+    .live {
+      display: inline-flex; align-items: center; gap: 5px;
+      font-size: 11px; color: #8a8f98; margin-left: 8px; font-weight: 400;
+      text-transform: none; letter-spacing: 0;
+    }
+    .live .dot {
+      width: 7px; height: 7px; border-radius: 50%; background: #1f9d55;
+      animation: pulse 1.6s infinite;
+    }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.25; } }
     .empty { color: #5a5f68; text-align: center; padding: 20px; font-size: 13px; }
 
     @media (max-width: 768px) {
@@ -241,6 +263,7 @@ PAGE = """<!DOCTYPE html>
     </div>
 
     <input id="name" placeholder="Customer name"/>
+    <input id="phone" placeholder="Phone (optional)" inputmode="tel"/>
     <div class="hint">📍 Tap the map to set the location</div>
     <div class="coords">
       <input id="lat" placeholder="Latitude" inputmode="decimal"/>
@@ -257,7 +280,7 @@ PAGE = """<!DOCTYPE html>
       <div class="stat done"><div class="num" id="stat-done">0</div><div class="label">Done</div></div>
     </div>
 
-    <h3>Route</h3>
+    <h3>Route <span class="live"><span class="dot"></span><span id="updated">live</span></span></h3>
     <div id="stops"></div>
   </div>
   <div id="map"></div>
@@ -269,6 +292,7 @@ PAGE = """<!DOCTYPE html>
     }).addTo(map);
     let layer = L.layerGroup().addTo(map);
     let pickMarker = null;
+    let lastStopCount = -1;
 
     map.on('click', e => {
       const lat = e.latlng.lat.toFixed(5);
@@ -289,7 +313,7 @@ PAGE = """<!DOCTYPE html>
     }
     function clearError() {
       document.getElementById('error').style.display = 'none';
-      ['name','lat','lng','promise'].forEach(id =>
+      ['name','phone','lat','lng','promise'].forEach(id =>
         document.getElementById(id).classList.remove('invalid'));
     }
 
@@ -297,6 +321,7 @@ PAGE = """<!DOCTYPE html>
       clearError();
       const body = {
         name: document.getElementById('name').value.trim(),
+        phone: document.getElementById('phone').value.trim(),
         lat: document.getElementById('lat').value.trim(),
         lng: document.getElementById('lng').value.trim(),
         promise_minutes: document.getElementById('promise').value.trim(),
@@ -318,12 +343,11 @@ PAGE = """<!DOCTYPE html>
       const data = await res.json();
       if (!res.ok) { showError(data.error || 'Could not add order.'); return; }
 
-      ['name','lat','lng','promise'].forEach(id => document.getElementById(id).value = '');
+      ['name','phone','lat','lng','promise'].forEach(id => document.getElementById(id).value = '');
       if (pickMarker) { map.removeLayer(pickMarker); pickMarker = null; }
       refresh();
     }
 
-    // 🧭 Open Amap navigation from the driver to this stop
     function navUrl(s) {
       const name = encodeURIComponent(s.name);
       return `https://uri.amap.com/navigation?to=${s.lng},${s.lat},${name}&mode=car&callnative=1`;
@@ -362,6 +386,7 @@ PAGE = """<!DOCTYPE html>
           <div class="meta">ETA ${s.eta} &middot; +${s.leg_km} km${promise}</div>
           <div class="actions">
             <a class="nav" href="${navUrl(s)}" target="_blank" rel="noopener">🧭 Navigate</a>
+            ${s.phone ? `<a class="nav call" href="tel:${s.phone}">📞 Call</a>` : ''}
             <button onclick="deliver('${s.id}')">✓ Delivered</button>
           </div>
         </div>`;
@@ -376,11 +401,17 @@ PAGE = """<!DOCTYPE html>
 
       if (pts.length > 1) {
         L.polyline(pts, {color: '#2d6cdf', weight: 3, opacity: 0.7}).addTo(layer);
-        map.fitBounds(pts, {padding: [40, 40]});
+        if (data.stops.length !== lastStopCount) {
+          map.fitBounds(pts, {padding: [40, 40]});
+        }
       }
+      lastStopCount = data.stops.length;
+      document.getElementById('updated').textContent =
+        'updated ' + new Date().toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', second: '2-digit'});
     }
 
     refresh();
+    setInterval(() => { if (!document.hidden) refresh(); }, 10000);
   </script>
 </body>
 </html>
