@@ -21,8 +21,9 @@ class Order:
     """A single delivery order."""
     customer_name: str
     lat: float
-    lng: float
+    lng: float 
     phone: str = ""
+    note: str = ""  # address details / instructions for the driver
     # Minutes spent at the customer (hand-off, payment)
     service_minutes: float = 5.0
     # Deliver-by promise as epoch seconds; None means no promise

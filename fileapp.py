@@ -54,6 +54,7 @@ def api_route():
                 "id": o.id,
                 "name": o.customer_name,
                 "phone": o.phone,
+                "note": o.note,
                 "lat": o.lat,
                 "lng": o.lng,
                 "eta": fmt(o.eta_epoch),
@@ -92,7 +93,12 @@ def add_order():
     if phone and not re.fullmatch(r"[0-9+\-\s()]{6,20}", phone):
         return bad_request("phone looks invalid")
 
-    # 4) Promise is optional, but if given it must be a positive number.
+    # 4) Note (address details) is optional, max 200 characters.
+    note = str(body.get("note", "")).strip()
+    if len(note) > 200:
+        return bad_request("note is too long (max 200 characters)")
+
+    # 5) Promise is optional, but if given it must be a positive number.
     kw = {}
     promise_raw = str(body.get("promise_minutes", "")).strip()
     if promise_raw:
@@ -104,7 +110,7 @@ def add_order():
             return bad_request("promise must be positive")
         kw["promised_by"] = time.time() + minutes * 60
 
-    order = Order(customer_name=name, lat=lat, lng=lng, phone=phone, **kw)
+    order = Order(customer_name=name, lat=lat, lng=lng, phone=phone, note=note, **kw)
     store.add(order)
     print(f"📦 New order: {order.customer_name} ({order.lat}, {order.lng})", flush=True)
     return jsonify({"ok": True, "id": order.id})
@@ -119,6 +125,38 @@ def deliver_order(order_id):
         print(f"✅ Delivered: {order.customer_name}", flush=True)
         return jsonify({"ok": True})
     return jsonify({"ok": False}), 404
+
+
+@app.route("/api/track/<order_id>")
+def api_track(order_id):
+    """Public info for ONE order — safe to share with the customer."""
+    order = store.get(order_id)
+    if not order:
+        return jsonify({"ok": False, "error": "order not found"}), 404
+    if order.status == OrderStatus.DELIVERED:
+        return jsonify({"ok": True, "status": "delivered", "name": order.customer_name})
+    if order.status == OrderStatus.CANCELLED:
+        return jsonify({"ok": True, "status": "cancelled", "name": order.customer_name})
+
+    # Where is this order in the current route?
+    route = optimize_route(driver, store.all(), geo)
+    me = next((o for o in route if o.id == order_id), None)
+    return jsonify({
+        "ok": True,
+        "status": "on_the_way",
+        "name": order.customer_name,
+        "position": me.sequence if me else None,
+        "stops_before": (me.sequence - 1) if me else None,
+        "eta": fmt(me.eta_epoch) if me else "--",
+        "promise": fmt(order.promised_by) if order.promised_by else None,
+        "lat": order.lat,
+        "lng": order.lng,
+    })
+
+
+@app.route("/track/<order_id>")
+def track_page(order_id):
+    return render_template_string(TRACK_PAGE, order_id=order_id)
 
 
 PAGE = """<!DOCTYPE html>
@@ -218,6 +256,12 @@ PAGE = """<!DOCTYPE html>
     }
     .stop .meta { color: #8a8f98; font-size: 12px; margin-top: 3px; }
     .stop .promise { color: #f0a020; }
+    .stop .note {
+      color: #c3c7cd; font-size: 12px; margin-top: 6px; padding: 6px 8px;
+      background: #1a1d24; border-left: 3px solid #8a8f98; border-radius: 4px;
+    }
+    .stop .share { background: #6b4fd8; }
+    .stop .share:hover { background: #5a3fc4; }
     .stop button {
       width: auto; padding: 6px 12px; font-size: 12px;
       background: #1f9d55; margin-top: 8px; border-radius: 6px;
@@ -264,6 +308,7 @@ PAGE = """<!DOCTYPE html>
 
     <input id="name" placeholder="Customer name"/>
     <input id="phone" placeholder="Phone (optional)" inputmode="tel"/>
+    <input id="note" placeholder="Address / notes (optional) — e.g. Bldg 5, floor 3" maxlength="200"/>
     <div class="hint">📍 Tap the map to set the location</div>
     <div class="coords">
       <input id="lat" placeholder="Latitude" inputmode="decimal"/>
@@ -313,7 +358,7 @@ PAGE = """<!DOCTYPE html>
     }
     function clearError() {
       document.getElementById('error').style.display = 'none';
-      ['name','phone','lat','lng','promise'].forEach(id =>
+      ['name','phone','note','lat','lng','promise'].forEach(id =>
         document.getElementById(id).classList.remove('invalid'));
     }
 
@@ -322,6 +367,7 @@ PAGE = """<!DOCTYPE html>
       const body = {
         name: document.getElementById('name').value.trim(),
         phone: document.getElementById('phone').value.trim(),
+        note: document.getElementById('note').value.trim(),
         lat: document.getElementById('lat').value.trim(),
         lng: document.getElementById('lng').value.trim(),
         promise_minutes: document.getElementById('promise').value.trim(),
@@ -343,11 +389,30 @@ PAGE = """<!DOCTYPE html>
       const data = await res.json();
       if (!res.ok) { showError(data.error || 'Could not add order.'); return; }
 
-      ['name','phone','lat','lng','promise'].forEach(id => document.getElementById(id).value = '');
+      ['name','phone','note','lat','lng','promise'].forEach(id => document.getElementById(id).value = '');
       if (pickMarker) { map.removeLayer(pickMarker); pickMarker = null; }
       refresh();
     }
 
+    // Make user text safe to put inside HTML (prevents broken pages / injection)
+    function esc(t) {
+      return String(t).replace(/[&<>"']/g, c => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      }[c]));
+    }
+
+    // 🔗 Copy the customer tracking link
+    async function share(id) {
+      const url = `${location.origin}/track/${id}`;
+      try {
+        await navigator.clipboard.writeText(url);
+        alert('Tracking link copied ✅ ' + url);
+      } catch (e) {
+        prompt('Copy this tracking link for the customer:', url);
+      }
+    }
+
+    // 🧭 Open Amap navigation from the driver to this stop
     function navUrl(s) {
       const name = encodeURIComponent(s.name);
       return `https://uri.amap.com/navigation?to=${s.lng},${s.lat},${name}&mode=car&callnative=1`;
@@ -373,7 +438,7 @@ PAGE = """<!DOCTYPE html>
         const color = s.late ? '#e5484d' : '#2d6cdf';
         L.circleMarker([s.lat, s.lng],
           {radius: 8, color: color, fillColor: color, fillOpacity: 1})
-          .addTo(layer).bindPopup(`${s.sequence}. ${s.name} — ETA ${s.eta}`);
+          .addTo(layer).bindPopup(`${s.sequence}. ${esc(s.name)} — ETA ${s.eta}`);
 
         let cls = 'stop';
         if (s.sequence === 1) cls += ' next';
@@ -382,11 +447,13 @@ PAGE = """<!DOCTYPE html>
         const promise = s.promise
           ? ` &middot; <span class="promise">promised ${s.promise}</span>` : '';
         html += `<div class="${cls}">
-          <b>${s.sequence}. ${s.name}</b>${badge}
+          <b>${s.sequence}. ${esc(s.name)}</b>${badge}
           <div class="meta">ETA ${s.eta} &middot; +${s.leg_km} km${promise}</div>
+          ${s.note ? `<div class="note">📝 ${esc(s.note)}</div>` : ''}
           <div class="actions">
             <a class="nav" href="${navUrl(s)}" target="_blank" rel="noopener">🧭 Navigate</a>
             ${s.phone ? `<a class="nav call" href="tel:${s.phone}">📞 Call</a>` : ''}
+            <button class="share" onclick="share('${s.id}')">🔗 Share</button>
             <button onclick="deliver('${s.id}')">✓ Delivered</button>
           </div>
         </div>`;
@@ -412,6 +479,97 @@ PAGE = """<!DOCTYPE html>
 
     refresh();
     setInterval(() => { if (!document.hidden) refresh(); }, 10000);
+  </script>
+</body>
+</html>
+"""
+
+TRACK_PAGE = """<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Track your order</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, "Segoe UI", sans-serif; margin: 0;
+      min-height: 100vh; background: #0f1115; color: #e8eaed;
+      display: flex; align-items: center; justify-content: center; padding: 20px;
+    }
+    .card {
+      width: 100%; max-width: 420px; background: #1a1d24;
+      border: 1px solid #2a2e37; border-radius: 16px; padding: 28px; text-align: center;
+    }
+    .logo {
+      width: 56px; height: 56px; border-radius: 14px; margin: 0 auto 14px;
+      background: linear-gradient(135deg, #2d6cdf, #1f9d55);
+      display: flex; align-items: center; justify-content: center; font-size: 28px;
+    }
+    h1 { font-size: 20px; margin: 0 0 4px; }
+    .sub { color: #8a8f98; font-size: 13px; margin-bottom: 22px; }
+    .big { font-size: 44px; font-weight: 800; color: #2d6cdf; margin: 6px 0; }
+    .label { color: #8a8f98; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; }
+    .row { display: flex; gap: 10px; margin-top: 18px; }
+    .box { flex: 1; background: #0f1115; border: 1px solid #2a2e37; border-radius: 12px; padding: 14px; }
+    .box .v { font-size: 20px; font-weight: 700; margin-top: 4px; }
+    .done { color: #1f9d55; }
+    .foot { color: #5a5f68; font-size: 11px; margin-top: 20px; }
+  </style>
+</head>
+<body>
+  <div class="card" id="card">
+    <div class="logo">🚚</div>
+    <h1>Loading…</h1>
+  </div>
+  <script>
+    const orderId = {{ order_id|tojson }};
+    function esc(t) {
+      return String(t).replace(/[&<>"']/g, c => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      }[c]));
+    }
+    async function load() {
+      const card = document.getElementById('card');
+      try {
+        const res = await fetch('/api/track/' + encodeURIComponent(orderId));
+        const d = await res.json();
+        if (!d.ok) {
+          card.innerHTML = '<div class="logo">❓</div><h1>Order not found</h1>' +
+            '<div class="sub">Please check your tracking link.</div>';
+          return;
+        }
+        if (d.status === 'delivered') {
+          card.innerHTML = `<div class="logo">✅</div><h1 class="done">Delivered!</h1>
+            <div class="sub">Enjoy, ${esc(d.name)} 🎉</div>`;
+          return;
+        }
+        if (d.status === 'cancelled') {
+          card.innerHTML = '<div class="logo">⛔</div><h1>Order cancelled</h1>';
+          return;
+        }
+        const before = d.stops_before === 0
+          ? "You're next! 🎯"
+          : `${d.stops_before} stop${d.stops_before === 1 ? '' : 's'} before you`;
+        card.innerHTML = `
+          <div class="logo">🚚</div>
+          <h1>Hi ${esc(d.name)} 👋</h1>
+          <div class="sub">Your order is on the way</div>
+          <div class="label">Estimated arrival</div>
+          <div class="big">${d.eta}</div>
+          <div class="row">
+            <div class="box"><div class="label">Position</div><div class="v">#${d.position}</div></div>
+            <div class="box"><div class="label">Queue</div><div class="v" style="font-size:14px">${before}</div></div>
+          </div>
+          ${d.promise ? `<div class="sub" style="margin-top:14px">Promised by ${d.promise}</div>` : ''}
+          <div class="foot">Updates automatically · ${new Date().toLocaleTimeString()}</div>`;
+      } catch (e) {
+        card.innerHTML = '<div class="logo">📡</div><h1>Connection problem</h1>' +
+          '<div class="sub">Retrying…</div>';
+      }
+    }
+    load();
+    setInterval(load, 15000);
   </script>
 </body>
 </html>
