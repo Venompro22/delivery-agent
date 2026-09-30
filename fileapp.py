@@ -213,6 +213,13 @@ PAGE = """<!DOCTYPE html>
       background: #1f9d55; margin-top: 8px; border-radius: 6px;
     }
     .stop button:hover { background: #178045; }
+    .stop .actions { display: flex; gap: 6px; margin-top: 8px; }
+    .stop .actions button, .stop .actions a { margin-top: 0; }
+    .stop .nav {
+      display: inline-block; padding: 6px 12px; font-size: 12px; font-weight: 600;
+      background: #2d6cdf; color: #fff; border-radius: 6px; text-decoration: none;
+    }
+    .stop .nav:hover { background: #245bc0; }
     .empty { color: #5a5f68; text-align: center; padding: 20px; font-size: 13px; }
 
     @media (max-width: 768px) {
@@ -316,6 +323,12 @@ PAGE = """<!DOCTYPE html>
       refresh();
     }
 
+    // 🧭 Open Amap navigation from the driver to this stop
+    function navUrl(s) {
+      const name = encodeURIComponent(s.name);
+      return `https://uri.amap.com/navigation?to=${s.lng},${s.lat},${name}&mode=car&callnative=1`;
+    }
+
     async function deliver(id) {
       await fetch(`/api/orders/${id}/deliver`, {method: 'POST'});
       refresh();
@@ -347,7 +360,10 @@ PAGE = """<!DOCTYPE html>
         html += `<div class="${cls}">
           <b>${s.sequence}. ${s.name}</b>${badge}
           <div class="meta">ETA ${s.eta} &middot; +${s.leg_km} km${promise}</div>
-          <button onclick="deliver('${s.id}')">✓ Delivered</button>
+          <div class="actions">
+            <a class="nav" href="${navUrl(s)}" target="_blank" rel="noopener">🧭 Navigate</a>
+            <button onclick="deliver('${s.id}')">✓ Delivered</button>
+          </div>
         </div>`;
       });
 
