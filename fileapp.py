@@ -23,6 +23,10 @@ def fmt(epoch):
     return datetime.fromtimestamp(epoch).strftime("%H:%M") if epoch else "--"
 
 
+def bad_request(message):
+    return jsonify({"ok": False, "error": message}), 400
+
+
 @app.route("/")
 def home():
     return render_template_string(PAGE)
@@ -33,6 +37,7 @@ def api_route():
     route = optimize_route(driver, store.all(), geo)
     summary = route_summary(route)
     late_ids = set(summary.get("late_orders", []))
+    delivered = sum(1 for o in store.all() if o.status == OrderStatus.DELIVERED)
     data = {
         "driver": {"lat": driver.lat, "lng": driver.lng, "name": driver.name},
         "summary": {
@@ -40,6 +45,7 @@ def api_route():
             "total_km": summary["total_km"],
             "finish": fmt(summary.get("finish_epoch")),
             "late_count": len(late_ids),
+            "delivered": delivered,
         },
         "stops": [
             {
@@ -61,17 +67,36 @@ def api_route():
 
 @app.route("/api/orders", methods=["POST"])
 def add_order():
-    body = request.get_json()
+    body = request.get_json(silent=True) or {}
+
+    name = str(body.get("name", "")).strip()
+    lat_raw = str(body.get("lat", "")).strip()
+    lng_raw = str(body.get("lng", "")).strip()
+    if not name or not lat_raw or not lng_raw:
+        return bad_request("name, lat and lng are required")
+
+    try:
+        lat = float(lat_raw)
+        lng = float(lng_raw)
+    except ValueError:
+        return bad_request("lat and lng must be numbers")
+    if not (-90 <= lat <= 90 and -180 <= lng <= 180):
+        return bad_request("lat/lng out of range")
+
     kw = {}
-    if body.get("promise_minutes"):
-        kw["promised_by"] = time.time() + float(body["promise_minutes"]) * 60
-    order = Order(
-        customer_name=body["name"],
-        lat=float(body["lat"]),
-        lng=float(body["lng"]),
-        **kw,
-    )
+    promise_raw = str(body.get("promise_minutes", "")).strip()
+    if promise_raw:
+        try:
+            minutes = float(promise_raw)
+        except ValueError:
+            return bad_request("promise must be a number of minutes")
+        if minutes <= 0:
+            return bad_request("promise must be positive")
+        kw["promised_by"] = time.time() + minutes * 60
+
+    order = Order(customer_name=name, lat=lat, lng=lng, **kw)
     store.add(order)
+    print(f"📦 New order: {order.customer_name} ({order.lat}, {order.lng})", flush=True)
     return jsonify({"ok": True, "id": order.id})
 
 
@@ -81,6 +106,7 @@ def deliver_order(order_id):
     if order:
         order.status = OrderStatus.DELIVERED
         store.save()
+        print(f"✅ Delivered: {order.customer_name}", flush=True)
         return jsonify({"ok": True})
     return jsonify({"ok": False}), 404
 
@@ -120,17 +146,29 @@ PAGE = """<!DOCTYPE html>
       font-size: 13px; text-transform: uppercase; letter-spacing: 1px;
       color: #8a8f98; margin: 24px 0 12px;
     }
-    .stats { display: flex; gap: 8px; margin: 16px 0; }
-    .stat {
-      flex: 1; background: #0f1115; border: 1px solid #2a2e37;
-      border-radius: 10px; padding: 12px 8px; text-align: center;
+    .hint {
+      font-size: 12px; color: #8a8f98; background: #0f1115;
+      border: 1px dashed #2a2e37; border-radius: 8px; padding: 8px 10px; margin-bottom: 6px;
     }
-    .stat .num { font-size: 20px; font-weight: 700; color: #2d6cdf; }
+    .coords { display: flex; gap: 8px; }
+    .coords input { flex: 1; }
+    .error {
+      display: none; color: #ff8a8d; background: rgba(229,72,77,0.12);
+      border: 1px solid #e5484d; border-radius: 8px; padding: 8px 10px;
+      font-size: 13px; margin-top: 8px;
+    }
+    .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 16px 0; }
+    .stat {
+      background: #0f1115; border: 1px solid #2a2e37;
+      border-radius: 10px; padding: 10px 4px; text-align: center;
+    }
+    .stat .num { font-size: 18px; font-weight: 700; color: #2d6cdf; }
+    .stat.done .num { color: #1f9d55; }
     .stat .label {
-      font-size: 10px; color: #8a8f98; text-transform: uppercase;
+      font-size: 9px; color: #8a8f98; text-transform: uppercase;
       letter-spacing: 0.5px; margin-top: 2px;
     }
-    #map { flex: 1; }
+    #map { flex: 1; cursor: crosshair; }
     input {
       width: 100%; padding: 11px; margin: 6px 0;
       background: #0f1115; border: 1px solid #2a2e37; border-radius: 8px;
@@ -138,6 +176,7 @@ PAGE = """<!DOCTYPE html>
     }
     input:focus { outline: none; border-color: #2d6cdf; }
     input::placeholder { color: #5a5f68; }
+    input.invalid { border-color: #e5484d; }
     button {
       width: 100%; padding: 12px; background: #2d6cdf; color: white;
       border: none; border-radius: 8px; cursor: pointer; margin-top: 10px;
@@ -175,6 +214,13 @@ PAGE = """<!DOCTYPE html>
     }
     .stop button:hover { background: #178045; }
     .empty { color: #5a5f68; text-align: center; padding: 20px; font-size: 13px; }
+
+    @media (max-width: 768px) {
+      body { flex-direction: column-reverse; height: auto; min-height: 100vh; }
+      #map { flex: none; height: 50vh; width: 100%; }
+      #sidebar { width: 100%; box-shadow: none; }
+      input, button { font-size: 16px; }
+    }
   </style>
 </head>
 <body>
@@ -188,15 +234,20 @@ PAGE = """<!DOCTYPE html>
     </div>
 
     <input id="name" placeholder="Customer name"/>
-    <input id="lat" placeholder="Latitude (e.g. 31.23)"/>
-    <input id="lng" placeholder="Longitude (e.g. 121.47)"/>
-    <input id="promise" placeholder="Promise in minutes (optional)"/>
+    <div class="hint">📍 Tap the map to set the location</div>
+    <div class="coords">
+      <input id="lat" placeholder="Latitude" inputmode="decimal"/>
+      <input id="lng" placeholder="Longitude" inputmode="decimal"/>
+    </div>
+    <input id="promise" placeholder="Promise in minutes (optional)" inputmode="numeric"/>
     <button onclick="addOrder()">Add order</button>
+    <div id="error" class="error"></div>
 
     <div class="stats">
       <div class="stat"><div class="num" id="stat-stops">0</div><div class="label">Stops</div></div>
-      <div class="stat"><div class="num" id="stat-km">0</div><div class="label">Total km</div></div>
+      <div class="stat"><div class="num" id="stat-km">0</div><div class="label">Km</div></div>
       <div class="stat"><div class="num" id="stat-finish">--</div><div class="label">Finish</div></div>
+      <div class="stat done"><div class="num" id="stat-done">0</div><div class="label">Done</div></div>
     </div>
 
     <h3>Route</h3>
@@ -210,19 +261,58 @@ PAGE = """<!DOCTYPE html>
       subdomains: ['1', '2', '3', '4'], attribution: '&copy; AutoNavi'
     }).addTo(map);
     let layer = L.layerGroup().addTo(map);
+    let pickMarker = null;
+
+    map.on('click', e => {
+      const lat = e.latlng.lat.toFixed(5);
+      const lng = e.latlng.lng.toFixed(5);
+      document.getElementById('lat').value = lat;
+      document.getElementById('lng').value = lng;
+      if (pickMarker) map.removeLayer(pickMarker);
+      pickMarker = L.marker([lat, lng]).addTo(map)
+        .bindPopup('New order here').openPopup();
+      clearError();
+      document.getElementById('name').focus();
+    });
+
+    function showError(msg) {
+      const box = document.getElementById('error');
+      box.textContent = msg;
+      box.style.display = 'block';
+    }
+    function clearError() {
+      document.getElementById('error').style.display = 'none';
+      ['name','lat','lng','promise'].forEach(id =>
+        document.getElementById(id).classList.remove('invalid'));
+    }
 
     async function addOrder() {
+      clearError();
       const body = {
-        name: document.getElementById('name').value,
-        lat: document.getElementById('lat').value,
-        lng: document.getElementById('lng').value,
-        promise_minutes: document.getElementById('promise').value,
+        name: document.getElementById('name').value.trim(),
+        lat: document.getElementById('lat').value.trim(),
+        lng: document.getElementById('lng').value.trim(),
+        promise_minutes: document.getElementById('promise').value.trim(),
       };
-      await fetch('/api/orders', {
+
+      const missing = ['name','lat','lng'].filter(k => !body[k]);
+      if (missing.length) {
+        missing.forEach(id => document.getElementById(id).classList.add('invalid'));
+        showError(missing.includes('lat') || missing.includes('lng')
+          ? 'Tap the map to set the location, and enter a name.'
+          : 'Please enter the customer name.');
+        return;
+      }
+
+      const res = await fetch('/api/orders', {
         method: 'POST', headers: {'Content-Type': 'application/json'},
         body: JSON.stringify(body),
       });
+      const data = await res.json();
+      if (!res.ok) { showError(data.error || 'Could not add order.'); return; }
+
       ['name','lat','lng','promise'].forEach(id => document.getElementById(id).value = '');
+      if (pickMarker) { map.removeLayer(pickMarker); pickMarker = null; }
       refresh();
     }
 
@@ -264,8 +354,9 @@ PAGE = """<!DOCTYPE html>
       document.getElementById('stat-stops').textContent = data.summary.stops;
       document.getElementById('stat-km').textContent = data.summary.total_km;
       document.getElementById('stat-finish').textContent = data.summary.finish;
+      document.getElementById('stat-done').textContent = data.summary.delivered;
       document.getElementById('stops').innerHTML = html ||
-        '<div class="empty">No orders yet.<br>Add one above 👆</div>';
+        '<div class="empty">No orders yet.<br>Tap the map to add one 👆</div>';
 
       if (pts.length > 1) {
         L.polyline(pts, {color: '#2d6cdf', weight: 3, opacity: 0.7}).addTo(layer);
