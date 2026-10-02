@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+import hmac
+import os
 import re
+import secrets
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
+from functools import wraps
 
-from flask import Flask, request, jsonify, render_template_string
+from flask import (Flask, request, jsonify, render_template_string,
+                   session, redirect, url_for)
 
 from models import Order, Driver, OrderStatus
 from geo import GeoService
@@ -14,6 +19,61 @@ from optimizer import optimize_route, route_summary
 from store import OrderStore
 
 app = Flask(__name__)
+
+
+# ---------- Security ----------
+def _load_secret_key() -> str:
+    """Key that signs the login cookie. Kept in a file so logins survive restarts."""
+    if os.environ.get("SECRET_KEY"):
+        return os.environ["SECRET_KEY"]
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".flask_secret")
+    if os.path.exists(path):
+        with open(path) as f:
+            return f.read().strip()
+    key = secrets.token_hex(32)
+    with open(path, "w") as f:
+        f.write(key)
+    return key
+
+
+app.secret_key = _load_secret_key()
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+    PERMANENT_SESSION_LIFETIME=timedelta(days=30),
+)
+
+DASHBOARD_PASSWORD = os.environ.get("DASHBOARD_PASSWORD")
+if not DASHBOARD_PASSWORD:
+    DASHBOARD_PASSWORD = secrets.token_urlsafe(8)
+    print("WARNING: DASHBOARD_PASSWORD is not set.", flush=True)
+    print(f"Temporary password for this run: {DASHBOARD_PASSWORD}", flush=True)
+
+_failed_logins = {}
+
+
+def is_logged_in() -> bool:
+    return session.get("auth") is True
+
+
+def login_required(view):
+    """Pages redirect to /login; API calls get 401."""
+    @wraps(view)
+    def wrapper(*args, **kwargs):
+        if is_logged_in():
+            return view(*args, **kwargs)
+        if request.path.startswith("/api/"):
+            return jsonify({"ok": False, "error": "login required"}), 401
+        return redirect(url_for("login"))
+    return wrapper
+
+
+def too_many_attempts(ip: str) -> bool:
+    count, first = _failed_logins.get(ip, (0, 0.0))
+    if time.time() - first > 600:
+        _failed_logins.pop(ip, None)
+        return False
+    return count >= 5
 
 driver = Driver(name="Driver 1", lat=31.2304, lng=121.4737)
 geo = GeoService(avg_speed_kmh=driver.avg_speed_kmh)
@@ -28,12 +88,46 @@ def bad_request(message):
     return jsonify({"ok": False, "error": message}), 400
 
 
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if is_logged_in():
+        return redirect(url_for("home"))
+    error = None
+    if request.method == "POST":
+        ip = request.headers.get("X-Real-IP") or request.remote_addr or "?"
+        if too_many_attempts(ip):
+            error = "Too many attempts. Wait 10 minutes."
+        else:
+            given = request.form.get("password", "")
+            if hmac.compare_digest(given.encode(), DASHBOARD_PASSWORD.encode()):
+                _failed_logins.pop(ip, None)
+                session.clear()
+                session["auth"] = True
+                session.permanent = True
+                print(f"Login from {ip}", flush=True)
+                return redirect(url_for("home"))
+            count, first = _failed_logins.get(ip, (0, time.time()))
+            _failed_logins[ip] = (count + 1, first)
+            print(f"Wrong password from {ip}", flush=True)
+            time.sleep(1)
+            error = "Wrong password."
+    return render_template_string(LOGIN_PAGE, error=error)
+
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for("login"))
+
+
 @app.route("/")
+@login_required
 def home():
     return render_template_string(PAGE)
 
 
 @app.route("/api/route")
+@login_required
 def api_route():
     route = optimize_route(driver, store.all(), geo)
     summary = route_summary(route)
@@ -69,6 +163,7 @@ def api_route():
 
 
 @app.route("/api/orders", methods=["POST"])
+@login_required
 def add_order():
     body = request.get_json(silent=True) or {}
 
@@ -117,6 +212,7 @@ def add_order():
 
 
 @app.route("/api/orders/<order_id>/deliver", methods=["POST"])
+@login_required
 def deliver_order(order_id):
     order = store.get(order_id)
     if order:
@@ -128,6 +224,7 @@ def deliver_order(order_id):
 
 
 @app.route("/api/driver/location", methods=["POST"])
+@login_required
 def update_driver_location():
     """The driver's phone sends its GPS position; routes start from here."""
     body = request.get_json(silent=True) or {}
@@ -205,6 +302,11 @@ PAGE = """<!DOCTYPE html>
       font-size: 22px; flex-shrink: 0;
     }
     .brand h2 { margin: 0; font-size: 18px; }
+    .logout {
+      margin-left: auto; font-size: 11px; color: #8a8f98; text-decoration: none;
+      border: 1px solid #2a2e37; border-radius: 6px; padding: 5px 8px;
+    }
+    .logout:hover { color: #e8eaed; border-color: #8a8f98; }
     .subtitle { color: #8a8f98; font-size: 12px; }
     #sidebar h3 {
       font-size: 13px; text-transform: uppercase; letter-spacing: 1px;
@@ -328,6 +430,7 @@ PAGE = """<!DOCTYPE html>
         <h2>Delivery Agent</h2>
         <div class="subtitle">Smart routing dashboard</div>
       </div>
+      <a class="logout" href="/logout" title="Log out">Logout</a>
     </div>
 
     <div class="gps-row">
@@ -367,6 +470,12 @@ PAGE = """<!DOCTYPE html>
     }).addTo(map);
     let layer = L.layerGroup().addTo(map);
     let pickMarker = null;
+
+    async function api(url, options) {
+      const res = await fetch(url, options);
+      if (res.status === 401) { location.href = '/login'; throw new Error('login required'); }
+      return res;
+    }
     let lastStopCount = -1;
 
     map.on('click', e => {
@@ -412,7 +521,7 @@ PAGE = """<!DOCTYPE html>
         return;
       }
 
-      const res = await fetch('/api/orders', {
+      const res = await api('/api/orders', {
         method: 'POST', headers: {'Content-Type': 'application/json'},
         body: JSON.stringify(body),
       });
@@ -443,7 +552,7 @@ PAGE = """<!DOCTYPE html>
     async function sendLocation(pos) {
       const lat = pos.coords.latitude, lng = pos.coords.longitude;
       const acc = Math.round(pos.coords.accuracy);
-      const res = await fetch('/api/driver/location', {
+      const res = await api('/api/driver/location', {
         method: 'POST', headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({lat, lng}),
       });
@@ -502,12 +611,12 @@ PAGE = """<!DOCTYPE html>
     }
 
     async function deliver(id) {
-      await fetch(`/api/orders/${id}/deliver`, {method: 'POST'});
+      await api(`/api/orders/${id}/deliver`, {method: 'POST'});
       refresh();
     }
 
     async function refresh() {
-      const res = await fetch('/api/route');
+      const res = await api('/api/route');
       const data = await res.json();
       layer.clearLayers();
       const pts = [[data.driver.lat, data.driver.lng]];
@@ -563,6 +672,52 @@ PAGE = """<!DOCTYPE html>
     refresh();
     setInterval(() => { if (!document.hidden) refresh(); }, 10000);
   </script>
+</body>
+</html>
+"""
+
+LOGIN_PAGE = """<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Login - Delivery Agent</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, "Segoe UI", sans-serif; margin: 0;
+      min-height: 100vh; background: #0f1115; color: #e8eaed;
+      display: flex; align-items: center; justify-content: center; padding: 20px;
+    }
+    .card {
+      width: 100%; max-width: 360px; background: #1a1d24;
+      border: 1px solid #2a2e37; border-radius: 16px; padding: 28px; text-align: center;
+    }
+    h1 { font-size: 20px; margin: 0 0 4px; }
+    .sub { color: #8a8f98; font-size: 13px; margin-bottom: 20px; }
+    input {
+      width: 100%; padding: 12px; margin: 6px 0; font-size: 16px;
+      background: #0f1115; border: 1px solid #2a2e37; border-radius: 8px; color: #e8eaed;
+    }
+    input:focus { outline: none; border-color: #2d6cdf; }
+    button {
+      width: 100%; padding: 12px; margin-top: 10px; font-size: 15px; font-weight: 600;
+      background: #2d6cdf; color: #fff; border: none; border-radius: 8px; cursor: pointer;
+    }
+    .error {
+      color: #ff8a8d; background: rgba(229,72,77,0.12); border: 1px solid #e5484d;
+      border-radius: 8px; padding: 8px 10px; font-size: 13px; margin-bottom: 10px;
+    }
+  </style>
+</head>
+<body>
+  <form class="card" method="post" action="/login">
+    <h1>Delivery Agent</h1>
+    <div class="sub">Enter the dashboard password</div>
+    {% if error %}<div class="error">{{ error }}</div>{% endif %}
+    <input type="password" name="password" placeholder="Password" autofocus required/>
+    <button type="submit">Log in</button>
+  </form>
 </body>
 </html>
 """
