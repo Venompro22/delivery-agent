@@ -46,7 +46,8 @@ class GeoService:
         self.amap_key = amap_key or os.environ.get("AMAP_KEY")
         self.avg_speed_kmh = avg_speed_kmh
         self.use_amap = bool(self.amap_key) and requests is not None
-
+        self.ors_key = os.environ.get("ORS_API_KEY")
+        self.use_ors = bool(self.ors_key) and requests is not None
     def distance_time(
         self, lat1: float, lng1: float, lat2: float, lng2: float
     ) -> Tuple[float, float]:
