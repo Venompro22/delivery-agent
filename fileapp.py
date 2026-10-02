@@ -75,7 +75,11 @@ def too_many_attempts(ip: str) -> bool:
         return False
     return count >= 5
 
-driver = Driver(name="Driver 1", lat=31.2304, lng=121.4737)
+driver = Driver(
+    name="Driver 1",
+    lat=float(os.environ.get("DRIVER_LAT", "31.2304")),
+    lng=float(os.environ.get("DRIVER_LNG", "121.4737")),
+)
 geo = GeoService(avg_speed_kmh=driver.avg_speed_kmh)
 store = OrderStore()
 
@@ -405,6 +409,19 @@ PAGE = """<!DOCTYPE html>
     }
     @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.25; } }
     .empty { color: #5a5f68; text-align: center; padding: 20px; font-size: 13px; }
+    .toast {
+      position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%) translateY(20px);
+      background: #1f9d55; color: #fff; padding: 12px 18px; border-radius: 10px;
+      font-size: 14px; font-weight: 600; box-shadow: 0 6px 20px rgba(0,0,0,0.4);
+      opacity: 0; pointer-events: none; transition: all 0.25s ease; z-index: 9999;
+      max-width: 90vw; text-align: center;
+    }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+    .stop.flash { animation: flash 1.6s ease; }
+    @keyframes flash {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(31,157,85,0); }
+      30% { box-shadow: 0 0 0 4px rgba(31,157,85,0.9); }
+    }
     .gps-row { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; }
     .gps-btn {
       width: auto; flex: 1; margin-top: 0; background: #0f1115;
@@ -450,6 +467,7 @@ PAGE = """<!DOCTYPE html>
     <input id="promise" placeholder="Promise in minutes (optional)" inputmode="numeric"/>
     <button onclick="addOrder()">Add order</button>
     <div id="error" class="error"></div>
+    <div id="toast" class="toast"></div>
 
     <div class="stats">
       <div class="stat"><div class="num" id="stat-stops">0</div><div class="label">Stops</div></div>
@@ -530,7 +548,27 @@ PAGE = """<!DOCTYPE html>
 
       ['name','phone','note','lat','lng','promise'].forEach(id => document.getElementById(id).value = '');
       if (pickMarker) { map.removeLayer(pickMarker); pickMarker = null; }
-      refresh();
+      await refresh();
+      highlightNew(data.id);
+    }
+
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.classList.add('show');
+      clearTimeout(t._timer);
+      t._timer = setTimeout(() => t.classList.remove('show'), 3500);
+    }
+
+    // Tell the user where the new order went, and bring it into view
+    function highlightNew(id) {
+      const card = document.querySelector(`.stop[data-id="${id}"]`);
+      if (!card) { showToast('✅ Order added'); return; }
+      const pos = [...document.querySelectorAll('.stop')].indexOf(card) + 1;
+      showToast(`✅ Order added — stop #${pos} in the route`);
+      card.scrollIntoView({behavior: 'smooth', block: 'center'});
+      card.classList.add('flash');
+      setTimeout(() => card.classList.remove('flash'), 1700);
     }
 
     // ---------- 📍 Driver GPS ----------
@@ -638,7 +676,7 @@ PAGE = """<!DOCTYPE html>
         const badge = s.late ? '<span class="badge">LATE</span>' : '';
         const promise = s.promise
           ? ` &middot; <span class="promise">promised ${s.promise}</span>` : '';
-        html += `<div class="${cls}">
+        html += `<div class="${cls}" data-id="${s.id}">
           <b>${s.sequence}. ${esc(s.name)}</b>${badge}
           <div class="meta">ETA ${s.eta} &middot; +${s.leg_km} km${promise}</div>
           ${s.note ? `<div class="note">📝 ${esc(s.note)}</div>` : ''}
@@ -671,6 +709,11 @@ PAGE = """<!DOCTYPE html>
 
     refresh();
     setInterval(() => { if (!document.hidden) refresh(); }, 10000);
+    if (window.isSecureContext && navigator.permissions) {
+      navigator.permissions.query({name: 'geolocation'})
+        .then(p => { if (p.state === 'granted') locateOnce(); })
+        .catch(() => {});
+    }
   </script>
 </body>
 </html>
