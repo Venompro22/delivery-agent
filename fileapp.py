@@ -127,6 +127,22 @@ def deliver_order(order_id):
     return jsonify({"ok": False}), 404
 
 
+@app.route("/api/driver/location", methods=["POST"])
+def update_driver_location():
+    """The driver's phone sends its GPS position; routes start from here."""
+    body = request.get_json(silent=True) or {}
+    try:
+        lat = float(body.get("lat"))
+        lng = float(body.get("lng"))
+    except (TypeError, ValueError):
+        return bad_request("lat and lng must be numbers")
+    if not (-90 <= lat <= 90 and -180 <= lng <= 180):
+        return bad_request("lat/lng out of range")
+    driver.lat, driver.lng = lat, lng
+    print(f"📍 Driver location: ({lat:.5f}, {lng:.5f})", flush=True)
+    return jsonify({"ok": True, "lat": lat, "lng": lng})
+
+
 @app.route("/api/track/<order_id>")
 def api_track(order_id):
     """Public info for ONE order — safe to share with the customer."""
@@ -287,6 +303,14 @@ PAGE = """<!DOCTYPE html>
     }
     @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.25; } }
     .empty { color: #5a5f68; text-align: center; padding: 20px; font-size: 13px; }
+    .gps-row { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; }
+    .gps-btn {
+      width: auto; flex: 1; margin-top: 0; background: #0f1115;
+      border: 1px solid #1f9d55; color: #1f9d55;
+    }
+    .gps-btn:hover { background: rgba(31,157,85,0.12); }
+    .gps-btn.on { background: #1f9d55; color: #fff; }
+    .gps-status { font-size: 11px; color: #8a8f98; min-height: 14px; margin: -6px 0 10px; }
 
     @media (max-width: 768px) {
       body { flex-direction: column-reverse; height: auto; min-height: 100vh; }
@@ -305,6 +329,12 @@ PAGE = """<!DOCTYPE html>
         <div class="subtitle">Smart routing dashboard</div>
       </div>
     </div>
+
+    <div class="gps-row">
+      <button class="gps-btn" onclick="locateOnce()">📍 Use my location</button>
+      <button class="gps-btn" id="live-btn" onclick="toggleLive()">🛰️ Live GPS: off</button>
+    </div>
+    <div class="gps-status" id="gps-status"></div>
 
     <input id="name" placeholder="Customer name"/>
     <input id="phone" placeholder="Phone (optional)" inputmode="tel"/>
@@ -394,14 +424,68 @@ PAGE = """<!DOCTYPE html>
       refresh();
     }
 
-    // Make user text safe to put inside HTML (prevents broken pages / injection)
+    // ---------- 📍 Driver GPS ----------
+    let watchId = null;
+    let lastSent = 0;
+
+    function gpsStatus(msg) { document.getElementById('gps-status').textContent = msg; }
+
+    function gpsError(err) {
+      if (!window.isSecureContext) {
+        gpsStatus('⚠️ GPS needs HTTPS — open the dashboard with the ngrok link.');
+      } else if (err && err.code === 1) {
+        gpsStatus('⚠️ Location permission denied — allow it in your browser settings.');
+      } else {
+        gpsStatus('⚠️ Could not get your location. Try again outside / with GPS on.');
+      }
+    }
+
+    async function sendLocation(pos) {
+      const lat = pos.coords.latitude, lng = pos.coords.longitude;
+      const acc = Math.round(pos.coords.accuracy);
+      const res = await fetch('/api/driver/location', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({lat, lng}),
+      });
+      if (!res.ok) { gpsStatus('⚠️ Server rejected the location.'); return; }
+      lastSent = Date.now();
+      gpsStatus(`📍 You are here (±${acc} m) · ${new Date().toLocaleTimeString()}`);
+      lastStopCount = -1;
+      refresh();
+    }
+
+    function locateOnce() {
+      if (!navigator.geolocation || !window.isSecureContext) { gpsError(); return; }
+      gpsStatus('Locating…');
+      navigator.geolocation.getCurrentPosition(sendLocation, gpsError,
+        {enableHighAccuracy: true, timeout: 15000, maximumAge: 0});
+    }
+
+    function toggleLive() {
+      const btn = document.getElementById('live-btn');
+      if (watchId !== null) {
+        navigator.geolocation.clearWatch(watchId);
+        watchId = null;
+        btn.classList.remove('on');
+        btn.textContent = '🛰️ Live GPS: off';
+        gpsStatus('Live GPS stopped.');
+        return;
+      }
+      if (!navigator.geolocation || !window.isSecureContext) { gpsError(); return; }
+      btn.classList.add('on');
+      btn.textContent = '🛰️ Live GPS: on';
+      gpsStatus('Starting live GPS…');
+      watchId = navigator.geolocation.watchPosition(pos => {
+        if (Date.now() - lastSent > 20000) sendLocation(pos);
+      }, gpsError, {enableHighAccuracy: true, maximumAge: 10000});
+    }
+
     function esc(t) {
       return String(t).replace(/[&<>"']/g, c => ({
         '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
       }[c]));
     }
 
-    // 🔗 Copy the customer tracking link
     async function share(id) {
       const url = `${location.origin}/track/${id}`;
       try {
@@ -412,7 +496,6 @@ PAGE = """<!DOCTYPE html>
       }
     }
 
-    // 🧭 Open Amap navigation from the driver to this stop
     function navUrl(s) {
       const name = encodeURIComponent(s.name);
       return `https://uri.amap.com/navigation?to=${s.lng},${s.lat},${name}&mode=car&callnative=1`;
@@ -430,7 +513,7 @@ PAGE = """<!DOCTYPE html>
       const pts = [[data.driver.lat, data.driver.lng]];
       L.circleMarker([data.driver.lat, data.driver.lng],
         {radius: 9, color: '#1f9d55', fillColor: '#1f9d55', fillOpacity: 1})
-        .addTo(layer).bindPopup('Start');
+        .addTo(layer).bindPopup('🚚 Driver (start)');
 
       let html = '';
       data.stops.forEach(s => {
