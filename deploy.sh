@@ -4,10 +4,9 @@ set -euo pipefail
 
 SERVER="scr-ysf2006@172.20.10.6"
 REMOTE_DIR="delivery-agent"
-FILES=(fileapp.py geo.py models.py optimizer.py store.py requirements.txt)
-
+FILES=(fileapp.py geo.py models.py optimizer.py store.py order_parser.py requirements.txt)
 echo "🔎 1/4 Checking Python code..."
-python3 -m py_compile fileapp.py geo.py models.py optimizer.py store.py
+python3 -m py_compile fileapp.py geo.py models.py optimizer.py store.py order_parser.py
 echo "🧪    Testing route logic with a fake order..."
 python3 -c "
 from geo import GeoService

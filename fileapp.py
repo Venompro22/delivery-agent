@@ -17,6 +17,7 @@ from models import Order, Driver, OrderStatus
 from geo import GeoService
 from optimizer import optimize_route, route_summary
 from store import OrderStore
+from order_parser import parse_message
 
 app = Flask(__name__)
 
@@ -262,7 +263,16 @@ def edit_order(order_id):
   store.save()
   print(f"✏️ Edited: {order.customer_name}", flush=True)
   return jsonify({"ok": True})
-
+@app.route("/api/parse", methods=["POST"])
+@login_required
+def parse_order_text():
+    body = request.get_json(silent=True) or {}
+    text = str(body.get("text", "")).strip()
+    if not text:
+        return bad_request("text is required")
+    if len(text) > 500:
+        return bad_request("text is too long")
+    return jsonify(parse_message(text))
 @app.route("/api/driver/location", methods=["POST"])
 @login_required
 def update_driver_location():
@@ -415,6 +425,11 @@ PAGE = """<!DOCTYPE html>
     input:focus { outline: none; border-color: #2d6cdf; }
     input::placeholder { color: #5a5f68; }
     input.invalid { border-color: #e5484d; }
+    #paste {
+      width: 100%; padding: 11px; margin: 6px 0; resize: vertical;
+      background: #0f1115; border: 1px dashed #6b4fd8; border-radius: 8px;
+      color: #e8eaed; font-size: 14px; font-family: inherit;
+    }
     button {
       width: 100%; padding: 12px; background: #2d6cdf; color: white;
       border: none; border-radius: 8px; cursor: pointer; margin-top: 10px;
@@ -524,7 +539,8 @@ PAGE = """<!DOCTYPE html>
       <button class="gps-btn" id="live-btn" onclick="toggleLive()">🛰️ Live GPS: off</button>
     </div>
     <div class="gps-status" id="gps-status"></div>
-
+        <textarea id="paste" rows="2" placeholder="📋 Paste a WeChat message here…"></textarea>
+    <button onclick="parseMessage()">✨ Fill from message</button>
     <input id="name" placeholder="Customer name"/>
     <input id="phone" placeholder="Phone (optional)" inputmode="tel"/>
     <input id="note" placeholder="Address / notes (optional) — e.g. Bldg 5, floor 3" maxlength="200"/>
@@ -622,7 +638,29 @@ PAGE = """<!DOCTYPE html>
       await refresh();
       highlightNew(data.id);
     }
+        async function parseMessage() {
+      const text = document.getElementById('paste').value.trim();
+      if (!text) { showError('Paste a message first.'); return; }
+      const res = await api('/api/parse', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({text}),
+      });
+      const d = await res.json();
+      if (!res.ok) { showError(d.error || 'Could not read the message.'); return; }
 
+      if (d.name) document.getElementById('name').value = d.name;
+      if (d.phone) document.getElementById('phone').value = d.phone;
+      if (d.address) document.getElementById('note').value = d.address;
+      if (d.deadline) {
+        const [h, m] = d.deadline.split(':').map(Number);
+        const target = new Date();
+        target.setHours(h, m, 0, 0);
+        const mins = Math.round((target - new Date()) / 60000);
+        if (mins > 0) document.getElementById('promise').value = mins;
+      }
+      clearError();
+      showToast('✨ Filled! Now tap the map to set the location 📍');
+    }
     function showToast(msg) {
       const t = document.getElementById('toast');
       t.textContent = msg;
