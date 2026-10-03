@@ -244,6 +244,35 @@ def update_driver_location():
     return jsonify({"ok": True, "lat": lat, "lng": lng})
 
 
+@app.route("/orders")
+@login_required
+def orders_page():
+    return render_template_string(ORDERS_PAGE)
+
+
+@app.route("/api/orders")
+@login_required
+def list_orders():
+    """Every order, newest first — delivered ones included."""
+    today = datetime.now().date()
+    items = []
+    for o in sorted(store.all(), key=lambda x: x.created_at or 0, reverse=True):
+        created = datetime.fromtimestamp(o.created_at) if o.created_at else None
+        items.append({
+            "id": o.id,
+            "name": o.customer_name,
+            "phone": o.phone,
+            "note": o.note,
+            "lat": o.lat,
+            "lng": o.lng,
+            "status": o.status.value,
+            "created": created.strftime("%m-%d %H:%M") if created else "--",
+            "today": bool(created and created.date() == today),
+            "promise": fmt(o.promised_by) if o.promised_by else None,
+        })
+    return jsonify(items)
+
+
 @app.route("/api/track/<order_id>")
 def api_track(order_id):
     """Public info for ONE order — safe to share with the customer."""
@@ -447,6 +476,7 @@ PAGE = """<!DOCTYPE html>
         <h2>Delivery Agent</h2>
         <div class="subtitle">Smart routing dashboard</div>
       </div>
+      <a class="logout" href="/orders" title="All orders">📋 Orders</a>
       <a class="logout" href="/logout" title="Log out">Logout</a>
     </div>
 
@@ -774,6 +804,170 @@ LOGIN_PAGE = """<!DOCTYPE html>
     <input type="password" name="password" placeholder="Password" autofocus required/>
     <button type="submit">Log in</button>
   </form>
+</body>
+</html>
+"""
+
+ORDERS_PAGE = """<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>All orders - Delivery Agent</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, "Segoe UI", sans-serif; margin: 0;
+      background: #0f1115; color: #e8eaed;
+    }
+    .wrap { max-width: 720px; margin: 0 auto; padding: 20px; }
+    .top { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+    .top h1 { font-size: 20px; margin: 0; flex: 1; }
+    .back {
+      font-size: 13px; color: #8a8f98; text-decoration: none;
+      border: 1px solid #2a2e37; border-radius: 6px; padding: 6px 10px;
+    }
+    .back:hover { color: #e8eaed; border-color: #8a8f98; }
+    .counts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 14px; }
+    .count { background: #1a1d24; border: 1px solid #2a2e37; border-radius: 10px; padding: 10px; text-align: center; }
+    .count .n { font-size: 20px; font-weight: 700; }
+    .count .l { font-size: 10px; color: #8a8f98; text-transform: uppercase; letter-spacing: 0.5px; }
+    .tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+    .tab {
+      padding: 7px 12px; font-size: 13px; border-radius: 20px; cursor: pointer;
+      background: #1a1d24; border: 1px solid #2a2e37; color: #c3c7cd;
+    }
+    .tab.on { background: #2d6cdf; border-color: #2d6cdf; color: #fff; }
+    input {
+      width: 100%; padding: 11px; margin: 4px 0 14px; font-size: 16px;
+      background: #1a1d24; border: 1px solid #2a2e37; border-radius: 8px; color: #e8eaed;
+    }
+    input:focus { outline: none; border-color: #2d6cdf; }
+    .order {
+      background: #1a1d24; border: 1px solid #2a2e37; border-radius: 10px;
+      padding: 12px 14px; margin-bottom: 8px;
+    }
+    .order.delivered { opacity: 0.7; }
+    .row { display: flex; align-items: center; gap: 8px; }
+    .row b { flex: 1; font-size: 15px; }
+    .badge { font-size: 11px; padding: 3px 8px; border-radius: 20px; font-weight: 600; }
+    .badge.pending { background: rgba(240,160,32,0.15); color: #f0a020; }
+    .badge.delivered { background: rgba(31,157,85,0.15); color: #1f9d55; }
+    .badge.cancelled { background: rgba(229,72,77,0.15); color: #e5484d; }
+    .meta { color: #8a8f98; font-size: 12px; margin-top: 4px; }
+    .note {
+      color: #c3c7cd; font-size: 12px; margin-top: 6px; padding: 6px 8px;
+      background: #0f1115; border-left: 3px solid #8a8f98; border-radius: 4px;
+    }
+    .actions { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+    .btn {
+      font-size: 12px; font-weight: 600; padding: 6px 10px; border-radius: 6px;
+      text-decoration: none; color: #fff; background: #2d6cdf; border: none; cursor: pointer;
+    }
+    .btn.call { background: #f0a020; color: #0f1115; }
+    .btn.share { background: #6b4fd8; }
+    .empty { color: #5a5f68; text-align: center; padding: 30px; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <h1>📋 All orders</h1>
+      <a class="back" href="/">← Dashboard</a>
+    </div>
+
+    <div class="counts">
+      <div class="count"><div class="n" id="c-all">0</div><div class="l">Total</div></div>
+      <div class="count"><div class="n" id="c-pending" style="color:#f0a020">0</div><div class="l">Pending</div></div>
+      <div class="count"><div class="n" id="c-delivered" style="color:#1f9d55">0</div><div class="l">Delivered</div></div>
+    </div>
+
+    <div class="tabs" id="tabs">
+      <button class="tab on" data-f="all">All</button>
+      <button class="tab" data-f="pending">🟡 Pending</button>
+      <button class="tab" data-f="delivered">✅ Delivered</button>
+      <button class="tab" data-f="today">📅 Today</button>
+    </div>
+    <input id="q" placeholder="🔍 Search by name, phone or note…"/>
+
+    <div id="list"></div>
+  </div>
+
+  <script>
+    let orders = [];
+    let filter = 'all';
+    let lastSignature = '';
+
+    function esc(t) {
+      return String(t).replace(/[&<>"']/g, c => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      }[c]));
+    }
+
+    function navUrl(o) {
+      return `https://uri.amap.com/navigation?to=${o.lng},${o.lat},${encodeURIComponent(o.name)}&mode=car&callnative=1`;
+    }
+
+    async function share(id) {
+      const url = `${location.origin}/track/${id}`;
+      try { await navigator.clipboard.writeText(url); alert('Tracking link copied ✅ ' + url); }
+      catch (e) { prompt('Copy this tracking link for the customer:', url); }
+    }
+
+    function render() {
+      const q = document.getElementById('q').value.trim().toLowerCase();
+      const shown = orders.filter(o => {
+        if (filter === 'pending' && o.status !== 'pending') return false;
+        if (filter === 'delivered' && o.status !== 'delivered') return false;
+        if (filter === 'today' && !o.today) return false;
+        if (!q) return true;
+        return [o.name, o.phone, o.note].some(v => (v || '').toLowerCase().includes(q));
+      });
+
+      document.getElementById('c-all').textContent = orders.length;
+      document.getElementById('c-pending').textContent = orders.filter(o => o.status === 'pending').length;
+      document.getElementById('c-delivered').textContent = orders.filter(o => o.status === 'delivered').length;
+
+      document.getElementById('list').innerHTML = shown.map(o => `
+        <div class="order ${o.status}">
+          <div class="row">
+            <b>${esc(o.name)}</b>
+            <span class="badge ${o.status}">${o.status}</span>
+          </div>
+          <div class="meta">🕒 ${o.created}${o.promise ? ' · promised ' + o.promise : ''}${o.phone ? ' · 📞 ' + esc(o.phone) : ''}</div>
+          ${o.note ? `<div class="note">📝 ${esc(o.note)}</div>` : ''}
+          <div class="actions">
+            <a class="btn" href="${navUrl(o)}" target="_blank" rel="noopener">🧭 Navigate</a>
+            ${o.phone ? `<a class="btn call" href="tel:${esc(o.phone)}">📞 Call</a>` : ''}
+            <button class="btn share" onclick="share('${o.id}')">🔗 Share</button>
+          </div>
+        </div>`).join('') || '<div class="empty">No orders here.</div>';
+    }
+
+    async function load() {
+      const res = await fetch('/api/orders');
+      if (res.status === 401) { location.href = '/login'; return; }
+      const data = await res.json();
+      const signature = JSON.stringify(data);
+      if (signature === lastSignature) return;   // nothing changed: no redraw
+      lastSignature = signature;
+      orders = data;
+      render();
+    }
+
+    document.getElementById('tabs').addEventListener('click', e => {
+      const btn = e.target.closest('.tab');
+      if (!btn) return;
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('on'));
+      btn.classList.add('on');
+      filter = btn.dataset.f;
+      render();
+    });
+    document.getElementById('q').addEventListener('input', render);
+
+    load();
+    setInterval(() => { if (!document.hidden) load(); }, 15000);
+  </script>
 </body>
 </html>
 """
