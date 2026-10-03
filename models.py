@@ -24,6 +24,7 @@ class Order:
     lng: float 
     phone: str = ""
     note: str = ""  # address details / instructions for the driver
+    delivered_at: Optional[float] = None
     # Minutes spent at the customer (hand-off, payment)
     service_minutes: float = 5.0
     # Deliver-by promise as epoch seconds; None means no promise
