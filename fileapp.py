@@ -356,8 +356,8 @@ PAGE = """<!DOCTYPE html>
     .stop {
       padding: 12px; margin-bottom: 8px; font-size: 14px;
       background: #0f1115; border: 1px solid #2a2e37; border-radius: 10px;
-      animation: slideIn 0.25s ease;
     }
+    .stop.new { animation: slideIn 0.25s ease; }
     @keyframes slideIn {
       from { opacity: 0; transform: translateY(-6px); }
       to { opacity: 1; transform: translateY(0); }
@@ -495,6 +495,8 @@ PAGE = """<!DOCTYPE html>
       return res;
     }
     let lastStopCount = -1;
+    let lastSignature = '';
+    const seenIds = new Set();
 
     map.on('click', e => {
       const lat = e.latlng.lat.toFixed(5);
@@ -656,6 +658,16 @@ PAGE = """<!DOCTYPE html>
     async function refresh() {
       const res = await api('/api/route');
       const data = await res.json();
+
+      // Same data as last time? Only update the clock — no redraw, no flicker.
+      const signature = JSON.stringify([data.driver, data.summary, data.stops]);
+      const stamp = 'updated ' + new Date().toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', second: '2-digit'});
+      if (signature === lastSignature) {
+        document.getElementById('updated').textContent = stamp;
+        return;
+      }
+      lastSignature = signature;
+
       layer.clearLayers();
       const pts = [[data.driver.lat, data.driver.lng]];
       L.circleMarker([data.driver.lat, data.driver.lng],
@@ -671,6 +683,7 @@ PAGE = """<!DOCTYPE html>
           .addTo(layer).bindPopup(`${s.sequence}. ${esc(s.name)} — ETA ${s.eta}`);
 
         let cls = 'stop';
+        if (!seenIds.has(s.id)) { cls += ' new'; seenIds.add(s.id); }
         if (s.sequence === 1) cls += ' next';
         if (s.late) cls += ' late';
         const badge = s.late ? '<span class="badge">LATE</span>' : '';
