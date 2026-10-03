@@ -221,11 +221,47 @@ def deliver_order(order_id):
     order = store.get(order_id)
     if order:
         order.status = OrderStatus.DELIVERED
+        order.delivered_at = time.time()
         store.save()
         print(f"✅ Delivered: {order.customer_name}", flush=True)
         return jsonify({"ok": True})
     return jsonify({"ok": False}), 404
 
+@app.route("/api/orders/<order_id>/cancel", methods=["POST"])
+@login_required
+def cancel_order(order_id):
+    order = store.get(order_id)
+    if not order:
+        return jsonify({"ok": False}), 404
+    if order.status == OrderStatus.DELIVERED:
+        return bad_request("order is already delivered")
+    order.status = OrderStatus.CANCELLED
+    store.save()
+    print(f"❌ Cancelled: {order.customer_name}", flush=True)
+    return jsonify({"ok": True})
+
+@app.route("/api/orders/<order_id>", methods=["PUT"])
+@login_required
+def edit_order(order_id):
+  order = store.get(order_id)
+  if not order:
+    return jsonify({"ok": False}), 404
+  body = request.get_json(silent=True) or {}
+  name = str(body.get("name", order.customer_name)).strip()
+  phone = str(body.get("phone", order.phone)).strip()
+  note = str(body.get("note", order.note)).strip()
+  if not name:
+    return bad_request("name is required")
+  if phone and not re.fullmatch(r"[0-9+\-\s()]{6,20}", phone):
+    return bad_request("phone looks invalid")
+  if len(note) > 200:
+    return bad_request("note is too long (max 200 characters)")
+  order.customer_name = name
+  order.phone = phone
+  order.note = note
+  store.save()
+  print(f"✏️ Edited: {order.customer_name}", flush=True)
+  return jsonify({"ok": True})
 
 @app.route("/api/driver/location", methods=["POST"])
 @login_required
@@ -269,6 +305,9 @@ def list_orders():
             "created": created.strftime("%m-%d %H:%M") if created else "--",
             "today": bool(created and created.date() == today),
             "promise": fmt(o.promised_by) if o.promised_by else None,
+            "delivered": fmt(o.delivered_at) if o.delivered_at else None,
+            "minutes": round((o.delivered_at - o.created_at) / 60)
+                       if o.delivered_at and o.created_at else None,
         })
     return jsonify(items)
 
@@ -866,6 +905,7 @@ ORDERS_PAGE = """<!DOCTYPE html>
     }
     .btn.call { background: #f0a020; color: #0f1115; }
     .btn.share { background: #6b4fd8; }
+    .btn.cancel { background: #e5484d; }
     .empty { color: #5a5f68; text-align: center; padding: 30px; font-size: 13px; }
   </style>
 </head>
@@ -881,7 +921,7 @@ ORDERS_PAGE = """<!DOCTYPE html>
       <div class="count"><div class="n" id="c-pending" style="color:#f0a020">0</div><div class="l">Pending</div></div>
       <div class="count"><div class="n" id="c-delivered" style="color:#1f9d55">0</div><div class="l">Delivered</div></div>
     </div>
-
+    <div class="meta" id="stats" style="margin-bottom:12px"></div>
     <div class="tabs" id="tabs">
       <button class="tab on" data-f="all">All</button>
       <button class="tab" data-f="pending">🟡 Pending</button>
@@ -914,6 +954,32 @@ ORDERS_PAGE = """<!DOCTYPE html>
       catch (e) { prompt('Copy this tracking link for the customer:', url); }
     }
 
+    async function cancelOrder(id) {
+      if (!confirm('Cancel this order?')) return;
+      const res = await fetch(`/api/orders/${id}/cancel`, {method: 'POST'});
+      if (!res.ok) { alert((await res.json()).error || 'Could not cancel'); return; }
+      lastSignature = '';
+      load();
+    }
+
+    async function editOrder(id) {
+      const o = orders.find(x => x.id === id);
+      const name = prompt('Customer name:', o.name);
+      if (name === null) return;
+      const phone = prompt('Phone:', o.phone || '');
+      if (phone === null) return;
+      const note = prompt('Address / notes:', o.note || '');
+      if (note === null) return;
+      const res = await fetch(`/api/orders/${id}`, {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({name, phone, note}),
+      });
+      if (!res.ok) { alert((await res.json()).error || 'Could not save'); return; }
+      lastSignature = '';
+      load();
+    }
+
     function render() {
       const q = document.getElementById('q').value.trim().toLowerCase();
       const shown = orders.filter(o => {
@@ -923,7 +989,11 @@ ORDERS_PAGE = """<!DOCTYPE html>
         if (!q) return true;
         return [o.name, o.phone, o.note].some(v => (v || '').toLowerCase().includes(q));
       });
-
+      const doneToday = orders.filter(o => o.status === 'delivered' && o.today);
+      const times = doneToday.map(o => o.minutes).filter(m => m !== null);
+      const avg = times.length ? Math.round(times.reduce((a, b) => a + b, 0) / times.length) : null;
+      document.getElementById('stats').textContent =
+        `📊 Today: ${doneToday.length} delivered` + (avg !== null ? ` · avg ${avg} min per order` : '');
       document.getElementById('c-all').textContent = orders.length;
       document.getElementById('c-pending').textContent = orders.filter(o => o.status === 'pending').length;
       document.getElementById('c-delivered').textContent = orders.filter(o => o.status === 'delivered').length;
@@ -940,6 +1010,8 @@ ORDERS_PAGE = """<!DOCTYPE html>
             <a class="btn" href="${navUrl(o)}" target="_blank" rel="noopener">🧭 Navigate</a>
             ${o.phone ? `<a class="btn call" href="tel:${esc(o.phone)}">📞 Call</a>` : ''}
             <button class="btn share" onclick="share('${o.id}')">🔗 Share</button>
+            ${o.status === 'pending' ? `<button class="btn" onclick="editOrder('${o.id}')">✏️ Edit</button>
+            <button class="btn cancel" onclick="cancelOrder('${o.id}')">✕ Cancel</button>` : ''}
           </div>
         </div>`).join('') || '<div class="empty">No orders here.</div>';
     }
