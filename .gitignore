@@ -4,3 +4,5 @@ __pycache__/
 route.html
 orders.json
 .flask_secret
+.DS_Store
+.vscode/
