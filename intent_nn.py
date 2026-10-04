@@ -74,7 +74,7 @@ def build_vocab(texts):
     chars = set()
     for text in texts:
         for ch in text:
-            if ch != " ":
+            if ch != " " and not ch.isdigit():   # digits (phones, addresses) don't tell the intent
                 chars.add(ch)
     return sorted(chars)
 
@@ -101,26 +101,18 @@ def predict_intent(text):
     return INTENTS[best], float(p[best])
 
 
-if __name__ == "__main__":
-    # ✂️ Split: 80% to learn from, 20% kept hidden for an honest exam
-    np.random.seed(42)
-    order = np.random.permutation(len(DATA))
-    cut = int(len(DATA) * 0.8)
-    train = [DATA[i] for i in order[:cut]]
-    test = [DATA[i] for i in order[cut:]]
-
-    texts = [t for t, _ in train]
+def train(data, epochs=501, lr=0.5, verbose=True):
+    """Learn weights from (message, label) pairs. Returns W, b, vocab."""
+    texts = [t for t, _ in data]
     vocab = build_vocab(texts)
+    X = np.array([text_to_vector(t, vocab) for t in texts])
+    y = np.array([label for _, label in data])
 
-    X = np.array([text_to_vector(text, vocab) for text in texts])
-    y = np.array([label for _, label in train])
     W = np.random.randn(len(vocab), len(LABELS)) * 0.01
     b = np.zeros(len(LABELS))
-
     Y = np.eye(len(LABELS))[y]
-    lr = 0.5
 
-    for epoch in range(501):
+    for epoch in range(epochs):
         probs = softmax(X @ W + b)
         loss = -np.mean(np.log(probs[range(len(y)), y] + 1e-9))
 
@@ -131,16 +123,30 @@ if __name__ == "__main__":
         W -= lr * dW
         b -= lr * db
 
-        if epoch % 100 == 0:
+        if verbose and epoch % 100 == 0:
             acc = (probs.argmax(axis=1) == y).mean()
             print(f"epoch {epoch:3d} | loss {loss:.3f} | accuracy {acc:.0%}")
+    return W, b, vocab
 
-    # 🧪 Honest exam: messages the model NEVER saw while learning
-    Xt = np.array([text_to_vector(t, vocab) for t, _ in test])
-    yt = np.array([label for _, label in test])
+
+if __name__ == "__main__":
+    # ✂️ 1) Honest exam: learn on 80%, test on 20% the model never saw
+    np.random.seed(42)
+    order = np.random.permutation(len(DATA))
+    cut = int(len(DATA) * 0.8)
+    train_set = [DATA[i] for i in order[:cut]]
+    test_set = [DATA[i] for i in order[cut:]]
+
+    W, b, vocab = train(train_set)
+    Xt = np.array([text_to_vector(t, vocab) for t, _ in test_set])
+    yt = np.array([label for _, label in test_set])
     test_acc = (softmax(Xt @ W + b).argmax(axis=1) == yt).mean()
-    print(f"\n🧪 Train: {len(train)} examples · Test: {len(test)} hidden examples")
+    print(f"\n🧪 Train: {len(train_set)} · Test: {len(test_set)} hidden")
     print(f"🧪 Accuracy on hidden test set: {test_acc:.0%}")
+
+    # 🎓 2) Final model: now learn from ALL the data
+    W, b, vocab = train(DATA, verbose=False)
+    print(f"🎓 Final model trained on all {len(DATA)} examples")
 
     print("\n🎯 Testing on NEW messages:")
     new_messages = [
@@ -152,6 +158,7 @@ if __name__ == "__main__":
         "已经送到了",
         "堵车 晚点到",
         "客户电话不接",
+        "我的水在哪里 15800002222",
     ]
     for msg in new_messages:
         v = np.array(text_to_vector(msg, vocab))
@@ -159,5 +166,5 @@ if __name__ == "__main__":
         best = p.argmax()
         print(f"{LABELS[best]:<14} {p[best]:.0%}  ←  {msg}")
 
-    np.savez("intent_model.npz", W=W, b=b, vocab=vocab)
+    np.savez(MODEL_PATH, W=W, b=b, vocab=vocab)
     print("\n💾 Model saved to intent_model.npz")
