@@ -18,6 +18,7 @@ from geo import GeoService
 from optimizer import optimize_route, route_summary
 from store import OrderStore
 from order_parser import parse_message
+from agent import handle_message
 
 app = Flask(__name__)
 
@@ -273,6 +274,29 @@ def parse_order_text():
     if len(text) > 500:
         return bad_request("text is too long")
     return jsonify(parse_message(text))
+@app.route("/api/agent", methods=["POST"])
+@login_required
+def agent_message():
+    body = request.get_json(silent=True) or {}
+    text = str(body.get("text", "")).strip()
+    if not text:
+        return bad_request("text is required")
+    if len(text) > 500:
+        return bad_request("text is too long")
+
+    orders = [{"id": o.id, "name": o.customer_name, "phone": o.phone,
+               "status": o.status.value} for o in store.all()]
+    result = handle_message(text, orders)
+
+    if result.get("order_id"):
+        order = store.get(result["order_id"])
+        result["name"] = order.customer_name
+        if result["action"] == "reply":
+            route = optimize_route(driver, store.all(), geo)
+            me = next((r for r in route if r.id == order.id), None)
+            if me:
+                result["reply"] = f"您好{order.customer_name}，您的订单预计 {fmt(me.eta_epoch)} 送达 🚚"
+    return jsonify(result)
 @app.route("/api/driver/location", methods=["POST"])
 @login_required
 def update_driver_location():
@@ -540,7 +564,7 @@ PAGE = """<!DOCTYPE html>
     </div>
     <div class="gps-status" id="gps-status"></div>
         <textarea id="paste" rows="2" placeholder="📋 Paste a WeChat message here…"></textarea>
-    <button onclick="parseMessage()">✨ Fill from message</button>
+       <button onclick="handleMessage()">🤖 Handle message</button>
     <input id="name" placeholder="Customer name"/>
     <input id="phone" placeholder="Phone (optional)" inputmode="tel"/>
     <input id="note" placeholder="Address / notes (optional) — e.g. Bldg 5, floor 3" maxlength="200"/>
@@ -661,6 +685,43 @@ PAGE = """<!DOCTYPE html>
       clearError();
       showToast('✨ Filled! Now tap the map to set the location 📍');
     }
+    async function handleMessage() {
+      const text = document.getElementById('paste').value.trim();
+      if (!text) { showError('Paste a message first.'); return; }
+      const res = await api('/api/agent', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({text}),
+      });
+      const r = await res.json();
+      if (!res.ok) { showError(r.error || 'The agent could not read the message.'); return; }
+      clearError();
+      const who = r.sender === 'driver' ? '🚚 Driver' : '👤 Customer';
+
+      if (r.action === 'fill_form') {
+        await parseMessage();
+      } else if (r.action === 'cancel') {
+        if (!confirm(`${who}: cancel the order of ${r.name}?`)) return;
+        await api(`/api/orders/${r.order_id}/cancel`, {method: 'POST'});
+        await refresh();
+        prompt('✅ Cancelled. Copy this reply for the customer:', r.reply);
+      } else if (r.action === 'reply') {
+        prompt(`${who} ${r.name} is asking about the order. Copy this reply:`, r.reply);
+      } else if (r.action === 'deliver') {
+        if (!confirm(`${who} says ${r.name}'s order is delivered. Mark it as delivered?`)) return;
+        await api(`/api/orders/${r.order_id}/deliver`, {method: 'POST'});
+        await refresh();
+        showToast(`✅ ${r.name}'s order marked as delivered`);
+      } else if (r.action === 'notify_delay') {
+        prompt(`${who} is running late ⏰ Copy this message for waiting customers:`, r.reply);
+      } else if (r.action === 'call_customer') {
+        if (confirm(`${who}: ${r.name} is not home 🏠 Call ${r.phone} now?`)) {
+          location.href = `tel:${r.phone}`;
+        }
+      } else {
+        showError(`🙋 I'm not sure (${r.reason}) — please check the message yourself.`);
+      }
+    }
+
     function showToast(msg) {
       const t = document.getElementById('toast');
       t.textContent = msg;
