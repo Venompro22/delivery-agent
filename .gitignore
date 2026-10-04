@@ -6,3 +6,5 @@ orders.json
 .flask_secret
 .DS_Store
 .vscode/
+.venv-ml/
+mini_gpt.pt
