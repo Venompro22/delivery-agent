@@ -8,3 +8,5 @@ orders.json
 .vscode/
 .venv-ml/
 mini_gpt.pt
+lora_intent/
+qwen_head.npz

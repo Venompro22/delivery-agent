@@ -65,6 +65,14 @@ DATA = [
     ("按门铃没人应", 5),
     ("地址找不到人", 5),
     ("打了三次电话都没接", 5),
+     # 🚫 negation examples (error analysis: models confused "don't deliver" with "delivered")
+    ("别送过来了", 1),
+    ("不要送了 我不在", 1),
+    ("水先别送 谢谢", 1),
+    ("我还没拿到水", 2),
+    ("怎么还没看到人", 2),
+    ("东西没到啊", 2),
+    ("没人来送啊 等很久了", 2),
 ]
 LABELS = ["📦 new order", "❌ cancel", "🤔 question",
           "✅ delivered", "⏰ delay", "🏠 not home"]
