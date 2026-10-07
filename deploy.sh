@@ -4,7 +4,7 @@ set -euo pipefail
 
 SERVER="scr-ysf2006@172.20.10.6"
 REMOTE_DIR="delivery-agent"
-FILES=(fileapp.py geo.py models.py optimizer.py store.py order_parser.py intent_nn.py intent_model.npz agent.py requirements.txt)
+FILES=(eval_set.py fileapp.py geo.py models.py optimizer.py store.py order_parser.py intent_nn.py intent_model.npz agent.py requirements.txt)
 echo "🔎 1/4 Checking Python code..."
 python3 -m py_compile fileapp.py geo.py models.py optimizer.py store.py order_parser.py intent_nn.py agent.py
 echo "🧪    Testing route logic with a fake order..."

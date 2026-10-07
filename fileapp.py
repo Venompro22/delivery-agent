@@ -20,7 +20,8 @@ from optimizer import optimize_route, route_summary
 from store import OrderStore
 from order_parser import parse_message
 from agent import handle_message
-from intent_nn import INTENTS
+import numpy as np
+from intent_nn import INTENTS, DATA, MODEL_PATH, predict_intent, train, load_feedback
 
 app = Flask(__name__)
 
@@ -289,6 +290,7 @@ def agent_message():
     orders = [{"id": o.id, "name": o.customer_name, "phone": o.phone,
                "status": o.status.value} for o in store.all()]
     result = handle_message(text, orders)
+    result["intent"], result["confidence"] = predict_intent(text)
 
     if result.get("order_id"):
         order = store.get(result["order_id"])
@@ -321,6 +323,29 @@ def save_feedback():
         count = sum(1 for _ in f)
     print(f"🎡 Feedback #{count}: {intent} ← {text}", flush=True)
     return jsonify({"ok": True, "count": count})
+
+
+def retrain_model():
+    """🧠 Re-learn the intent model from built-in DATA + every feedback example."""
+    examples = DATA + load_feedback()
+    W, b, vocab = train(examples, verbose=False)
+    np.savez(MODEL_PATH, W=W, b=b, vocab=vocab)
+    return len(examples), len(examples) - len(DATA)
+
+
+try:   # on every start/deploy, include the feedback collected on this server
+    _n, _fb = retrain_model()
+    print(f"🧠 Intent model ready: {_n} examples ({_fb} from feedback)", flush=True)
+except Exception as e:
+    print(f"⚠️ Could not retrain at start: {e}", flush=True)
+
+
+@app.route("/api/retrain", methods=["POST"])
+@login_required
+def retrain():
+    total, from_feedback = retrain_model()
+    print(f"🧠 Retrained: {total} examples ({from_feedback} from feedback)", flush=True)
+    return jsonify({"ok": True, "examples": total, "from_feedback": from_feedback})
 
 
 @app.route("/api/driver/location", methods=["POST"])
@@ -483,6 +508,43 @@ PAGE = """<!DOCTYPE html>
     .fb button { width: auto; margin: 0; padding: 5px 9px; font-size: 12px; }
     .fb .fb-ok { background: #1f9d55; }
     .fb .fb-fix { background: #f0a020; color: #0f1115; }
+    .ai-card {
+      background: #0f1115; border: 1px solid #6b4fd8; border-radius: 12px;
+      padding: 12px; margin-top: 8px; font-size: 13px; color: #e8eaed;
+      animation: slideIn 0.25s ease;
+    }
+    .ai-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .ai-who { font-size: 11px; padding: 3px 8px; border-radius: 20px; background: #1a1d24; color: #c3c7cd; }
+    .ai-intent { font-weight: 700; font-size: 14px; }
+    .ai-conf { margin-left: auto; font-size: 11px; color: #8a8f98; }
+    .ai-bar { height: 4px; background: #1a1d24; border-radius: 4px; margin: 8px 0; overflow: hidden; }
+    .ai-bar div { height: 100%; border-radius: 4px; }
+    .ai-msg { color: #c3c7cd; background: #1a1d24; border-left: 3px solid #6b4fd8;
+              padding: 6px 8px; border-radius: 4px; margin: 6px 0; }
+    .ai-what { margin: 8px 0; }
+    .ai-reply { width: 100%; padding: 8px; margin: 6px 0; font-size: 13px; resize: none;
+                background: #1a1d24; color: #e8eaed; border: 1px dashed #1f9d55; border-radius: 6px; }
+    .ai-actions, .ai-learn, .ai-fix { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+    .ai-actions button, .ai-learn button, .ai-fix button, .ai-actions a {
+      width: auto; margin: 0; padding: 7px 11px; font-size: 12px; border-radius: 6px; text-decoration: none;
+    }
+    .ai-actions a { background: #f0a020; color: #0f1115; font-weight: 600; }
+    .ai-learn { margin-top: 10px; padding-top: 8px; border-top: 1px solid #2a2e37; color: #8a8f98; font-size: 12px; }
+    .ai-learn .ok { background: #1f9d55; }
+    .ai-learn .fix { background: #f0a020; color: #0f1115; }
+    .ai-fix { margin-top: 6px; }
+    .ai-fix button { background: #1a1d24; border: 1px solid #2a2e37; color: #e8eaed; }
+    .ai-fix button:hover { border-color: #6b4fd8; }
+    .ai-human { color: #f0a020; }
+    #ai-history { margin-top: 10px; }
+    .hist-head { display: flex; align-items: center; gap: 8px; font-size: 11px; color: #8a8f98;
+                 text-transform: uppercase; letter-spacing: 1px; margin: 4px 0; }
+    .hist-head button { width: auto; margin: 0 0 0 auto; padding: 5px 10px; font-size: 11px;
+                        background: #6b4fd8; text-transform: none; letter-spacing: 0; }
+    .hist-row { display: flex; gap: 6px; font-size: 12px; color: #c3c7cd; padding: 4px 0;
+                border-bottom: 1px solid #1a1d24; white-space: nowrap; overflow: hidden; }
+    .hist-row .t { color: #5a5f68; }
+    .hist-row .m { overflow: hidden; text-overflow: ellipsis; }
     #paste {
       width: 100%; padding: 11px; margin: 6px 0; resize: vertical;
       background: #0f1115; border: 1px dashed #6b4fd8; border-radius: 8px;
@@ -599,7 +661,8 @@ PAGE = """<!DOCTYPE html>
     <div class="gps-status" id="gps-status"></div>
         <textarea id="paste" rows="2" placeholder="📋 Paste a WeChat message here…"></textarea>
        <button onclick="handleMessage()">🤖 Handle message</button>
-    <div id="fb" class="fb"></div>
+    <div id="fb"></div>
+    <div id="ai-history"></div>
     <input id="name" placeholder="Customer name"/>
     <input id="phone" placeholder="Phone (optional)" inputmode="tel"/>
     <input id="note" placeholder="Address / notes (optional) — e.g. Bldg 5, floor 3" maxlength="200"/>
@@ -721,40 +784,121 @@ PAGE = """<!DOCTYPE html>
       clearError();
       showToast('✨ Filled! Now tap the map to set the location 📍');
     }
-    // ---------- 🎡 Data flywheel ----------
-    const ACTION_INTENT = {fill_form: 'new_order', cancel: 'cancel', reply: 'question',
-                           deliver: 'delivered', notify_delay: 'delay', call_customer: 'not_home'};
-    const INTENT_NAMES = {new_order: '📦 new order', cancel: '❌ cancel', question: '🤔 question',
-                          delivered: '✅ delivered', delay: '⏰ delay', not_home: '🏠 not home'};
-    let lastMsg = null;
+    // ---------- 🤖 AI Inbox ----------
+    const INTENT_NAMES = {new_order: '📦 New order', cancel: '❌ Cancel', question: '🤔 Question',
+                          delivered: '✅ Delivered', delay: '⏰ Delay', not_home: '🏠 Not home'};
+    const aiHistory = [];
+    let current = null;     // the message on the card right now
 
-    function showFeedback(text, intent) {
-      lastMsg = {text, intent};
-      const fb = document.getElementById('fb');
-      fb.innerHTML = `🤖 I understood: <b>${INTENT_NAMES[intent] || intent}</b>
-        <button class="fb-ok" onclick="sendFeedback(true)">✅ Right</button>
-        <button class="fb-fix" onclick="sendFeedback(false)">✏️ Fix</button>`;
-      fb.style.display = 'flex';
+    function confColor(c) { return c >= 0.8 ? '#1f9d55' : c >= 0.6 ? '#f0a020' : '#e5484d'; }
+
+    async function copyText(t) {
+      try { await navigator.clipboard.writeText(t); showToast('📋 Copied — paste it in WeChat'); }
+      catch (e) { prompt('Copy this:', t); }
     }
 
-    async function sendFeedback(isRight) {
-      if (!lastMsg) return;
-      let intent = lastMsg.intent;
-      if (!isRight) {
-        const keys = Object.keys(INTENT_NAMES);
-        const menu = keys.map((k, i) => `${i + 1}. ${INTENT_NAMES[k]}`).join('\\n');
-        const n = parseInt(prompt('What did the message really mean?\\n' + menu), 10);
-        if (!(n >= 1 && n <= keys.length)) return;
-        intent = keys[n - 1];
+    function actionHtml(r) {
+      const name = esc(r.name || '');
+      const reply = r.reply ? `<textarea class="ai-reply" rows="2" readonly>${esc(r.reply)}</textarea>` : '';
+      const copy = r.reply ? `<button onclick="copyText(current.r.reply)">📋 Copy reply</button>` : '';
+      switch (r.action) {
+        case 'fill_form':
+          return `<div class="ai-what">📦 Order form filled — <b>tap the map</b> to set the location 📍</div>`;
+        case 'cancel':
+          return `<div class="ai-what">❌ Wants to cancel <b>${name}</b>'s order</div>
+            <div class="ai-actions"><button style="background:#e5484d" onclick="doAction('cancel')">✕ Cancel the order</button></div>`;
+        case 'reply':
+          return `<div class="ai-what">🤔 <b>${name}</b> is asking about the order</div>${reply}
+            <div class="ai-actions">${copy}</div>`;
+        case 'deliver':
+          return `<div class="ai-what">✅ Driver delivered <b>${name}</b>'s order</div>
+            <div class="ai-actions"><button style="background:#1f9d55" onclick="doAction('deliver')">✓ Mark as delivered</button></div>`;
+        case 'notify_delay':
+          return `<div class="ai-what">⏰ The driver is running late</div>${reply}
+            <div class="ai-actions">${copy}</div>`;
+        case 'call_customer':
+          return `<div class="ai-what">🏠 <b>${name}</b> is not home</div>
+            <div class="ai-actions"><a href="tel:${esc(r.phone)}">📞 Call ${esc(r.phone)}</a></div>`;
+        default:
+          return `<div class="ai-what ai-human">🙋 Not sure (${esc(r.reason || '')}) — please check it yourself.</div>`;
       }
+    }
+
+    function renderCard() {
+      const {text, r} = current;
+      const pct = Math.round((r.confidence || 0) * 100);
+      const who = r.sender === 'driver' ? '🚚 Driver' : '👤 Customer';
+      document.getElementById('fb').innerHTML = `<div class="ai-card">
+        <div class="ai-head">
+          <span class="ai-who">${who}</span>
+          <span class="ai-intent">${INTENT_NAMES[r.intent] || r.intent}</span>
+          <span class="ai-conf">${pct}% sure</span>
+        </div>
+        <div class="ai-bar"><div style="width:${pct}%;background:${confColor(r.confidence || 0)}"></div></div>
+        <div class="ai-msg">💬 ${esc(text)}</div>
+        ${actionHtml(r)}
+        <div class="ai-learn" id="ai-learn">Was I right?
+          <button class="ok" onclick="teach(current.r.intent)">✅ Right</button>
+          <button class="fix" onclick="showFix()">✏️ Fix</button>
+        </div>
+      </div>`;
+    }
+
+    function showFix() {
+      document.getElementById('ai-learn').innerHTML = 'It means: <div class="ai-fix">' +
+        Object.keys(INTENT_NAMES).map(k =>
+          `<button onclick="teach('${k}')">${INTENT_NAMES[k]}</button>`).join('') + '</div>';
+    }
+
+    async function teach(intent) {
+      if (!current) return;
       const res = await api('/api/feedback', {
         method: 'POST', headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({text: lastMsg.text, intent}),
+        body: JSON.stringify({text: current.text, intent}),
       });
       const d = await res.json();
-      document.getElementById('fb').style.display = 'none';
-      lastMsg = null;
-      showToast(res.ok ? `📝 Saved! ${d.count} examples collected 🎡` : (d.error || 'Could not save'));
+      if (!res.ok) { showError(d.error || 'Could not save'); return; }
+      current.status = intent === current.r.intent ? '✅' : '✏️';
+      document.getElementById('ai-learn').innerHTML =
+        `📝 Learned! ${d.count} examples collected 🎡 — press <b>🧠 Retrain AI</b> below to use them`;
+      renderHistory();
+    }
+
+    async function doAction(kind) {
+      const {r} = current;
+      const res = await api(`/api/orders/${r.order_id}/${kind}`, {method: 'POST'});
+      if (!res.ok) { showError((await res.json()).error || 'Action failed'); return; }
+      await refresh();
+      showToast(kind === 'cancel' ? `✕ ${r.name}'s order cancelled` : `✅ ${r.name}'s order delivered`);
+      current.status = kind === 'cancel' ? '✕' : '✓';
+      renderHistory();
+      if (kind === 'cancel' && r.reply) {
+        document.querySelector('#fb .ai-actions').innerHTML =
+          `<textarea class="ai-reply" rows="2" readonly>${esc(r.reply)}</textarea>
+           <button onclick="copyText(current.r.reply)">📋 Copy reply</button>`;
+      } else {
+        document.querySelector('#fb .ai-actions').innerHTML = '<span>✔ Done</span>';
+      }
+    }
+
+    function renderHistory() {
+      const rows = aiHistory.slice(0, 8).map(h => {
+        const who = h.r.sender === 'driver' ? '🚚' : '👤';
+        return `<div class="hist-row"><span class="t">${h.time}</span><span>${who}</span>
+          <span>${INTENT_NAMES[h.r.intent] || h.r.intent}</span><span>${h.status || ''}</span>
+          <span class="m">${esc(h.text)}</span></div>`;
+      }).join('');
+      document.getElementById('ai-history').innerHTML = `<div class="hist-head">🤖 AI inbox
+        <button onclick="retrainAI()">🧠 Retrain AI</button></div>${rows ||
+        '<div class="hist-row"><span class="t">Paste a WeChat message above 👆</span></div>'}`;
+    }
+
+    async function retrainAI() {
+      showToast('🧠 Training…');
+      const res = await api('/api/retrain', {method: 'POST'});
+      const d = await res.json();
+      showToast(res.ok ? `🧠 AI retrained on ${d.examples} examples (${d.from_feedback} taught by you) 🎉`
+                       : (d.error || 'Retrain failed'));
     }
 
     async function handleMessage() {
@@ -767,34 +911,14 @@ PAGE = """<!DOCTYPE html>
       const r = await res.json();
       if (!res.ok) { showError(r.error || 'The agent could not read the message.'); return; }
       clearError();
-      const who = r.sender === 'driver' ? '🚚 Driver' : '👤 Customer';
-      const understood = r.action === 'ask_human' ? r.intent : ACTION_INTENT[r.action];
-      if (understood) showFeedback(text, understood);
-
-      if (r.action === 'fill_form') {
-        await parseMessage();
-      } else if (r.action === 'cancel') {
-        if (!confirm(`${who}: cancel the order of ${r.name}?`)) return;
-        await api(`/api/orders/${r.order_id}/cancel`, {method: 'POST'});
-        await refresh();
-        prompt('✅ Cancelled. Copy this reply for the customer:', r.reply);
-      } else if (r.action === 'reply') {
-        prompt(`${who} ${r.name} is asking about the order. Copy this reply:`, r.reply);
-      } else if (r.action === 'deliver') {
-        if (!confirm(`${who} says ${r.name}'s order is delivered. Mark it as delivered?`)) return;
-        await api(`/api/orders/${r.order_id}/deliver`, {method: 'POST'});
-        await refresh();
-        showToast(`✅ ${r.name}'s order marked as delivered`);
-      } else if (r.action === 'notify_delay') {
-        prompt(`${who} is running late ⏰ Copy this message for waiting customers:`, r.reply);
-      } else if (r.action === 'call_customer') {
-        if (confirm(`${who}: ${r.name} is not home 🏠 Call ${r.phone} now?`)) {
-          location.href = `tel:${r.phone}`;
-        }
-      } else {
-        showError(`🙋 I'm not sure (${r.reason}) — please check the message yourself.`);
-      }
+      current = {text, r, status: '', time: new Date().toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})};
+      aiHistory.unshift(current);
+      renderCard();
+      renderHistory();
+      if (r.action === 'fill_form') await parseMessage();
+      document.getElementById('paste').value = '';
     }
+    renderHistory();
 
     function showToast(msg) {
       const t = document.getElementById('toast');
