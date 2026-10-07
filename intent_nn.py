@@ -137,13 +137,39 @@ def train(data, epochs=501, lr=0.5, verbose=True):
     return W, b, vocab
 
 
+def load_feedback():
+    """🎡 Extra training examples confirmed/corrected in the dashboard (feedback.jsonl)."""
+    import json
+    from eval_set import EVAL
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "feedback.jsonl")
+    if not os.path.exists(path):
+        return []
+    exam = {t for t, _ in EVAL}       # 🔒 never train on the final exam (no data leakage!)
+    known = {t for t, _ in DATA}
+    extra, seen = [], set()
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            text, intent = row.get("text", ""), row.get("intent")
+            if not text or intent not in INTENTS or text in exam or text in known or text in seen:
+                continue
+            seen.add(text)
+            extra.append((text, INTENTS.index(intent)))
+    return extra
+
+
 if __name__ == "__main__":
+    ALL = DATA + load_feedback()
+    print(f"📚 {len(DATA)} built-in examples + {len(ALL) - len(DATA)} from feedback = {len(ALL)}")
     # ✂️ 1) Honest exam: learn on 80%, test on 20% the model never saw
     np.random.seed(42)
-    order = np.random.permutation(len(DATA))
-    cut = int(len(DATA) * 0.8)
-    train_set = [DATA[i] for i in order[:cut]]
-    test_set = [DATA[i] for i in order[cut:]]
+    order = np.random.permutation(len(ALL))
+    cut = int(len(ALL) * 0.8)
+    train_set = [ALL[i] for i in order[:cut]]
+    test_set = [ALL[i] for i in order[cut:]]
 
     W, b, vocab = train(train_set)
     Xt = np.array([text_to_vector(t, vocab) for t, _ in test_set])
@@ -153,8 +179,8 @@ if __name__ == "__main__":
     print(f"🧪 Accuracy on hidden test set: {test_acc:.0%}")
 
     # 🎓 2) Final model: now learn from ALL the data
-    W, b, vocab = train(DATA, verbose=False)
-    print(f"🎓 Final model trained on all {len(DATA)} examples")
+    W, b, vocab = train(ALL, verbose=False)
+    print(f"🎓 Final model trained on all {len(ALL)} examples")
 
     print("\n🎯 Testing on NEW messages:")
     new_messages = [

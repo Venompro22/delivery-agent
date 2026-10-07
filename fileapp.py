@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hmac
+import json
 import os
 import re
 import secrets
@@ -19,6 +20,7 @@ from optimizer import optimize_route, route_summary
 from store import OrderStore
 from order_parser import parse_message
 from agent import handle_message
+from intent_nn import INTENTS
 
 app = Flask(__name__)
 
@@ -297,6 +299,30 @@ def agent_message():
             if me:
                 result["reply"] = f"您好{order.customer_name}，您的订单预计 {fmt(me.eta_epoch)} 送达 🚚"
     return jsonify(result)
+FEEDBACK_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "feedback.jsonl")
+
+
+@app.route("/api/feedback", methods=["POST"])
+@login_required
+def save_feedback():
+    """🎡 Data flywheel: every confirmed/corrected message becomes a training example."""
+    body = request.get_json(silent=True) or {}
+    text = str(body.get("text", "")).strip()
+    intent = str(body.get("intent", "")).strip()
+    if not text or len(text) > 500:
+        return bad_request("text must be 1-500 characters")
+    if intent not in INTENTS:
+        return bad_request("unknown intent")
+    text = re.sub(r"1[3-9]\d{9}", "", text).strip()   # 🔒 never store phone numbers
+    with open(FEEDBACK_PATH, "a", encoding="utf-8") as f:
+        f.write(json.dumps({"text": text, "intent": intent, "time": time.time()},
+                           ensure_ascii=False) + "\n")
+    with open(FEEDBACK_PATH, encoding="utf-8") as f:
+        count = sum(1 for _ in f)
+    print(f"🎡 Feedback #{count}: {intent} ← {text}", flush=True)
+    return jsonify({"ok": True, "count": count})
+
+
 @app.route("/api/driver/location", methods=["POST"])
 @login_required
 def update_driver_location():
@@ -449,6 +475,14 @@ PAGE = """<!DOCTYPE html>
     input:focus { outline: none; border-color: #2d6cdf; }
     input::placeholder { color: #5a5f68; }
     input.invalid { border-color: #e5484d; }
+    .fb {
+      display: none; align-items: center; gap: 6px; flex-wrap: wrap;
+      font-size: 12px; color: #c3c7cd; background: #0f1115;
+      border: 1px dashed #6b4fd8; border-radius: 8px; padding: 8px; margin-top: 6px;
+    }
+    .fb button { width: auto; margin: 0; padding: 5px 9px; font-size: 12px; }
+    .fb .fb-ok { background: #1f9d55; }
+    .fb .fb-fix { background: #f0a020; color: #0f1115; }
     #paste {
       width: 100%; padding: 11px; margin: 6px 0; resize: vertical;
       background: #0f1115; border: 1px dashed #6b4fd8; border-radius: 8px;
@@ -565,6 +599,7 @@ PAGE = """<!DOCTYPE html>
     <div class="gps-status" id="gps-status"></div>
         <textarea id="paste" rows="2" placeholder="📋 Paste a WeChat message here…"></textarea>
        <button onclick="handleMessage()">🤖 Handle message</button>
+    <div id="fb" class="fb"></div>
     <input id="name" placeholder="Customer name"/>
     <input id="phone" placeholder="Phone (optional)" inputmode="tel"/>
     <input id="note" placeholder="Address / notes (optional) — e.g. Bldg 5, floor 3" maxlength="200"/>
@@ -659,6 +694,7 @@ PAGE = """<!DOCTYPE html>
 
       ['name','phone','note','lat','lng','promise'].forEach(id => document.getElementById(id).value = '');
       if (pickMarker) { map.removeLayer(pickMarker); pickMarker = null; }
+      knownIds.add(data.id);
       await refresh();
       highlightNew(data.id);
     }
@@ -685,6 +721,42 @@ PAGE = """<!DOCTYPE html>
       clearError();
       showToast('✨ Filled! Now tap the map to set the location 📍');
     }
+    // ---------- 🎡 Data flywheel ----------
+    const ACTION_INTENT = {fill_form: 'new_order', cancel: 'cancel', reply: 'question',
+                           deliver: 'delivered', notify_delay: 'delay', call_customer: 'not_home'};
+    const INTENT_NAMES = {new_order: '📦 new order', cancel: '❌ cancel', question: '🤔 question',
+                          delivered: '✅ delivered', delay: '⏰ delay', not_home: '🏠 not home'};
+    let lastMsg = null;
+
+    function showFeedback(text, intent) {
+      lastMsg = {text, intent};
+      const fb = document.getElementById('fb');
+      fb.innerHTML = `🤖 I understood: <b>${INTENT_NAMES[intent] || intent}</b>
+        <button class="fb-ok" onclick="sendFeedback(true)">✅ Right</button>
+        <button class="fb-fix" onclick="sendFeedback(false)">✏️ Fix</button>`;
+      fb.style.display = 'flex';
+    }
+
+    async function sendFeedback(isRight) {
+      if (!lastMsg) return;
+      let intent = lastMsg.intent;
+      if (!isRight) {
+        const keys = Object.keys(INTENT_NAMES);
+        const menu = keys.map((k, i) => `${i + 1}. ${INTENT_NAMES[k]}`).join('\\n');
+        const n = parseInt(prompt('What did the message really mean?\\n' + menu), 10);
+        if (!(n >= 1 && n <= keys.length)) return;
+        intent = keys[n - 1];
+      }
+      const res = await api('/api/feedback', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({text: lastMsg.text, intent}),
+      });
+      const d = await res.json();
+      document.getElementById('fb').style.display = 'none';
+      lastMsg = null;
+      showToast(res.ok ? `📝 Saved! ${d.count} examples collected 🎡` : (d.error || 'Could not save'));
+    }
+
     async function handleMessage() {
       const text = document.getElementById('paste').value.trim();
       if (!text) { showError('Paste a message first.'); return; }
@@ -696,6 +768,8 @@ PAGE = """<!DOCTYPE html>
       if (!res.ok) { showError(r.error || 'The agent could not read the message.'); return; }
       clearError();
       const who = r.sender === 'driver' ? '🚚 Driver' : '👤 Customer';
+      const understood = r.action === 'ask_human' ? r.intent : ACTION_INTENT[r.action];
+      if (understood) showFeedback(text, understood);
 
       if (r.action === 'fill_form') {
         await parseMessage();
@@ -823,6 +897,49 @@ PAGE = """<!DOCTYPE html>
       refresh();
     }
 
+    // ---------- 🔔 Alerts: new orders + late orders ----------
+    let alertsReady = false;
+    const knownIds = new Set();
+    const lateSeen = new Set();
+    let audioCtx = null;
+
+    // Browsers only allow sound/notifications after the user clicks once
+    document.addEventListener('click', () => {
+      try { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {}
+      if (window.Notification && Notification.permission === 'default') Notification.requestPermission();
+    }, {once: true});
+
+    function beep(freq, ms) {
+      if (!audioCtx) return;
+      const osc = audioCtx.createOscillator(), gain = audioCtx.createGain();
+      osc.frequency.value = freq;
+      gain.gain.value = 0.15;
+      osc.connect(gain); gain.connect(audioCtx.destination);
+      osc.start(); osc.stop(audioCtx.currentTime + ms / 1000);
+    }
+
+    function notify(msg) {
+      showToast(msg);
+      if (window.Notification && Notification.permission === 'granted') {
+        new Notification('🚚 Delivery Agent', {body: msg});
+      }
+    }
+
+    function checkAlerts(stops) {
+      const newOnes = stops.filter(s => !knownIds.has(s.id));
+      const lateNow = stops.filter(s => s.late && !lateSeen.has(s.id));
+      stops.forEach(s => knownIds.add(s.id));
+      lateNow.forEach(s => lateSeen.add(s.id));
+      if (!alertsReady) { alertsReady = true; return; }   // first load: stay quiet
+      if (lateNow.length) {
+        beep(440, 400);
+        notify(`⏰ LATE: ${lateNow.map(s => s.name).join(', ')}`);
+      } else if (newOnes.length) {
+        beep(880, 150);
+        notify(`📦 New order: ${newOnes.map(s => s.name).join(', ')}`);
+      }
+    }
+
     async function refresh() {
       const res = await api('/api/route');
       const data = await res.json();
@@ -836,6 +953,7 @@ PAGE = """<!DOCTYPE html>
       }
       lastSignature = signature;
 
+      checkAlerts(data.stops);
       layer.clearLayers();
       const pts = [[data.driver.lat, data.driver.lng]];
       L.circleMarker([data.driver.lat, data.driver.lng],
