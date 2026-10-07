@@ -492,6 +492,21 @@ PAGE = """<!DOCTYPE html>
       letter-spacing: 0.5px; margin-top: 2px;
     }
     #map { flex: 1; cursor: crosshair; }
+    .pin {
+      width: 28px; height: 28px; border-radius: 50%; color: #fff; font-weight: 800; font-size: 13px;
+      display: flex; align-items: center; justify-content: center;
+      border: 2px solid #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.45);
+    }
+    .pin-driver {
+      width: 36px; height: 36px; border-radius: 50%; background: #1f9d55; font-size: 19px;
+      display: flex; align-items: center; justify-content: center; border: 3px solid #fff;
+      box-shadow: 0 0 0 0 rgba(31,157,85,0.7); animation: driverPulse 2s infinite;
+    }
+    @keyframes driverPulse {
+      0% { box-shadow: 0 0 0 0 rgba(31,157,85,0.7); }
+      70% { box-shadow: 0 0 0 14px rgba(31,157,85,0); }
+      100% { box-shadow: 0 0 0 0 rgba(31,157,85,0); }
+    }
     input {
       width: 100%; padding: 11px; margin: 6px 0;
       background: #0f1115; border: 1px solid #2a2e37; border-radius: 8px;
@@ -693,9 +708,19 @@ PAGE = """<!DOCTYPE html>
     let MAP_LANG = 'en';
     try { MAP_LANG = (localStorage.getItem('lang') || ((navigator.language || '').startsWith('zh') ? 'zh' : 'en')) === 'zh' ? 'zh_cn' : 'en'; } catch (e) {}
     const map = L.map('map').setView([31.2304, 121.4737], 13);
-    L.tileLayer('https://webrd0{s}.is.autonavi.com/appmaptile?lang=' + MAP_LANG + '&size=1&scale=1&style=8&x={x}&y={y}&z={z}', {
-      subdomains: ['1', '2', '3', '4'], attribution: '&copy; AutoNavi'
-    }).addTo(map);
+    // 🗺️ Sharp tiles on Retina screens + Streets / Satellite switch + scale bar
+    const TILE_SCALE = window.devicePixelRatio > 1 ? 2 : 1;
+    const streets = L.tileLayer('https://webrd0{s}.is.autonavi.com/appmaptile?lang=' + MAP_LANG +
+      '&size=1&scale=' + TILE_SCALE + '&style=8&x={x}&y={y}&z={z}',
+      {subdomains: ['1', '2', '3', '4'], maxZoom: 18, attribution: '&copy; AutoNavi'}).addTo(map);
+    const satellite = L.layerGroup([
+      L.tileLayer('https://webst0{s}.is.autonavi.com/appmaptile?style=6&x={x}&y={y}&z={z}',
+        {subdomains: ['1', '2', '3', '4'], maxZoom: 18, attribution: '&copy; AutoNavi'}),
+      L.tileLayer('https://webst0{s}.is.autonavi.com/appmaptile?style=8&x={x}&y={y}&z={z}',
+        {subdomains: ['1', '2', '3', '4'], maxZoom: 18}),
+    ]);
+    L.control.layers({'🗺️ Streets': streets, '🛰️ Satellite': satellite}, null, {position: 'topleft'}).addTo(map);
+    L.control.scale({imperial: false}).addTo(map);
     let layer = L.layerGroup().addTo(map);
     let pickMarker = null;
 
@@ -958,8 +983,29 @@ PAGE = """<!DOCTYPE html>
       }
     }
 
+    // 📍 Phones give GPS in WGS-84; Chinese maps (Gaode) use GCJ-02 → convert, or the dot is ~500 m off
+    function wgs2gcj(lat, lng) {
+      if (lng < 72.004 || lng > 137.8347 || lat < 0.8293 || lat > 55.8271) return [lat, lng];  // outside China
+      const a = 6378245.0, ee = 0.00669342162296594323, PI = Math.PI;
+      const x = lng - 105.0, y = lat - 35.0;
+      let dLat = -100 + 2 * x + 3 * y + 0.2 * y * y + 0.1 * x * y + 0.2 * Math.sqrt(Math.abs(x));
+      dLat += (20 * Math.sin(6 * x * PI) + 20 * Math.sin(2 * x * PI)) * 2 / 3;
+      dLat += (20 * Math.sin(y * PI) + 40 * Math.sin(y / 3 * PI)) * 2 / 3;
+      dLat += (160 * Math.sin(y / 12 * PI) + 320 * Math.sin(y * PI / 30)) * 2 / 3;
+      let dLng = 300 + x + 2 * y + 0.1 * x * x + 0.1 * x * y + 0.1 * Math.sqrt(Math.abs(x));
+      dLng += (20 * Math.sin(6 * x * PI) + 20 * Math.sin(2 * x * PI)) * 2 / 3;
+      dLng += (20 * Math.sin(x * PI) + 40 * Math.sin(x / 3 * PI)) * 2 / 3;
+      dLng += (150 * Math.sin(x / 12 * PI) + 300 * Math.sin(x / 30 * PI)) * 2 / 3;
+      const rad = lat / 180 * PI;
+      let m = Math.sin(rad); m = 1 - ee * m * m;
+      const sm = Math.sqrt(m);
+      dLat = (dLat * 180) / ((a * (1 - ee)) / (m * sm) * PI);
+      dLng = (dLng * 180) / (a / sm * Math.cos(rad) * PI);
+      return [lat + dLat, lng + dLng];
+    }
+
     async function sendLocation(pos) {
-      const lat = pos.coords.latitude, lng = pos.coords.longitude;
+      const [lat, lng] = wgs2gcj(pos.coords.latitude, pos.coords.longitude);
       const acc = Math.round(pos.coords.accuracy);
       const res = await api('/api/driver/location', {
         method: 'POST', headers: {'Content-Type': 'application/json'},
@@ -1083,16 +1129,17 @@ PAGE = """<!DOCTYPE html>
       checkAlerts(data.stops);
       layer.clearLayers();
       const pts = [[data.driver.lat, data.driver.lng]];
-      L.circleMarker([data.driver.lat, data.driver.lng],
-        {radius: 9, color: '#1f9d55', fillColor: '#1f9d55', fillOpacity: 1})
+      L.marker([data.driver.lat, data.driver.lng], {icon: L.divIcon({className: '',
+        html: '<div class="pin-driver">🚚</div>', iconSize: [36, 36], iconAnchor: [18, 18]}), zIndexOffset: 1000})
         .addTo(layer).bindPopup('🚚 Driver (start)');
 
       let html = '';
       data.stops.forEach(s => {
         pts.push([s.lat, s.lng]);
         const color = s.late ? '#e5484d' : '#2d6cdf';
-        L.circleMarker([s.lat, s.lng],
-          {radius: 8, color: color, fillColor: color, fillOpacity: 1})
+        L.marker([s.lat, s.lng], {icon: L.divIcon({className: '',
+          html: `<div class="pin" style="background:${color}">${s.sequence}</div>`,
+          iconSize: [28, 28], iconAnchor: [14, 14]})})
           .addTo(layer).bindPopup(`${s.sequence}. ${esc(s.name)} — ETA ${s.eta}`);
 
         let cls = 'stop';
@@ -1123,7 +1170,8 @@ PAGE = """<!DOCTYPE html>
         '<div class="empty">No orders yet.<br>Tap the map to add one 👆</div>';
 
       if (pts.length > 1) {
-        L.polyline(pts, {color: '#2d6cdf', weight: 3, opacity: 0.7}).addTo(layer);
+        L.polyline(pts, {color: '#ffffff', weight: 8, opacity: 0.85}).addTo(layer);
+        L.polyline(pts, {color: '#2d6cdf', weight: 4, opacity: 0.95}).addTo(layer);
         if (data.stops.length !== lastStopCount) {
           map.fitBounds(pts, {padding: [40, 40]});
         }
