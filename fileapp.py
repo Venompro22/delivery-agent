@@ -707,6 +707,16 @@ PAGE = """<!DOCTYPE html>
     .demo-btn:hover { background: rgba(107,79,216,0.15); }
     .demo-clear { border-color: #2a2e37; color: #8a8f98; }
     .demo-clear:hover { background: rgba(138,143,152,0.12); }
+    .sim-btn { border-color: #f0a020; color: #f0a020; }
+    .sim-btn:hover { background: rgba(240,160,32,0.12); }
+    .sim-btn.on { background: #f0a020; color: #0f1115; }
+    .chips { display: flex; gap: 5px; flex-wrap: wrap; align-items: center; margin: 2px 0 4px; }
+    .chips-label { font-size: 11px; color: #8a8f98; }
+    .chip {
+      width: auto; margin: 0; padding: 4px 9px; font-size: 11px; font-weight: 500; border-radius: 20px;
+      background: #1a1d24; border: 1px solid #2a2e37; color: #c3c7cd;
+    }
+    .chip:hover { background: #1a1d24; border-color: #6b4fd8; color: #fff; }
     .gps-status { font-size: 11px; color: #8a8f98; min-height: 14px; margin: -6px 0 10px; }
 
     @media (max-width: 768px) {
@@ -737,8 +747,16 @@ PAGE = """<!DOCTYPE html>
     <div class="gps-row">
       <button class="gps-btn demo-btn" onclick="loadDemo()">✨ Demo</button>
       <button class="gps-btn demo-clear" onclick="clearDemo()">🧹 Clear demo</button>
+      <button class="gps-btn sim-btn" id="sim-btn" onclick="simulate()">▶️ Simulate</button>
     </div>
         <textarea id="paste" rows="2" placeholder="📋 Paste a WeChat message here…"></textarea>
+    <div class="chips"><span class="chips-label">💬 Try:</span>
+      <button class="chip" onclick="tryMsg(this)">我的水在哪里 13800138001</button>
+      <button class="chip" onclick="tryMsg(this)">已送达 13900139002</button>
+      <button class="chip" onclick="tryMsg(this)">堵车了 晚一点到</button>
+      <button class="chip" onclick="tryMsg(this)">客户不在家 电话不接 15800158003</button>
+      <button class="chip" onclick="tryMsg(this)">我要两桶水 文三路200号 下午5点前</button>
+    </div>
        <button onclick="handleMessage()">🤖 Handle message</button>
     <div id="fb"></div>
     <div id="ai-history"></div>
@@ -1035,6 +1053,50 @@ PAGE = """<!DOCTYPE html>
       lastStopCount = -1;
       await refresh();
       showToast(`🧹 ${d.removed} demo orders removed`);
+    }
+
+    // ---------- ▶️ Simulation: the driver drives the route by himself ----------
+    let simRunning = false;
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+    async function simulate() {
+      const btn = document.getElementById('sim-btn');
+      if (simRunning) { simRunning = false; return; }          // second click = stop
+      simRunning = true;
+      btn.classList.add('on');
+      btn.textContent = '⏹ Stop';
+      try {
+        while (simRunning) {
+          const data = await (await api('/api/route')).json();
+          if (!data.stops.length) { showToast('🏁 All orders delivered!'); break; }
+          const stop = data.stops[0], from = data.driver, STEPS = 10;
+          for (let i = 1; i <= STEPS && simRunning; i++) {          // 🚚 glide toward the next stop
+            const lat = from.lat + (stop.lat - from.lat) * i / STEPS;
+            const lng = from.lng + (stop.lng - from.lng) * i / STEPS;
+            await api('/api/driver/location', {
+              method: 'POST', headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({lat, lng}),
+            });
+            await refresh();
+            await sleep(600);
+          }
+          if (!simRunning) break;
+          await api(`/api/orders/${stop.id}/deliver`, {method: 'POST'});   // ✅ arrived
+          showToast(`✅ ${stop.name} delivered`);
+          await refresh();
+          await sleep(1000);
+        }
+      } finally {
+        simRunning = false;
+        btn.classList.remove('on');
+        btn.textContent = '▶️ Simulate';
+      }
+    }
+
+    // 💬 one click = paste a sample message and let the AI handle it
+    function tryMsg(el) {
+      document.getElementById('paste').value = el.textContent;
+      handleMessage();
     }
 
     function showToast(msg) {
@@ -1665,6 +1727,7 @@ I18N_SCRIPT = r"""<script>
     "unknown intent": "未知意图", "ETA": "预计到达",
     "Clear demo": "清除演示", "demo orders added": "个演示订单已添加",
     "watch the route": "看看路线", "demo orders removed": "个演示订单已删除", "Demo": "演示",
+    "Simulate": "模拟配送", "All orders delivered!": "所有订单已送达！", "Try:": "试试：",
     "Enter the dashboard password": "请输入调度台密码", "Password": "密码", "Log in": "登录",
     "Wrong password.": "密码错误。", "Too many attempts. Wait 10 minutes.": "尝试次数过多，请等待10分钟。"
   };
