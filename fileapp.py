@@ -348,6 +348,47 @@ def retrain():
     return jsonify({"ok": True, "examples": total, "from_feedback": from_feedback})
 
 
+DEMO_TAG = "🎬 "
+DEMO_ORDERS = [   # name, phone, address, promise in minutes (None = no promise), km north, km east
+    ("张伟", "13800138001", "文三路100号 5号楼3楼", 40, 1.2, 0.8),
+    ("李娜", "13900139002", "阳光小区 3单元 502室", 25, -0.9, 1.5),
+    ("王芳", "15800158003", "图书馆 前台", None, 2.0, -1.1),
+    ("刘洋", "13700137004", "西湖区 公司前台", 60, -1.6, -0.7),
+    ("陈静", "18800188005", "学生宿舍 8号楼", 3, 0.5, 2.3),     # tight promise → shows LATE ⏰
+    ("赵磊", "13600136006", "农贸市场 门口", None, 2.6, 1.9),
+]
+
+
+@app.route("/api/demo", methods=["POST"])
+@login_required
+def demo_orders():
+    """✨ Add realistic demo orders around the driver (great for showing the app)."""
+    import math
+    ids = []
+    for name, phone, note, promise, north_km, east_km in DEMO_ORDERS:
+        lat = driver.lat + north_km / 111.0
+        lng = driver.lng + east_km / (111.0 * math.cos(math.radians(driver.lat)))
+        kw = {"promised_by": time.time() + promise * 60} if promise else {}
+        order = Order(customer_name=name, lat=round(lat, 5), lng=round(lng, 5),
+                      phone=phone, note=DEMO_TAG + note, **kw)
+        store.add(order)
+        ids.append(order.id)
+    print(f"✨ Demo: added {len(ids)} orders", flush=True)
+    return jsonify({"ok": True, "ids": ids})
+
+
+@app.route("/api/demo/clear", methods=["POST"])
+@login_required
+def clear_demo():
+    """🧹 Remove every demo order (real orders are never touched)."""
+    before = len(store.orders)
+    store.orders = [o for o in store.orders if not (o.note or "").startswith(DEMO_TAG)]
+    store.save()
+    removed = before - len(store.orders)
+    print(f"🧹 Demo: removed {removed} orders", flush=True)
+    return jsonify({"ok": True, "removed": removed})
+
+
 @app.route("/api/driver/location", methods=["POST"])
 @login_required
 def update_driver_location():
@@ -662,6 +703,10 @@ PAGE = """<!DOCTYPE html>
     }
     .gps-btn:hover { background: rgba(31,157,85,0.12); }
     .gps-btn.on { background: #1f9d55; color: #fff; }
+    .demo-btn { border-color: #6b4fd8; color: #b9a6ff; }
+    .demo-btn:hover { background: rgba(107,79,216,0.15); }
+    .demo-clear { border-color: #2a2e37; color: #8a8f98; }
+    .demo-clear:hover { background: rgba(138,143,152,0.12); }
     .gps-status { font-size: 11px; color: #8a8f98; min-height: 14px; margin: -6px 0 10px; }
 
     @media (max-width: 768px) {
@@ -689,6 +734,10 @@ PAGE = """<!DOCTYPE html>
       <button class="gps-btn" id="live-btn" onclick="toggleLive()">🛰️ Live GPS: off</button>
     </div>
     <div class="gps-status" id="gps-status"></div>
+    <div class="gps-row">
+      <button class="gps-btn demo-btn" onclick="loadDemo()">✨ Demo</button>
+      <button class="gps-btn demo-clear" onclick="clearDemo()">🧹 Clear demo</button>
+    </div>
         <textarea id="paste" rows="2" placeholder="📋 Paste a WeChat message here…"></textarea>
        <button onclick="handleMessage()">🤖 Handle message</button>
     <div id="fb"></div>
@@ -969,6 +1018,24 @@ PAGE = """<!DOCTYPE html>
       document.getElementById('paste').value = '';
     }
     renderHistory();
+
+    async function loadDemo() {
+      const res = await api('/api/demo', {method: 'POST'});
+      const d = await res.json();
+      if (!res.ok) { showError(d.error || 'Could not add demo orders'); return; }
+      if (typeof knownIds !== 'undefined') d.ids.forEach(id => knownIds.add(id));   // no "new order" beeps
+      lastStopCount = -1;          // zoom the map to fit the new route
+      await refresh();
+      showToast(`✨ ${d.ids.length} demo orders added — watch the route 🗺️`);
+    }
+
+    async function clearDemo() {
+      const res = await api('/api/demo/clear', {method: 'POST'});
+      const d = await res.json();
+      lastStopCount = -1;
+      await refresh();
+      showToast(`🧹 ${d.removed} demo orders removed`);
+    }
 
     function showToast(msg) {
       const t = document.getElementById('toast');
@@ -1596,6 +1663,8 @@ I18N_SCRIPT = r"""<script>
     "Connection problem": "连接问题", "Retrying…": "重试中…",
     " examples": " 条", "low confidence": "把握不足", "order not found": "未找到订单",
     "unknown intent": "未知意图", "ETA": "预计到达",
+    "Clear demo": "清除演示", "demo orders added": "个演示订单已添加",
+    "watch the route": "看看路线", "demo orders removed": "个演示订单已删除", "Demo": "演示",
     "Enter the dashboard password": "请输入调度台密码", "Password": "密码", "Log in": "登录",
     "Wrong password.": "密码错误。", "Too many attempts. Wait 10 minutes.": "尝试次数过多，请等待10分钟。"
   };
