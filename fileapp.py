@@ -492,6 +492,21 @@ PAGE = """<!DOCTYPE html>
       letter-spacing: 0.5px; margin-top: 2px;
     }
     #map { flex: 1; cursor: crosshair; }
+    /* 🍎 map themes */
+    .tiles-dark { filter: invert(100%) hue-rotate(180deg) brightness(0.92) contrast(0.88) saturate(0.55); }
+    .tiles-soft { filter: saturate(0.6) brightness(1.05) contrast(0.93); }
+    #map { background: #0f1115; }
+    .leaflet-bar a, .leaflet-control-layers {
+      background: #1a1d24 !important; color: #e8eaed !important; border-color: #2a2e37 !important;
+    }
+    .leaflet-control-layers { border-radius: 10px !important; box-shadow: 0 4px 14px rgba(0,0,0,0.4) !important; }
+    .leaflet-control-layers-expanded { padding: 8px 12px; font-size: 13px; }
+    .leaflet-popup-content-wrapper, .leaflet-popup-tip {
+      background: #1a1d24; color: #e8eaed; border-radius: 10px; box-shadow: 0 6px 20px rgba(0,0,0,0.5);
+    }
+    .leaflet-control-attribution { background: rgba(15,17,21,0.7) !important; color: #8a8f98 !important; }
+    .leaflet-control-attribution a { color: #8a8f98 !important; }
+    .leaflet-control-scale-line { background: rgba(26,29,36,0.8); color: #e8eaed; border-color: #8a8f98; }
     .pin {
       width: 28px; height: 28px; border-radius: 50%; color: #fff; font-weight: 800; font-size: 13px;
       display: flex; align-items: center; justify-content: center;
@@ -708,18 +723,25 @@ PAGE = """<!DOCTYPE html>
     let MAP_LANG = 'en';
     try { MAP_LANG = (localStorage.getItem('lang') || ((navigator.language || '').startsWith('zh') ? 'zh' : 'en')) === 'zh' ? 'zh_cn' : 'en'; } catch (e) {}
     const map = L.map('map').setView([31.2304, 121.4737], 13);
-    // 🗺️ Sharp tiles on Retina screens + Streets / Satellite switch + scale bar
+    // 🍎 Map styles: 🌙 Dark (Apple-like) · ☀️ Light · 🛰️ Satellite — your choice is remembered
     const TILE_SCALE = window.devicePixelRatio > 1 ? 2 : 1;
-    const streets = L.tileLayer('https://webrd0{s}.is.autonavi.com/appmaptile?lang=' + MAP_LANG +
-      '&size=1&scale=' + TILE_SCALE + '&style=8&x={x}&y={y}&z={z}',
-      {subdomains: ['1', '2', '3', '4'], maxZoom: 18, attribution: '&copy; AutoNavi'}).addTo(map);
-    const satellite = L.layerGroup([
-      L.tileLayer('https://webst0{s}.is.autonavi.com/appmaptile?style=6&x={x}&y={y}&z={z}',
-        {subdomains: ['1', '2', '3', '4'], maxZoom: 18, attribution: '&copy; AutoNavi'}),
-      L.tileLayer('https://webst0{s}.is.autonavi.com/appmaptile?style=8&x={x}&y={y}&z={z}',
-        {subdomains: ['1', '2', '3', '4'], maxZoom: 18}),
-    ]);
-    L.control.layers({'🗺️ Streets': streets, '🛰️ Satellite': satellite}, null, {position: 'topleft'}).addTo(map);
+    const gaodeUrl = 'https://webrd0{s}.is.autonavi.com/appmaptile?lang=' + MAP_LANG +
+      '&size=1&scale=' + TILE_SCALE + '&style=8&x={x}&y={y}&z={z}';
+    const tileOpts = {subdomains: ['1', '2', '3', '4'], maxZoom: 18, attribution: '&copy; AutoNavi'};
+    const mapStyles = {
+      '🌙 Dark': L.tileLayer(gaodeUrl, Object.assign({className: 'tiles-dark'}, tileOpts)),
+      '☀️ Light': L.tileLayer(gaodeUrl, Object.assign({className: 'tiles-soft'}, tileOpts)),
+      '🛰️ Satellite': L.layerGroup([
+        L.tileLayer('https://webst0{s}.is.autonavi.com/appmaptile?style=6&x={x}&y={y}&z={z}', tileOpts),
+        L.tileLayer('https://webst0{s}.is.autonavi.com/appmaptile?style=8&x={x}&y={y}&z={z}',
+          {subdomains: ['1', '2', '3', '4'], maxZoom: 18}),
+      ]),
+    };
+    let mapStyle = '🌙 Dark';
+    try { const saved = localStorage.getItem('mapStyle'); if (mapStyles[saved]) mapStyle = saved; } catch (e) {}
+    mapStyles[mapStyle].addTo(map);
+    L.control.layers(mapStyles, null, {position: 'topleft'}).addTo(map);
+    map.on('baselayerchange', e => { try { localStorage.setItem('mapStyle', e.name); } catch (err) {} });
     L.control.scale({imperial: false}).addTo(map);
     let layer = L.layerGroup().addTo(map);
     let pickMarker = null;
