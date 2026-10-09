@@ -735,6 +735,7 @@ PAGE = """<!DOCTYPE html>
         <h2>Delivery Agent</h2>
         <div class="subtitle">Smart routing dashboard</div>
       </div>
+      <a class="logout" href="/driver" title="Driver view">🚚 Driver</a>
       <a class="logout" href="/orders" title="All orders">📋 Orders</a>
       <a class="logout" href="/logout" title="Log out">Logout</a>
     </div>
@@ -1728,6 +1729,9 @@ I18N_SCRIPT = r"""<script>
     "Clear demo": "清除演示", "demo orders added": "个演示订单已添加",
     "watch the route": "看看路线", "demo orders removed": "个演示订单已删除", "Demo": "演示",
     "Simulate": "模拟配送", "All orders delivered!": "所有订单已送达！", "Try:": "试试：",
+    "Next stop": "下一站", "Up next": "接下来", "No more stops": "没有更多站点了",
+    "Great job!": "干得好！", "Start GPS": "开启定位", "GPS on — tap to stop": "定位中 — 点击停止",
+    "GPS stopped": "定位已停止", "left": "剩余", "finish": "完成", "Sent": "已发送",
     "Enter the dashboard password": "请输入调度台密码", "Password": "密码", "Log in": "登录",
     "Wrong password.": "密码错误。", "Too many attempts. Wait 10 minutes.": "尝试次数过多，请等待10分钟。"
   };
@@ -1784,6 +1788,194 @@ PAGE = PAGE.replace("</body>", I18N_SCRIPT + "\n</body>")
 ORDERS_PAGE = ORDERS_PAGE.replace("</body>", I18N_SCRIPT + "\n</body>")
 TRACK_PAGE = TRACK_PAGE.replace("</body>", I18N_SCRIPT + "\n</body>")
 LOGIN_PAGE = LOGIN_PAGE.replace("</body>", I18N_SCRIPT + "\n</body>")
+
+
+@app.route("/driver")
+@login_required
+def driver_page():
+    return render_template_string(DRIVER_PAGE)
+
+
+DRIVER_PAGE = """<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+  <meta name="theme-color" content="#0f1115"/>
+  <title>Driver - Delivery Agent</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, "Segoe UI", sans-serif; margin: 0; background: #0f1115; color: #e8eaed; }
+    .wrap { max-width: 520px; margin: 0 auto; padding: 16px 16px 40px; }
+    .top { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+    .top h1 { font-size: 18px; margin: 0; flex: 1; }
+    .back { font-size: 12px; color: #8a8f98; text-decoration: none; border: 1px solid #2a2e37; border-radius: 6px; padding: 6px 10px; }
+    .progress { background: #1a1d24; border-radius: 20px; height: 10px; overflow: hidden; margin: 6px 0 4px; }
+    .progress div { height: 100%; background: linear-gradient(90deg, #1f9d55, #2d6cdf); transition: width .4s; }
+    .meta { color: #8a8f98; font-size: 13px; }
+    .card { background: #1a1d24; border: 1px solid #2a2e37; border-radius: 18px; padding: 20px; margin: 16px 0; }
+    .card.late { border-color: #e5484d; box-shadow: 0 0 0 1px #e5484d inset; }
+    .label { font-size: 12px; letter-spacing: 1px; text-transform: uppercase; color: #8a8f98; }
+    .seq { display: inline-flex; width: 30px; height: 30px; border-radius: 50%; background: #2d6cdf; color: #fff;
+           align-items: center; justify-content: center; font-weight: 800; margin-left: 6px; vertical-align: middle; }
+    .name { font-size: 30px; font-weight: 800; margin: 10px 0 6px; }
+    .note { font-size: 17px; color: #c3c7cd; margin-bottom: 8px; }
+    .info { font-size: 15px; color: #c3c7cd; }
+    .badge { display: inline-block; background: #e5484d; color: #fff; font-size: 12px; font-weight: 700;
+             padding: 3px 9px; border-radius: 20px; margin-left: 6px; }
+    .btn { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; border: none;
+           border-radius: 14px; padding: 18px; font-size: 19px; font-weight: 800; color: #fff; text-decoration: none;
+           cursor: pointer; margin-top: 10px; }
+    .row { display: flex; gap: 10px; }
+    .nav { background: #2d6cdf; }
+    .call { background: #f0a020; color: #0f1115; }
+    .done { background: #1f9d55; }
+    .gps { background: #0f1115; border: 2px solid #1f9d55; color: #1f9d55; font-size: 16px; padding: 14px; }
+    .gps.on { background: #1f9d55; color: #fff; }
+    .gps-status { font-size: 12px; color: #8a8f98; text-align: center; margin-top: 6px; min-height: 16px; }
+    .next h3 { font-size: 12px; letter-spacing: 1px; text-transform: uppercase; color: #8a8f98; margin: 22px 0 8px; }
+    .item { display: flex; gap: 10px; align-items: center; padding: 10px 12px; background: #1a1d24;
+            border-radius: 10px; margin-bottom: 6px; font-size: 15px; }
+    .item .n { width: 24px; height: 24px; border-radius: 50%; background: #2a2e37; display: flex;
+               align-items: center; justify-content: center; font-size: 12px; font-weight: 700; }
+    .item .eta { margin-left: auto; color: #8a8f98; font-size: 13px; }
+    .item.late .n { background: #e5484d; }
+    .empty { text-align: center; padding: 50px 10px; font-size: 20px; }
+    .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: #1f9d55; color: #fff;
+             padding: 14px 20px; border-radius: 12px; font-weight: 700; opacity: 0; transition: opacity .25s;
+             pointer-events: none; max-width: 90vw; text-align: center; z-index: 9999; }
+    .toast.show { opacity: 1; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <h1>🚚 Driver</h1>
+      <a class="back" href="/">← Dashboard</a>
+    </div>
+    <div class="meta" id="stats">Loading…</div>
+    <div class="progress"><div id="bar" style="width:0%"></div></div>
+    <div id="main"></div>
+    <button class="btn gps" id="gps-btn" onclick="toggleGps()">🛰️ Start GPS</button>
+    <div class="gps-status" id="gps-status"></div>
+    <div class="next" id="next"></div>
+  </div>
+  <div class="toast" id="toast"></div>
+
+  <script>
+    function esc(t) {
+      return String(t).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
+    }
+    function toast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg; t.classList.add('show');
+      clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), 2500);
+    }
+    async function api(url, options) {
+      const res = await fetch(url, options);
+      if (res.status === 401) { location.href = '/login'; throw new Error('login required'); }
+      return res;
+    }
+    function navUrl(s) {
+      return `https://uri.amap.com/navigation?to=${s.lng},${s.lat},${encodeURIComponent(s.name)}&mode=car&callnative=1`;
+    }
+
+    let current = null;
+    async function load() {
+      const data = await (await api('/api/route')).json();
+      const done = data.summary.delivered, left = data.stops.length, total = done + left;
+      document.getElementById('stats').textContent =
+        `✅ ${done} delivered · 📦 ${left} left · ${data.summary.total_km} km · finish ${data.summary.finish}`;
+      document.getElementById('bar').style.width = total ? `${Math.round(done / total * 100)}%` : '0%';
+
+      const main = document.getElementById('main');
+      if (!left) {
+        current = null;
+        main.innerHTML = '<div class="card empty">🏁 No more stops<br><span class="meta">Great job! 🎉</span></div>';
+        document.getElementById('next').innerHTML = '';
+        return;
+      }
+      const s = data.stops[0];
+      current = s;
+      main.innerHTML = `<div class="card ${s.late ? 'late' : ''}">
+        <div class="label">Next stop <span class="seq">${s.sequence}</span></div>
+        <div class="name">${esc(s.name)}${s.late ? '<span class="badge">LATE</span>' : ''}</div>
+        ${s.note ? `<div class="note">📝 ${esc(s.note)}</div>` : ''}
+        <div class="info">⏰ ETA ${s.eta} · 📏 ${s.leg_km} km${s.promise ? ` · promised ${s.promise}` : ''}</div>
+        <a class="btn nav" href="${navUrl(s)}" target="_blank" rel="noopener">🧭 Navigate</a>
+        <div class="row">
+          ${s.phone ? `<a class="btn call" href="tel:${esc(s.phone)}">📞 Call</a>` : ''}
+          <button class="btn done" onclick="deliver()">✅ Delivered</button>
+        </div>
+      </div>`;
+      document.getElementById('next').innerHTML = data.stops.length > 1 ? '<h3>Up next</h3>' +
+        data.stops.slice(1).map(o => `<div class="item ${o.late ? 'late' : ''}"><span class="n">${o.sequence}</span>
+          <span>${esc(o.name)}</span><span class="eta">ETA ${o.eta}</span></div>`).join('') : '';
+    }
+
+    async function deliver() {
+      if (!current) return;
+      const s = current;
+      await api(`/api/orders/${s.id}/deliver`, {method: 'POST'});
+      if (navigator.vibrate) navigator.vibrate(80);
+      toast(`✅ ${s.name} delivered`);
+      load();
+    }
+
+    // 📍 GPS (WGS-84) → Chinese map coordinates (GCJ-02)
+    function wgs2gcj(lat, lng) {
+      if (lng < 72.004 || lng > 137.8347 || lat < 0.8293 || lat > 55.8271) return [lat, lng];
+      const a = 6378245.0, ee = 0.00669342162296594323, PI = Math.PI;
+      const x = lng - 105.0, y = lat - 35.0;
+      let dLat = -100 + 2 * x + 3 * y + 0.2 * y * y + 0.1 * x * y + 0.2 * Math.sqrt(Math.abs(x));
+      dLat += (20 * Math.sin(6 * x * PI) + 20 * Math.sin(2 * x * PI)) * 2 / 3;
+      dLat += (20 * Math.sin(y * PI) + 40 * Math.sin(y / 3 * PI)) * 2 / 3;
+      dLat += (160 * Math.sin(y / 12 * PI) + 320 * Math.sin(y * PI / 30)) * 2 / 3;
+      let dLng = 300 + x + 2 * y + 0.1 * x * x + 0.1 * x * y + 0.1 * Math.sqrt(Math.abs(x));
+      dLng += (20 * Math.sin(6 * x * PI) + 20 * Math.sin(2 * x * PI)) * 2 / 3;
+      dLng += (20 * Math.sin(x * PI) + 40 * Math.sin(x / 3 * PI)) * 2 / 3;
+      dLng += (150 * Math.sin(x / 12 * PI) + 300 * Math.sin(x / 30 * PI)) * 2 / 3;
+      const rad = lat / 180 * PI;
+      let m = Math.sin(rad); m = 1 - ee * m * m;
+      const sm = Math.sqrt(m);
+      dLat = (dLat * 180) / ((a * (1 - ee)) / (m * sm) * PI);
+      dLng = (dLng * 180) / (a / sm * Math.cos(rad) * PI);
+      return [lat + dLat, lng + dLng];
+    }
+
+    let watchId = null, lastSent = 0;
+    function gpsStatus(t) { document.getElementById('gps-status').textContent = t; }
+    function toggleGps() {
+      const btn = document.getElementById('gps-btn');
+      if (watchId !== null) {
+        navigator.geolocation.clearWatch(watchId); watchId = null;
+        btn.classList.remove('on'); btn.textContent = '🛰️ Start GPS'; gpsStatus('GPS stopped');
+        return;
+      }
+      if (!navigator.geolocation || !window.isSecureContext) {
+        gpsStatus('⚠️ GPS needs HTTPS — open this page with the ngrok link'); return;
+      }
+      btn.classList.add('on'); btn.textContent = '🛰️ GPS on — tap to stop';
+      watchId = navigator.geolocation.watchPosition(async pos => {
+        if (Date.now() - lastSent < 15000) return;
+        lastSent = Date.now();
+        const [lat, lng] = wgs2gcj(pos.coords.latitude, pos.coords.longitude);
+        await api('/api/driver/location', {method: 'POST', headers: {'Content-Type': 'application/json'},
+                                          body: JSON.stringify({lat, lng})});
+        gpsStatus(`📍 Sent ±${Math.round(pos.coords.accuracy)} m · ${new Date().toLocaleTimeString()}`);
+        load();
+      }, () => gpsStatus('⚠️ Could not get your location'), {enableHighAccuracy: true, maximumAge: 10000});
+    }
+
+    load();
+    setInterval(() => { if (!document.hidden) load(); }, 10000);
+  </script>
+</body>
+</html>
+"""
+
+
+DRIVER_PAGE = DRIVER_PAGE.replace("</body>", I18N_SCRIPT + "\n</body>")
 
 
 if __name__ == "__main__":
