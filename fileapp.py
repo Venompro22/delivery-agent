@@ -7,6 +7,7 @@ import json
 import os
 import re
 import secrets
+import statistics
 import time
 from datetime import datetime, timedelta
 from functools import wraps
@@ -54,11 +55,17 @@ if not DASHBOARD_PASSWORD:
     print("WARNING: DASHBOARD_PASSWORD is not set.", flush=True)
     print(f"Temporary password for this run: {DASHBOARD_PASSWORD}", flush=True)
 
+DRIVER_PASSWORD = os.environ.get("DRIVER_PASSWORD")   # optional: second password for drivers
 _failed_logins = {}
 
 
+def current_role():
+    """Who is logged in: "owner", "driver" or None."""
+    return session.get("role")
+
+
 def is_logged_in() -> bool:
-    return session.get("auth") is True
+    return session.get("auth") is True and current_role() in ("owner", "driver")
 
 
 def login_required(view):
@@ -70,6 +77,19 @@ def login_required(view):
         if request.path.startswith("/api/"):
             return jsonify({"ok": False, "error": "login required"}), 401
         return redirect(url_for("login"))
+    return wrapper
+
+
+def owner_required(view):
+    """Only the owner can open this. Drivers are sent to their own page."""
+    @wraps(view)
+    @login_required
+    def wrapper(*args, **kwargs):
+        if current_role() == "owner":
+            return view(*args, **kwargs)
+        if request.path.startswith("/api/"):
+            return jsonify({"ok": False, "error": "owner only"}), 403
+        return redirect(url_for("driver_page"))
     return wrapper
 
 
@@ -108,13 +128,19 @@ def login():
             error = "Too many attempts. Wait 10 minutes."
         else:
             given = request.form.get("password", "")
+            role = None
             if hmac.compare_digest(given.encode(), DASHBOARD_PASSWORD.encode()):
+                role = "owner"
+            elif DRIVER_PASSWORD and hmac.compare_digest(given.encode(), DRIVER_PASSWORD.encode()):
+                role = "driver"
+            if role:
                 _failed_logins.pop(ip, None)
                 session.clear()
                 session["auth"] = True
+                session["role"] = role
                 session.permanent = True
-                print(f"Login from {ip}", flush=True)
-                return redirect(url_for("home"))
+                print(f"Login from {ip} as {role}", flush=True)
+                return redirect(url_for("home") if role == "owner" else url_for("driver_page"))
             count, first = _failed_logins.get(ip, (0, time.time()))
             _failed_logins[ip] = (count + 1, first)
             print(f"Wrong password from {ip}", flush=True)
@@ -130,7 +156,7 @@ def logout():
 
 
 @app.route("/")
-@login_required
+@owner_required
 def home():
     return render_template_string(PAGE)
 
@@ -172,7 +198,7 @@ def api_route():
 
 
 @app.route("/api/orders", methods=["POST"])
-@login_required
+@owner_required
 def add_order():
     body = request.get_json(silent=True) or {}
 
@@ -233,7 +259,7 @@ def deliver_order(order_id):
     return jsonify({"ok": False}), 404
 
 @app.route("/api/orders/<order_id>/cancel", methods=["POST"])
-@login_required
+@owner_required
 def cancel_order(order_id):
     order = store.get(order_id)
     if not order:
@@ -246,7 +272,7 @@ def cancel_order(order_id):
     return jsonify({"ok": True})
 
 @app.route("/api/orders/<order_id>", methods=["PUT"])
-@login_required
+@owner_required
 def edit_order(order_id):
   order = store.get(order_id)
   if not order:
@@ -268,7 +294,7 @@ def edit_order(order_id):
   print(f"✏️ Edited: {order.customer_name}", flush=True)
   return jsonify({"ok": True})
 @app.route("/api/parse", methods=["POST"])
-@login_required
+@owner_required
 def parse_order_text():
     body = request.get_json(silent=True) or {}
     text = str(body.get("text", "")).strip()
@@ -278,7 +304,7 @@ def parse_order_text():
         return bad_request("text is too long")
     return jsonify(parse_message(text))
 @app.route("/api/agent", methods=["POST"])
-@login_required
+@owner_required
 def agent_message():
     body = request.get_json(silent=True) or {}
     text = str(body.get("text", "")).strip()
@@ -305,7 +331,7 @@ FEEDBACK_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "feedba
 
 
 @app.route("/api/feedback", methods=["POST"])
-@login_required
+@owner_required
 def save_feedback():
     """🎡 Data flywheel: every confirmed/corrected message becomes a training example."""
     body = request.get_json(silent=True) or {}
@@ -341,7 +367,7 @@ except Exception as e:
 
 
 @app.route("/api/retrain", methods=["POST"])
-@login_required
+@owner_required
 def retrain():
     total, from_feedback = retrain_model()
     print(f"🧠 Retrained: {total} examples ({from_feedback} from feedback)", flush=True)
@@ -360,7 +386,7 @@ DEMO_ORDERS = [   # name, phone, address, promise in minutes (None = no promise)
 
 
 @app.route("/api/demo", methods=["POST"])
-@login_required
+@owner_required
 def demo_orders():
     """✨ Add realistic demo orders around the driver (great for showing the app)."""
     import math
@@ -378,7 +404,7 @@ def demo_orders():
 
 
 @app.route("/api/demo/clear", methods=["POST"])
-@login_required
+@owner_required
 def clear_demo():
     """🧹 Remove every demo order (real orders are never touched)."""
     before = len(store.orders)
@@ -387,6 +413,42 @@ def clear_demo():
     removed = before - len(store.orders)
     print(f"🧹 Demo: removed {removed} orders", flush=True)
     return jsonify({"ok": True, "removed": removed})
+
+@app.route("/api/stats")
+@owner_required
+def api_stats():
+    """📊 Numbers for the stats page."""
+    today = datetime.now().date()
+    days = [today - timedelta(days=i) for i in range(6, -1, -1)]
+    per_day = {d: 0 for d in days}
+    minutes = []
+    by_hour = [0] * 24
+    on_time = late = 0
+
+    for o in store.all():
+        if o.status != OrderStatus.DELIVERED or not o.delivered_at:
+            continue
+        done = datetime.fromtimestamp(o.delivered_at)
+        if done.date() in per_day:
+            per_day[done.date()] += 1
+        by_hour[done.hour] += 1
+        if o.created_at:
+            minutes.append((o.delivered_at - o.created_at) / 60)
+        if o.promised_by:
+            if o.delivered_at <= o.promised_by:
+                on_time += 1
+            else:
+                late += 1
+
+    promised = on_time + late
+    return jsonify({
+        "days": [d.strftime("%m-%d") for d in days],
+        "delivered": [per_day[d] for d in days],
+        "by_hour": by_hour,
+        "total_delivered": sum(by_hour),
+        "avg_minutes": round(statistics.median(minutes)) if minutes else None,
+        "on_time_pct": round(on_time / promised * 100) if promised else None,
+    })
 
 
 @app.route("/api/driver/location", methods=["POST"])
@@ -407,13 +469,18 @@ def update_driver_location():
 
 
 @app.route("/orders")
-@login_required
+@owner_required
 def orders_page():
     return render_template_string(ORDERS_PAGE)
 
 
+@app.route("/stats")
+@owner_required
+def stats_page():
+    return render_template_string(STATS_PAGE)
+
 @app.route("/api/orders")
-@login_required
+@owner_required
 def list_orders():
     """Every order, newest first — delivered ones included."""
     today = datetime.now().date()
@@ -744,6 +811,7 @@ PAGE = """<!DOCTYPE html>
       </div>
       <a class="logout" href="/driver" title="Driver view">🚚 Driver</a>
       <a class="logout" href="/orders" title="All orders">📋 Orders</a>
+      <a class="logout" href="/stats" title="Stats">📊 Stats</a>
       <a class="logout" href="/logout" title="Log out">Logout</a>
     </div>
 
@@ -1723,7 +1791,74 @@ TRACK_PAGE = """<!DOCTYPE html>
 </body>
 </html>
 """
+STATS_PAGE = """<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Stats - Delivery Agent</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, "Segoe UI", sans-serif; margin: 0; background: #0f1115; color: #e8eaed; }
+    .wrap { max-width: 900px; margin: 0 auto; padding: 24px 20px 40px; }
+    .top { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; }
+    .top h1 { font-size: 22px; margin: 0; flex: 1; }
+    .back { font-size: 13px; color: #8a8f98; text-decoration: none;
+            border: 1px solid #2a2e37; border-radius: 6px; padding: 6px 10px; }
+    .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+    .kpi { background: #1a1d24; border: 1px solid #2a2e37; border-radius: 14px; padding: 16px; }
+    .kpi .l { font-size: 11px; color: #8a8f98; text-transform: uppercase; letter-spacing: 0.07em; }
+    .kpi .n { font-size: 30px; font-weight: 700; margin-top: 6px; font-variant-numeric: tabular-nums; }
+    .kpi .s { font-size: 12px; color: #8a8f98; margin-top: 2px; }
+    .charts { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+    .chart { background: #1a1d24; border: 1px solid #2a2e37; border-radius: 14px; padding: 16px; }
+    .chart h3 { font-size: 13px; margin: 0 0 12px; color: #c3c7cd; font-weight: 600; }
+    .chart canvas { width: 100%; height: 220px; }
+    @media (max-width: 720px) {
+      .kpis { grid-template-columns: repeat(2, 1fr); }
+      .charts { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <h1>Stats</h1>
+      <a class="back" href="/">← Dashboard</a>
+    </div>
 
+    <div class="kpis">
+      <div class="kpi"><div class="l">This week</div><div class="n" id="k-week">–</div><div class="s">orders delivered</div></div>
+      <div class="kpi"><div class="l">Today</div><div class="n" id="k-today">–</div><div class="s">orders delivered</div></div>
+      <div class="kpi"><div class="l">Median time</div><div class="n" id="k-time">–</div><div class="s">minutes per order</div></div>
+      <div class="kpi"><div class="l">On time</div><div class="n" id="k-ontime">–</div><div class="s">of promised orders</div></div>
+    </div>
+
+    <div class="charts">
+      <div class="chart"><h3>Deliveries — last 7 days</h3><canvas id="chart-days"></canvas></div>
+      <div class="chart"><h3>Busiest hours</h3><canvas id="chart-hours"></canvas></div>
+    </div>
+  </div>
+
+  <script>
+    async function load() {
+      const res = await fetch('/api/stats');
+      if (res.status === 401) { location.href = '/login'; return; }
+      const d = await res.json();
+
+      const week = d.delivered.reduce((a, b) => a + b, 0);
+      const today = d.delivered[d.delivered.length - 1];
+      document.getElementById('k-week').textContent = week;
+      document.getElementById('k-today').textContent = today;
+      document.getElementById('k-time').textContent = d.avg_minutes ?? '–';
+      document.getElementById('k-ontime').textContent = d.on_time_pct !== null ? d.on_time_pct + '%' : '–';
+    }
+
+    load();
+  </script>
+</body>
+</html>
+"""
 I18N_SCRIPT = r"""<script>
 (function () {
   const ZH = {
@@ -1833,6 +1968,7 @@ PAGE = PAGE.replace("</body>", I18N_SCRIPT + "\n</body>")
 ORDERS_PAGE = ORDERS_PAGE.replace("</body>", I18N_SCRIPT + "\n</body>")
 TRACK_PAGE = TRACK_PAGE.replace("</body>", I18N_SCRIPT + "\n</body>")
 LOGIN_PAGE = LOGIN_PAGE.replace("</body>", I18N_SCRIPT + "\n</body>")
+STATS_PAGE = STATS_PAGE.replace("</body>", I18N_SCRIPT + "\n</body>")
 
 
 @app.route("/driver")
@@ -2086,7 +2222,7 @@ PRO_SCRIPT = r"""<script>
 </script>"""
 
 # ✒️ every page gets the pro typography
-for _name in ("PAGE", "ORDERS_PAGE", "TRACK_PAGE", "LOGIN_PAGE", "DRIVER_PAGE"):
+for _name in ("PAGE", "ORDERS_PAGE", "TRACK_PAGE", "LOGIN_PAGE", "DRIVER_PAGE", "STATS_PAGE"):
     if _name in globals():
         globals()[_name] = globals()[_name].replace("</head>", PRO_HEAD + "</head>").replace("</body>", PRO_SCRIPT + "\n</body>")
 
