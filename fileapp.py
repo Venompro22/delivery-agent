@@ -1978,5 +1978,72 @@ DRIVER_PAGE = """<!DOCTYPE html>
 DRIVER_PAGE = DRIVER_PAGE.replace("</body>", I18N_SCRIPT + "\n</body>")
 
 
+PRO_HEAD = """
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/inter@5.0.18/400.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/inter@5.0.18/500.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/inter@5.0.18/600.css"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/inter@5.0.18/700.css"/>
+  <style>
+    /* ✒️ Pro typography */
+    :root { --pro-font: "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC",
+                        "Hiragino Sans GB", "Microsoft YaHei", "Segoe UI", sans-serif; }
+    body, button, input, textarea, select { font-family: var(--pro-font) !important; }
+    body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
+           font-feature-settings: "cv11", "ss01", "ss03"; letter-spacing: -0.006em; }
+    h1, h2, .brand h2, .name, .big { letter-spacing: -0.022em !important; font-weight: 700; }
+    button, .btn, .logout, .back, .nav, .tab, .chip { font-weight: 500 !important; letter-spacing: -0.005em; }
+    #sidebar h3, .stat .label, .label, .hist-head, .next h3, .count .l {
+      letter-spacing: 0.07em !important; font-weight: 600 !important; font-size: 10.5px !important; }
+    .stat .num, .count .n { font-weight: 600 !important; letter-spacing: -0.02em; }
+    .stat .num, .count .n, .meta, .info, .eta, .ai-conf, .hist-row .t, .big, .v,
+    .gps-status, #updated, .item .eta { font-variant-numeric: tabular-nums; }
+    .subtitle, .meta, .hint, .gps-status { color: #8a8f98; }
+    input::placeholder, textarea::placeholder { color: #5f646d !important; }
+    input, textarea { font-size: 14px; }
+    button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible {
+      outline: 2px solid #6b4fd8; outline-offset: 2px; }
+  </style>
+"""
+
+PRO_SCRIPT = r"""<script>
+(function () {
+  // ✒️ Clean UI: remove emojis from buttons, titles and labels (customer data is never touched)
+  const EMOJI = /(?:\p{Extended_Pictographic}|\p{Regional_Indicator})(?:\uFE0F|\u200D\p{Extended_Pictographic})*\uFE0F?\s?/gu;
+  const SEL = 'button:not(.chip), .btn, .logout, .back, h1, h3, .label, .hint, .subtitle, .chips-label, ' +
+              '.hist-head, .stat .label, .gps-status, .tab, .ai-who';
+  function strip(el) {
+    el.childNodes.forEach(n => {
+      if (n.nodeType === 3) { const t = n.nodeValue.replace(EMOJI, ''); if (t !== n.nodeValue) n.nodeValue = t; }
+    });
+  }
+  function clean(root) {
+    if (root.matches && root.matches(SEL)) strip(root);
+    if (root.querySelectorAll) root.querySelectorAll(SEL).forEach(strip);
+    document.querySelectorAll('input[placeholder], textarea[placeholder]').forEach(el => {
+      const t = el.placeholder.replace(EMOJI, ''); if (t !== el.placeholder) el.placeholder = t;
+    });
+  }
+  function start() {
+    clean(document.body);
+    new MutationObserver(muts => muts.forEach(m => {
+      if (m.type === 'characterData') {
+        const p = m.target.parentElement;
+        if (p && p.matches(SEL)) strip(p);
+      } else m.addedNodes.forEach(n => {
+        if (n.nodeType === 1) clean(n);
+        else if (n.nodeType === 3 && n.parentElement && n.parentElement.matches(SEL)) strip(n.parentElement);
+      });
+    })).observe(document.body, {childList: true, subtree: true, characterData: true});
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();
+})();
+</script>"""
+
+# ✒️ every page gets the pro typography
+for _name in ("PAGE", "ORDERS_PAGE", "TRACK_PAGE", "LOGIN_PAGE", "DRIVER_PAGE"):
+    if _name in globals():
+        globals()[_name] = globals()[_name].replace("</head>", PRO_HEAD + "</head>").replace("</body>", PRO_SCRIPT + "\n</body>")
+
+
 if __name__ == "__main__":
     app.run(debug=True, port=5000)
