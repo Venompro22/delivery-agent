@@ -558,6 +558,13 @@ PAGE = """<!DOCTYPE html>
       display: flex; align-items: center; justify-content: center; border: 3px solid #fff;
       box-shadow: 0 0 0 0 rgba(31,157,85,0.7); animation: driverPulse 2s infinite;
     }
+    .puck { position: relative; width: 40px; height: 40px; }
+    .puck-arrow { position: absolute; inset: 0; transition: transform 0.6s ease;
+                  filter: drop-shadow(0 2px 6px rgba(0,0,0,0.45)); }
+    .puck-ring { position: absolute; inset: 5px; border-radius: 50%; background: rgba(45,108,223,0.35);
+                 animation: puckPulse 2.2s ease-out infinite; }
+    @keyframes puckPulse { 0% { transform: scale(1); opacity: 0.7; } 100% { transform: scale(2.6); opacity: 0; } }
+    .logo svg { display: block; }
     @keyframes driverPulse {
       0% { box-shadow: 0 0 0 0 rgba(31,157,85,0.7); }
       70% { box-shadow: 0 0 0 14px rgba(31,157,85,0); }
@@ -730,7 +737,7 @@ PAGE = """<!DOCTYPE html>
 <body>
   <div id="sidebar">
     <div class="brand">
-      <div class="logo">🚚</div>
+      <div class="logo"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="19" r="2.5"/><circle cx="18" cy="5" r="2.5"/><path d="M8.5 19H15a3.5 3.5 0 0 0 0-7H9a3.5 3.5 0 0 1 0-7h6.5"/></svg></div>
       <div>
         <h2>Delivery Agent</h2>
         <div class="subtitle">Smart routing dashboard</div>
@@ -1265,6 +1272,46 @@ PAGE = """<!DOCTYPE html>
       }
     }
 
+    // ---------- 🧭 Driver puck: smooth movement + heading arrow ----------
+    const PUCK = '<div class="puck"><div class="puck-ring"></div>' +
+      '<svg class="puck-arrow" viewBox="0 0 40 40" width="40" height="40">' +
+      '<defs><linearGradient id="puckGrad" x1="0" y1="0" x2="0" y2="1">' +
+      '<stop offset="0" stop-color="#4f8dff"/><stop offset="1" stop-color="#1f5fd6"/></linearGradient></defs>' +
+      '<circle cx="20" cy="20" r="15" fill="url(#puckGrad)" stroke="#fff" stroke-width="3"/>' +
+      '<path d="M20 10 L27 27 L20 23 L13 27 Z" fill="#fff"/></svg></div>';
+    let driverMarker = null, driverPos = null;
+
+    function bearing(a, b) {
+      const r = x => x * Math.PI / 180;
+      const y = Math.sin(r(b[1] - a[1])) * Math.cos(r(b[0]));
+      const x = Math.cos(r(a[0])) * Math.sin(r(b[0])) - Math.sin(r(a[0])) * Math.cos(r(b[0])) * Math.cos(r(b[1] - a[1]));
+      return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+    }
+
+    function updateDriver(lat, lng) {
+      const to = [lat, lng];
+      if (!driverMarker) {
+        driverMarker = L.marker(to, {icon: L.divIcon({className: '', html: PUCK, iconSize: [40, 40],
+          iconAnchor: [20, 20]}), zIndexOffset: 1000}).addTo(map).bindPopup('Driver');
+        driverPos = to;
+        return;
+      }
+      const from = driverPos;
+      if (from[0] === lat && from[1] === lng) return;
+      if (map.distance(from, to) > 3) {                       // turn the arrow toward where we are going
+        const arrow = driverMarker.getElement() && driverMarker.getElement().querySelector('.puck-arrow');
+        if (arrow) arrow.style.transform = `rotate(${bearing(from, to)}deg)`;
+      }
+      const t0 = performance.now(), D = 900;                    // glide instead of jumping
+      (function step(now) {
+        const k = Math.min(1, (now - t0) / D);
+        const e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+        driverMarker.setLatLng([from[0] + (to[0] - from[0]) * e, from[1] + (to[1] - from[1]) * e]);
+        if (k < 1) requestAnimationFrame(step);
+      })(t0);
+      driverPos = to;
+    }
+
     async function refresh() {
       const res = await api('/api/route');
       const data = await res.json();
@@ -1281,9 +1328,7 @@ PAGE = """<!DOCTYPE html>
       checkAlerts(data.stops);
       layer.clearLayers();
       const pts = [[data.driver.lat, data.driver.lng]];
-      L.marker([data.driver.lat, data.driver.lng], {icon: L.divIcon({className: '',
-        html: '<div class="pin-driver">🚚</div>', iconSize: [36, 36], iconAnchor: [18, 18]}), zIndexOffset: 1000})
-        .addTo(layer).bindPopup('🚚 Driver (start)');
+      updateDriver(data.driver.lat, data.driver.lng);
 
       let html = '';
       data.stops.forEach(s => {
@@ -2010,7 +2055,8 @@ PRO_SCRIPT = r"""<script>
   // ✒️ Clean UI: remove emojis from buttons, titles and labels (customer data is never touched)
   const EMOJI = /(?:\p{Extended_Pictographic}|\p{Regional_Indicator})(?:\uFE0F|\u200D\p{Extended_Pictographic})*\uFE0F?\s?/gu;
   const SEL = 'button:not(.chip), .btn, .logout, .back, h1, h3, .label, .hint, .subtitle, .chips-label, ' +
-              '.hist-head, .stat .label, .gps-status, .tab, .ai-who';
+              '.hist-head, .stat .label, .gps-status, .tab, .ai-who, .toast, .ai-intent, .ai-what, ' +
+              '.ai-learn, .hist-row span:not(.m), .error, .empty, .meta, .badge, .note';
   function strip(el) {
     el.childNodes.forEach(n => {
       if (n.nodeType === 3) { const t = n.nodeValue.replace(EMOJI, ''); if (t !== n.nodeValue) n.nodeValue = t; }
