@@ -1797,6 +1797,7 @@ STATS_PAGE = """<!DOCTYPE html>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>Stats - Delivery Agent</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <style>
     * { box-sizing: border-box; }
     body { font-family: -apple-system, "Segoe UI", sans-serif; margin: 0; background: #0f1115; color: #e8eaed; }
@@ -1813,7 +1814,7 @@ STATS_PAGE = """<!DOCTYPE html>
     .charts { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
     .chart { background: #1a1d24; border: 1px solid #2a2e37; border-radius: 14px; padding: 16px; }
     .chart h3 { font-size: 13px; margin: 0 0 12px; color: #c3c7cd; font-weight: 600; }
-    .chart canvas { width: 100%; height: 220px; }
+    .chart-box { position: relative; height: 220px; }
     @media (max-width: 720px) {
       .kpis { grid-template-columns: repeat(2, 1fr); }
       .charts { grid-template-columns: 1fr; }
@@ -1835,12 +1836,24 @@ STATS_PAGE = """<!DOCTYPE html>
     </div>
 
     <div class="charts">
-      <div class="chart"><h3>Deliveries — last 7 days</h3><canvas id="chart-days"></canvas></div>
-      <div class="chart"><h3>Busiest hours</h3><canvas id="chart-hours"></canvas></div>
+      <div class="chart"><h3>Deliveries — last 7 days</h3><div class="chart-box"><canvas id="chart-days"></canvas></div></div>
+      <div class="chart"><h3>Busiest hours</h3><div class="chart-box"><canvas id="chart-hours"></canvas></div></div>
     </div>
   </div>
 
   <script>
+    function baseOptions() {
+      return {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { grid: { display: false } },
+          y: { beginAtZero: true, ticks: { precision: 0 }, grid: { color: 'rgba(255,255,255,0.06)' } },
+        },
+      };
+    }
+
     async function load() {
       const res = await fetch('/api/stats');
       if (res.status === 401) { location.href = '/login'; return; }
@@ -1852,6 +1865,32 @@ STATS_PAGE = """<!DOCTYPE html>
       document.getElementById('k-today').textContent = today;
       document.getElementById('k-time').textContent = d.avg_minutes ?? '–';
       document.getElementById('k-ontime').textContent = d.on_time_pct !== null ? d.on_time_pct + '%' : '–';
+
+      Chart.defaults.color = '#8a8f98';
+      Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+
+      new Chart(document.getElementById('chart-days'), {
+        type: 'bar',
+        data: {
+          labels: d.days,
+          datasets: [{ data: d.delivered, backgroundColor: '#2d6cdf', borderRadius: 6, maxBarThickness: 34 }],
+        },
+        options: baseOptions(),
+      });
+
+      const busiest = Math.max(...d.by_hour);
+      new Chart(document.getElementById('chart-hours'), {
+        type: 'bar',
+        data: {
+          labels: d.by_hour.map((_, h) => h + 'h'),
+          datasets: [{
+            data: d.by_hour,
+            backgroundColor: d.by_hour.map(v => v === busiest && v > 0 ? '#f0a020' : '#1f9d55'),
+            borderRadius: 4,
+          }],
+        },
+        options: baseOptions(),
+      });
     }
 
     load();
