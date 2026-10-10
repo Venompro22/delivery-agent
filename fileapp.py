@@ -1974,7 +1974,7 @@ STATS_PAGE = STATS_PAGE.replace("</body>", I18N_SCRIPT + "\n</body>")
 @app.route("/driver")
 @login_required
 def driver_page():
-    return render_template_string(DRIVER_PAGE)
+    return render_template_string(DRIVER_PAGE, role=current_role())
 
 
 DRIVER_PAGE = """<!DOCTYPE html>
@@ -2032,7 +2032,11 @@ DRIVER_PAGE = """<!DOCTYPE html>
   <div class="wrap">
     <div class="top">
       <h1>🚚 Driver</h1>
+      {% if role == "owner" %}
       <a class="back" href="/">← Dashboard</a>
+      {% else %}
+      <a class="back" href="/logout">Logout</a>
+      {% endif %}
     </div>
     <div class="meta" id="stats">Loading…</div>
     <div class="progress"><div id="bar" style="width:0%"></div></div>
