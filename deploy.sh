@@ -25,7 +25,7 @@ ssh "$SERVER" "sudo /usr/bin/systemctl restart delivery"
 sleep 2
 
 echo "🌐 4/4 Checking the site..."
-code=$(curl --noproxy '*' -s -o /dev/null -w "%{http_code}" "http://172.20.10.6/login")
+code=$(curl --noproxy '*' -s -o /dev/null -w "%{http_code}" "https://172.20.10.6/login")
 if [ "$code" = "200" ]; then
   echo "✅ Deployed! Site is up."
 else

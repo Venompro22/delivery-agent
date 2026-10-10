@@ -42,12 +42,21 @@ def _load_secret_key() -> str:
     return key
 
 
-app.secret_key = _load_secret_key()
 app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE="Lax",
+    SESSION_COOKIE_SECURE=os.environ.get("COOKIE_SECURE") == "1",
     PERMANENT_SESSION_LIFETIME=timedelta(days=30),
 )
+
+@app.after_request
+def security_headers(resp):
+    """🛡️ Extra browser protection on every response."""
+    resp.headers["X-Content-Type-Options"] = "nosniff"
+    resp.headers["X-Frame-Options"] = "DENY"
+    resp.headers["Referrer-Policy"] = "same-origin"
+    resp.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=(self)"
+    return resp
 
 DASHBOARD_PASSWORD = os.environ.get("DASHBOARD_PASSWORD")
 if not DASHBOARD_PASSWORD:

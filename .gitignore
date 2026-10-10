@@ -11,3 +11,4 @@ mini_gpt.pt
 lora_intent/
 qwen_head.npz
 feedback.jsonl
+*.pem
