@@ -17,6 +17,8 @@ r = optimize_route(d, [Order(customer_name='t', lat=30.13, lng=120.26)], GeoServ
 assert len(r) == 1, 'route is empty'
 print('    ✅ route logic OK')
 "
+echo "🧪    Running tests..."
+python3 -m pytest -q || { echo "❌ Tests failed — NOT deploying"; exit 1; }
 echo "📤 2/4 Uploading files..."
 scp -q "${FILES[@]}" "$SERVER:$REMOTE_DIR/"
 
