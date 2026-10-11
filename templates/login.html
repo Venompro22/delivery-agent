@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Login - Delivery Agent</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, "Segoe UI", sans-serif; margin: 0;
+      min-height: 100vh; background: #0f1115; color: #e8eaed;
+      display: flex; align-items: center; justify-content: center; padding: 20px;
+    }
+    .card {
+      width: 100%; max-width: 360px; background: #1a1d24;
+      border: 1px solid #2a2e37; border-radius: 16px; padding: 28px; text-align: center;
+    }
+    h1 { font-size: 20px; margin: 0 0 4px; }
+    .sub { color: #8a8f98; font-size: 13px; margin-bottom: 20px; }
+    input {
+      width: 100%; padding: 12px; margin: 6px 0; font-size: 16px;
+      background: #0f1115; border: 1px solid #2a2e37; border-radius: 8px; color: #e8eaed;
+    }
+    input:focus { outline: none; border-color: #2d6cdf; }
+    button {
+      width: 100%; padding: 12px; margin-top: 10px; font-size: 15px; font-weight: 600;
+      background: #2d6cdf; color: #fff; border: none; border-radius: 8px; cursor: pointer;
+    }
+    .error {
+      color: #ff8a8d; background: rgba(229,72,77,0.12); border: 1px solid #e5484d;
+      border-radius: 8px; padding: 8px 10px; font-size: 13px; margin-bottom: 10px;
+    }
+  </style>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/inter@5.0.18/400.css" media="print" onload="this.media='all'"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/inter@5.0.18/500.css" media="print" onload="this.media='all'"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/inter@5.0.18/600.css" media="print" onload="this.media='all'"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/inter@5.0.18/700.css" media="print" onload="this.media='all'"/>
+  <link rel="stylesheet" href="/static/pro.css"/>
+</head>
+<body>
+  <form class="card" method="post" action="/login">
+    <h1>Delivery Agent</h1>
+    <div class="sub">Enter the dashboard password</div>
+    {% if error %}<div class="error">{{ error }}</div>{% endif %}
+    <input type="password" name="password" placeholder="Password" autofocus required/>
+    <button type="submit">Log in</button>
+  </form>
+  <script src="/static/i18n.js"></script>
+  <script src="/static/pro.js"></script>
+</body>
+</html>

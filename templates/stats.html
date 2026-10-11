@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Stats - Delivery Agent</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, "Segoe UI", sans-serif; margin: 0; background: #0f1115; color: #e8eaed; }
+    .wrap { max-width: 900px; margin: 0 auto; padding: 24px 20px 40px; }
+    .top { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; }
+    .top h1 { font-size: 22px; margin: 0; flex: 1; }
+    .back { font-size: 13px; color: #8a8f98; text-decoration: none;
+            border: 1px solid #2a2e37; border-radius: 6px; padding: 6px 10px; }
+    .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+    .kpi { background: #1a1d24; border: 1px solid #2a2e37; border-radius: 14px; padding: 16px; }
+    .kpi .l { font-size: 11px; color: #8a8f98; text-transform: uppercase; letter-spacing: 0.07em; }
+    .kpi .n { font-size: 30px; font-weight: 700; margin-top: 6px; font-variant-numeric: tabular-nums; }
+    .kpi .s { font-size: 12px; color: #8a8f98; margin-top: 2px; }
+    .charts { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+    .chart { background: #1a1d24; border: 1px solid #2a2e37; border-radius: 14px; padding: 16px; }
+    .chart h3 { font-size: 13px; margin: 0 0 12px; color: #c3c7cd; font-weight: 600; }
+    .chart-box { position: relative; height: 220px; }
+    @media (max-width: 720px) {
+      .kpis { grid-template-columns: repeat(2, 1fr); }
+      .charts { grid-template-columns: 1fr; }
+    }
+  </style>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/inter@5.0.18/400.css" media="print" onload="this.media='all'"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/inter@5.0.18/500.css" media="print" onload="this.media='all'"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/inter@5.0.18/600.css" media="print" onload="this.media='all'"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/inter@5.0.18/700.css" media="print" onload="this.media='all'"/>
+  <link rel="stylesheet" href="/static/pro.css"/>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <h1>Stats</h1>
+      <a class="back" href="/">← Dashboard</a>
+    </div>
+
+    <div class="kpis">
+      <div class="kpi"><div class="l">This week</div><div class="n" id="k-week">–</div><div class="s">orders delivered</div></div>
+      <div class="kpi"><div class="l">Today</div><div class="n" id="k-today">–</div><div class="s">orders delivered</div></div>
+      <div class="kpi"><div class="l">Median time</div><div class="n" id="k-time">–</div><div class="s">minutes per order</div></div>
+      <div class="kpi"><div class="l">On time</div><div class="n" id="k-ontime">–</div><div class="s">of promised orders</div></div>
+    </div>
+
+    <div class="charts">
+      <div class="chart"><h3>Deliveries — last 7 days</h3><div class="chart-box"><canvas id="chart-days"></canvas></div></div>
+      <div class="chart"><h3>Busiest hours</h3><div class="chart-box"><canvas id="chart-hours"></canvas></div></div>
+    </div>
+  </div>
+
+  <script>
+    function baseOptions() {
+      return {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { grid: { display: false } },
+          y: { beginAtZero: true, ticks: { precision: 0 }, grid: { color: 'rgba(255,255,255,0.06)' } },
+        },
+      };
+    }
+
+    async function load() {
+      const res = await fetch('/api/stats');
+      if (res.status === 401) { location.href = '/login'; return; }
+      const d = await res.json();
+
+      const week = d.delivered.reduce((a, b) => a + b, 0);
+      const today = d.delivered[d.delivered.length - 1];
+      document.getElementById('k-week').textContent = week;
+      document.getElementById('k-today').textContent = today;
+      document.getElementById('k-time').textContent = d.avg_minutes ?? '–';
+      document.getElementById('k-ontime').textContent = d.on_time_pct !== null ? d.on_time_pct + '%' : '–';
+
+      Chart.defaults.color = '#8a8f98';
+      Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+
+      new Chart(document.getElementById('chart-days'), {
+        type: 'bar',
+        data: {
+          labels: d.days,
+          datasets: [{ data: d.delivered, backgroundColor: '#2d6cdf', borderRadius: 6, maxBarThickness: 34 }],
+        },
+        options: baseOptions(),
+      });
+
+      const busiest = Math.max(...d.by_hour);
+      new Chart(document.getElementById('chart-hours'), {
+        type: 'bar',
+        data: {
+          labels: d.by_hour.map((_, h) => h + 'h'),
+          datasets: [{
+            data: d.by_hour,
+            backgroundColor: d.by_hour.map(v => v === busiest && v > 0 ? '#f0a020' : '#1f9d55'),
+            borderRadius: 4,
+          }],
+        },
+        options: baseOptions(),
+      });
+    }
+
+    load();
+  </script>
+  <script src="/static/i18n.js"></script>
+  <script src="/static/pro.js"></script>
+</body>
+</html>

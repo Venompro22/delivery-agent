@@ -20,6 +20,7 @@ print('    ✅ route logic OK')
 echo "🧪    Running tests..."
 python3 -m pytest -q || { echo "❌ Tests failed — NOT deploying"; exit 1; }
 echo "📤 2/4 Uploading files..."
+scp -q -r templates static scr-ysf2006@172.20.10.6:~/delivery-agent/
 scp -q "${FILES[@]}" "$SERVER:$REMOTE_DIR/"
 
 echo "🔄 3/4 Restarting service..."

@@ -1,0 +1,18 @@
+/* ✒️ Pro typography */
+    :root { --pro-font: "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC",
+                        "Hiragino Sans GB", "Microsoft YaHei", "Segoe UI", sans-serif; }
+    body, button, input, textarea, select { font-family: var(--pro-font) !important; }
+    body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
+           font-feature-settings: "cv11", "ss01", "ss03"; letter-spacing: -0.006em; }
+    h1, h2, .brand h2, .name, .big { letter-spacing: -0.022em !important; font-weight: 700; }
+    button, .btn, .logout, .back, .nav, .tab, .chip { font-weight: 500 !important; letter-spacing: -0.005em; }
+    #sidebar h3, .stat .label, .label, .hist-head, .next h3, .count .l {
+      letter-spacing: 0.07em !important; font-weight: 600 !important; font-size: 10.5px !important; }
+    .stat .num, .count .n { font-weight: 600 !important; letter-spacing: -0.02em; }
+    .stat .num, .count .n, .meta, .info, .eta, .ai-conf, .hist-row .t, .big, .v,
+    .gps-status, #updated, .item .eta { font-variant-numeric: tabular-nums; }
+    .subtitle, .meta, .hint, .gps-status { color: #8a8f98; }
+    input::placeholder, textarea::placeholder { color: #5f646d !important; }
+    input, textarea { font-size: 14px; }
+    button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible {
+      outline: 2px solid #6b4fd8; outline-offset: 2px; }
