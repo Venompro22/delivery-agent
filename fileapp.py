@@ -73,7 +73,16 @@ if not DASHBOARD_PASSWORD:
 
 DRIVER_PASSWORD = os.environ.get("DRIVER_PASSWORD")   # optional: second password for drivers
 _failed_logins = {}
+SESSION_VERSION_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".session_version")
 
+
+def session_version() -> int:
+    """🚪 Bump this number to log everyone out."""
+    try:
+        with open(SESSION_VERSION_PATH) as f:
+            return int(f.read().strip() or 0)
+    except (FileNotFoundError, ValueError):
+        return 0
 
 def current_role():
     """Who is logged in: "owner", "driver" or None."""
@@ -81,7 +90,9 @@ def current_role():
 
 
 def is_logged_in() -> bool:
-    return session.get("auth") is True and current_role() in ("owner", "driver")
+    return (session.get("auth") is True
+            and current_role() in ("owner", "driver")
+            and session.get("v") == session_version())
 
 
 def login_required(view):
@@ -154,6 +165,7 @@ def login():
                 session.clear()
                 session["auth"] = True
                 session["role"] = role
+                session["v"] = session_version()
                 session.permanent = True
                 print(f"Login from {ip} as {role}", flush=True)
                 return redirect(url_for("home") if role == "owner" else url_for("driver_page"))
@@ -466,6 +478,16 @@ def api_stats():
         "on_time_pct": round(on_time / promised * 100) if promised else None,
     })
 
+@app.route("/api/logout-all", methods=["POST"])
+@owner_required
+def logout_all():
+    """🚪 Log out everyone (owner + all drivers) right now."""
+    new = session_version() + 1
+    with open(SESSION_VERSION_PATH, "w") as f:
+        f.write(str(new))
+    session.clear()
+    print(f"🚪 Logged everyone out (session version {new})", flush=True)
+    return jsonify({"ok": True})
 
 @app.route("/api/driver/location", methods=["POST"])
 @login_required
@@ -829,6 +851,7 @@ PAGE = """<!DOCTYPE html>
       <a class="logout" href="/orders" title="All orders">📋 Orders</a>
       <a class="logout" href="/stats" title="Stats">📊 Stats</a>
       <a class="logout" href="/logout" title="Log out">Logout</a>
+      <a class="logout" href="#" title="Log out everyone" onclick="logoutAll(); return false;">Logout all</a>
     </div>
 
     <div class="gps-row">
@@ -1190,7 +1213,11 @@ PAGE = """<!DOCTYPE html>
       document.getElementById('paste').value = el.textContent;
       handleMessage();
     }
-
+    async function logoutAll() {
+      if (!confirm('Log out EVERYONE — you and all drivers?')) return;
+      await api('/api/logout-all', {method: 'POST'});
+      location.href = '/login';
+    }
     function showToast(msg) {
       const t = document.getElementById('toast');
       t.textContent = msg;
