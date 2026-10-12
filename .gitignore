@@ -13,3 +13,4 @@ qwen_head.npz
 feedback.jsonl
 *.pem
 .session_version
+orders.db

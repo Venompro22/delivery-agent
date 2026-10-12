@@ -67,3 +67,10 @@ def test_security_headers_are_sent(client):
     r = client.get("/login")
     assert r.headers["X-Frame-Options"] == "DENY"
     assert r.headers["X-Content-Type-Options"] == "nosniff"
+
+
+def test_orders_survive_a_restart(client):
+    login(client, "owner-pass")
+    client.post("/api/orders", json={"name": "王芳", "lat": "30.2", "lng": "120.1"})
+    again = fileapp.OrderStore(fileapp.store.path)     # like restarting the server
+    assert [o.customer_name for o in again.all()] == ["王芳"]
