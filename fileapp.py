@@ -49,12 +49,6 @@ def _load_secret_key() -> str:
     return key
 
 
-    key = secrets.token_hex(32)
-    with open(path, "w") as f:
-        f.write(key)
-    return key
-
-
 app.secret_key = _load_secret_key()
 app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
