@@ -6,6 +6,7 @@ import pytest
 
 os.environ["DASHBOARD_PASSWORD"] = "owner-pass"
 os.environ["DRIVER_PASSWORD"] = "driver-pass"
+os.environ["SKIP_AUTO_RETRAIN"] = "1"
 os.environ.pop("COOKIE_SECURE", None)
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 

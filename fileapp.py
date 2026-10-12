@@ -387,11 +387,12 @@ def retrain_model():
     return len(examples), len(examples) - len(DATA)
 
 
-try:   # on every start/deploy, include the feedback collected on this server
-    _n, _fb = retrain_model()
-    print(f"🧠 Intent model ready: {_n} examples ({_fb} from feedback)", flush=True)
-except Exception as e:
-    print(f"⚠️ Could not retrain at start: {e}", flush=True)
+if os.environ.get("SKIP_AUTO_RETRAIN") != "1":
+    try:   # on every start/deploy, include the feedback collected on this server
+        _n, _fb = retrain_model()
+        print(f"🧠 Intent model ready: {_n} examples ({_fb} from feedback)", flush=True)
+    except Exception as e:
+        print(f"⚠️ Could not retrain at start: {e}", flush=True)
 
 
 @app.route("/api/retrain", methods=["POST"])
