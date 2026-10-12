@@ -287,12 +287,15 @@
       <button class="gps-btn" id="live-btn" onclick="toggleLive()">🛰️ Live GPS: off</button>
     </div>
     <div class="gps-status" id="gps-status"></div>
+    {% if dev_mode %}
     <div class="gps-row">
       <button class="gps-btn demo-btn" onclick="loadDemo()">✨ Demo</button>
       <button class="gps-btn demo-clear" onclick="clearDemo()">🧹 Clear demo</button>
       <button class="gps-btn sim-btn" id="sim-btn" onclick="simulate()">▶️ Simulate</button>
     </div>
+    {% endif %}
         <textarea id="paste" rows="2" placeholder="📋 Paste a WeChat message here…"></textarea>
+    {% if dev_mode %}
     <div class="chips"><span class="chips-label">💬 Try:</span>
       <button class="chip" onclick="tryMsg(this)">我的水在哪里 13800138001</button>
       <button class="chip" onclick="tryMsg(this)">已送达 13900139002</button>
@@ -300,6 +303,7 @@
       <button class="chip" onclick="tryMsg(this)">客户不在家 电话不接 15800158003</button>
       <button class="chip" onclick="tryMsg(this)">我要两桶水 文三路200号 下午5点前</button>
     </div>
+    {% endif %}
        <button onclick="handleMessage()">🤖 Handle message</button>
     <div id="fb"></div>
     <div id="ai-history"></div>

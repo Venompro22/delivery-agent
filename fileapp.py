@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 from functools import wraps
 
 from flask import (Flask, request, jsonify, render_template,
-                   session, redirect, url_for)
+                   session, redirect, url_for, abort)
 
 from models import Order, Driver, OrderStatus
 from geo import GeoService
@@ -26,6 +26,13 @@ from intent_nn import INTENTS, DATA, MODEL_PATH, predict_intent, train, load_fee
 
 app = Flask(__name__)
 
+DEV_MODE = os.environ.get("DEV_MODE") == "1"   # demo / simulate tools — only on my Mac
+
+
+@app.context_processor
+def inject_dev_mode():
+    """Let every template know if dev tools should be shown."""
+    return {"dev_mode": DEV_MODE}
 
 # ---------- Security ----------
 def _load_secret_key() -> str:
@@ -418,6 +425,8 @@ DEMO_ORDERS = [   # name, phone, address, promise in minutes (None = no promise)
 @owner_required
 def demo_orders():
     """✨ Add realistic demo orders around the driver (great for showing the app)."""
+    if not DEV_MODE:
+        abort(404)
     import math
     ids = []
     for name, phone, note, promise, north_km, east_km in DEMO_ORDERS:
@@ -431,11 +440,12 @@ def demo_orders():
     print(f"✨ Demo: added {len(ids)} orders", flush=True)
     return jsonify({"ok": True, "ids": ids})
 
-
 @app.route("/api/demo/clear", methods=["POST"])
 @owner_required
 def clear_demo():
     """🧹 Remove every demo order (real orders are never touched)."""
+    if not DEV_MODE:
+        abort(404)
     before = len(store.orders)
     store.orders = [o for o in store.orders if not (o.note or "").startswith(DEMO_TAG)]
     store.save()
