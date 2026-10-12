@@ -51,7 +51,12 @@
     "Great job!": "干得好！", "Start GPS": "开启定位", "GPS on — tap to stop": "定位中 — 点击停止",
     "GPS stopped": "定位已停止", "left": "剩余", "finish": "完成", "Sent": "已发送",
     "Enter the dashboard password": "请输入调度台密码", "Password": "密码", "Log in": "登录",
-    "Wrong password.": "密码错误。", "Too many attempts. Wait 10 minutes.": "尝试次数过多，请等待10分钟。"
+    "Wrong password.": "密码错误。", "Too many attempts. Wait 10 minutes.": "尝试次数过多，请等待10分钟。",
+    "Stats - Delivery Agent": "统计 - 智能配送助手", "Stats": "统计",
+    "This week": "本周", "orders delivered": "已送达订单",
+    "Median time": "中位时长", "minutes per order": "分钟/单",
+    "On time": "准时率", "of promised orders": "占承诺订单",
+    "Deliveries — last 7 days": "近 7 天送达量", "Busiest hours": "最忙时段",
   };
   const PAIRS = Object.entries(ZH).sort((a, b) => b[0].length - a[0].length);
   const tr = s => { for (const [en, zh] of PAIRS) if (s.includes(en)) s = s.split(en).join(zh); return s; };
