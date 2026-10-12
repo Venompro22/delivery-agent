@@ -83,8 +83,8 @@
     btn.textContent = lang === 'zh' ? 'EN' : '中文';
     btn.title = 'Language / 语言';
     btn.style.cssText = 'position:fixed;top:10px;right:10px;z-index:10000;width:auto;margin:0;' +
-      'padding:6px 12px;font-size:13px;border-radius:20px;border:1px solid #6b4fd8;' +
-      'background:#1a1d24;color:#e8eaed;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.4)';
+      'padding:6px 12px;font-size:13px;border-radius:20px;border:1px solid var(--accent);' +
+      'background:var(--surface);color:var(--text);cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.4)';
     btn.onclick = () => {
       try { localStorage.setItem('lang', lang === 'zh' ? 'en' : 'zh'); } catch (e) {}
       location.reload();

@@ -1,3 +1,32 @@
+/* 🎨 Design tokens — every color in the app comes from here */
+:root {
+  /* surfaces */
+  --bg: #0f1115;           /* page background */
+  --surface: #1a1d24;      /* cards, panels, inputs */
+  --border: #2a2e37;       /* lines between things */
+
+  /* text */
+  --text: #e8eaed;         /* main text */
+  --text-2: #c3c7cd;       /* secondary text */
+  --muted: #8a8f98;        /* labels, hints */
+  --faint: #5a5f68;        /* disabled, very quiet */
+
+  /* brand — one accent only */
+  --accent: #2d6cdf;
+  --accent-hover: #245bc0;
+  --accent-text: #4f8dff;  /* accent used as text on dark bg */
+  --accent-soft: rgba(45, 108, 223, 0.15);
+  --on-accent: #fff;       /* text on top of accent buttons */
+
+  /* status */
+  --ok: #1f9d55;           /* delivered */
+  --ok-hover: #178045;
+  --warn: #f0a020;         /* soon / attention */
+  --warn-hover: #d88e14;
+  --danger: #e5484d;       /* LATE, cancel */
+  --danger-text: #ff8a8d;
+}
+
 /* ✒️ Pro typography */
     :root { --pro-font: "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC",
                         "Hiragino Sans GB", "Microsoft YaHei", "Segoe UI", sans-serif; }
@@ -11,8 +40,8 @@
     .stat .num, .count .n { font-weight: 600 !important; letter-spacing: -0.02em; }
     .stat .num, .count .n, .meta, .info, .eta, .ai-conf, .hist-row .t, .big, .v,
     .gps-status, #updated, .item .eta { font-variant-numeric: tabular-nums; }
-    .subtitle, .meta, .hint, .gps-status { color: #8a8f98; }
-    input::placeholder, textarea::placeholder { color: #5f646d !important; }
+    .subtitle, .meta, .hint, .gps-status { color: var(--muted); }
+    input::placeholder, textarea::placeholder { color: var(--faint) !important; }
     input, textarea { font-size: 14px; }
     button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible {
-      outline: 2px solid #6b4fd8; outline-offset: 2px; }
+      outline: 2px solid var(--accent); outline-offset: 2px; }

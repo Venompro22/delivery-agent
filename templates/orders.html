@@ -8,56 +8,56 @@
     * { box-sizing: border-box; }
     body {
       font-family: -apple-system, "Segoe UI", sans-serif; margin: 0;
-      background: #0f1115; color: #e8eaed;
+      background: var(--bg); color: var(--text);
     }
     .wrap { max-width: 720px; margin: 0 auto; padding: 20px; }
     .top { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
     .top h1 { font-size: 20px; margin: 0; flex: 1; }
     .back {
-      font-size: 13px; color: #8a8f98; text-decoration: none;
-      border: 1px solid #2a2e37; border-radius: 6px; padding: 6px 10px;
+      font-size: 13px; color: var(--muted); text-decoration: none;
+      border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px;
     }
-    .back:hover { color: #e8eaed; border-color: #8a8f98; }
+    .back:hover { color: var(--text); border-color: var(--muted); }
     .counts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 14px; }
-    .count { background: #1a1d24; border: 1px solid #2a2e37; border-radius: 10px; padding: 10px; text-align: center; }
+    .count { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 10px; text-align: center; }
     .count .n { font-size: 20px; font-weight: 700; }
-    .count .l { font-size: 10px; color: #8a8f98; text-transform: uppercase; letter-spacing: 0.5px; }
+    .count .l { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
     .tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
     .tab {
       padding: 7px 12px; font-size: 13px; border-radius: 20px; cursor: pointer;
-      background: #1a1d24; border: 1px solid #2a2e37; color: #c3c7cd;
+      background: var(--surface); border: 1px solid var(--border); color: var(--text-2);
     }
-    .tab.on { background: #2d6cdf; border-color: #2d6cdf; color: #fff; }
+    .tab.on { background: var(--accent); border-color: var(--accent); color: #fff; }
     input {
       width: 100%; padding: 11px; margin: 4px 0 14px; font-size: 16px;
-      background: #1a1d24; border: 1px solid #2a2e37; border-radius: 8px; color: #e8eaed;
+      background: var(--surface); border: 1px solid var(--border); border-radius: 8px; color: var(--text);
     }
-    input:focus { outline: none; border-color: #2d6cdf; }
+    input:focus { outline: none; border-color: var(--accent); }
     .order {
-      background: #1a1d24; border: 1px solid #2a2e37; border-radius: 10px;
+      background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
       padding: 12px 14px; margin-bottom: 8px;
     }
     .order.delivered { opacity: 0.7; }
     .row { display: flex; align-items: center; gap: 8px; }
     .row b { flex: 1; font-size: 15px; }
     .badge { font-size: 11px; padding: 3px 8px; border-radius: 20px; font-weight: 600; }
-    .badge.pending { background: rgba(240,160,32,0.15); color: #f0a020; }
-    .badge.delivered { background: rgba(31,157,85,0.15); color: #1f9d55; }
-    .badge.cancelled { background: rgba(229,72,77,0.15); color: #e5484d; }
-    .meta { color: #8a8f98; font-size: 12px; margin-top: 4px; }
+    .badge.pending { background: rgba(240,160,32,0.15); color: var(--warn); }
+    .badge.delivered { background: rgba(31,157,85,0.15); color: var(--ok); }
+    .badge.cancelled { background: rgba(229,72,77,0.15); color: var(--danger); }
+    .meta { color: var(--muted); font-size: 12px; margin-top: 4px; }
     .note {
-      color: #c3c7cd; font-size: 12px; margin-top: 6px; padding: 6px 8px;
-      background: #0f1115; border-left: 3px solid #8a8f98; border-radius: 4px;
+      color: var(--text-2); font-size: 12px; margin-top: 6px; padding: 6px 8px;
+      background: var(--bg); border-left: 3px solid var(--muted); border-radius: 4px;
     }
     .actions { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
     .btn {
       font-size: 12px; font-weight: 600; padding: 6px 10px; border-radius: 6px;
-      text-decoration: none; color: #fff; background: #2d6cdf; border: none; cursor: pointer;
+      text-decoration: none; color: #fff; background: var(--accent); border: none; cursor: pointer;
     }
-    .btn.call { background: #f0a020; color: #0f1115; }
-    .btn.share { background: #6b4fd8; }
-    .btn.cancel { background: #e5484d; }
-    .empty { color: #5a5f68; text-align: center; padding: 30px; font-size: 13px; }
+    .btn.call { background: var(--warn); color: var(--bg); }
+    .btn.share { background: var(--accent); }
+    .btn.cancel { background: var(--danger); }
+    .empty { color: var(--faint); text-align: center; padding: 30px; font-size: 13px; }
   </style>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/inter@5.0.18/400.css" media="print" onload="this.media='all'"/>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/inter@5.0.18/500.css" media="print" onload="this.media='all'"/>
@@ -74,8 +74,8 @@
 
     <div class="counts">
       <div class="count"><div class="n" id="c-all">0</div><div class="l">Total</div></div>
-      <div class="count"><div class="n" id="c-pending" style="color:#f0a020">0</div><div class="l">Pending</div></div>
-      <div class="count"><div class="n" id="c-delivered" style="color:#1f9d55">0</div><div class="l">Delivered</div></div>
+      <div class="count"><div class="n" id="c-pending" style="color:var(--warn)">0</div><div class="l">Pending</div></div>
+      <div class="count"><div class="n" id="c-delivered" style="color:var(--ok)">0</div><div class="l">Delivered</div></div>
     </div>
     <div class="meta" id="stats" style="margin-bottom:12px"></div>
     <div class="tabs" id="tabs">

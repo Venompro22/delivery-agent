@@ -8,26 +8,26 @@
     * { box-sizing: border-box; }
     body {
       font-family: -apple-system, "Segoe UI", sans-serif; margin: 0;
-      min-height: 100vh; background: #0f1115; color: #e8eaed;
+      min-height: 100vh; background: var(--bg); color: var(--text);
       display: flex; align-items: center; justify-content: center; padding: 20px;
     }
     .card {
-      width: 100%; max-width: 360px; background: #1a1d24;
-      border: 1px solid #2a2e37; border-radius: 16px; padding: 28px; text-align: center;
+      width: 100%; max-width: 360px; background: var(--surface);
+      border: 1px solid var(--border); border-radius: 16px; padding: 28px; text-align: center;
     }
     h1 { font-size: 20px; margin: 0 0 4px; }
-    .sub { color: #8a8f98; font-size: 13px; margin-bottom: 20px; }
+    .sub { color: var(--muted); font-size: 13px; margin-bottom: 20px; }
     input {
       width: 100%; padding: 12px; margin: 6px 0; font-size: 16px;
-      background: #0f1115; border: 1px solid #2a2e37; border-radius: 8px; color: #e8eaed;
+      background: var(--bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text);
     }
-    input:focus { outline: none; border-color: #2d6cdf; }
+    input:focus { outline: none; border-color: var(--accent); }
     button {
       width: 100%; padding: 12px; margin-top: 10px; font-size: 15px; font-weight: 600;
-      background: #2d6cdf; color: #fff; border: none; border-radius: 8px; cursor: pointer;
+      background: var(--accent); color: #fff; border: none; border-radius: 8px; cursor: pointer;
     }
     .error {
-      color: #ff8a8d; background: rgba(229,72,77,0.12); border: 1px solid #e5484d;
+      color: var(--danger-text); background: rgba(229,72,77,0.12); border: 1px solid var(--danger);
       border-radius: 8px; padding: 8px 10px; font-size: 13px; margin-bottom: 10px;
     }
   </style>
