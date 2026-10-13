@@ -355,14 +355,32 @@
     const gaodeUrl = 'https://webrd0{s}.is.autonavi.com/appmaptile?lang=' + MAP_LANG +
       '&size=1&scale=' + TILE_SCALE + '&style=8&x={x}&y={y}&z={z}';
     const tileOpts = {subdomains: ['1', '2', '3', '4'], maxZoom: 18, noWrap: true, attribution: '&copy; AutoNavi'};
+    // 🌍 Gaode has detail only in China → everywhere else use CARTO (OpenStreetMap data).
+    // Same box as wgs2gcj(): inside it coordinates are GCJ-02 (Gaode), outside WGS-84 (CARTO).
+    const GAODE_BOX = L.latLngBounds([0.8293, 72.004], [55.8271, 137.8347]);
+    const worldOpts = {subdomains: 'abcd', maxZoom: 18, noWrap: true,
+                       attribution: '&copy; OpenStreetMap &copy; CARTO'};
+    const worldLayer = cls => L.tileLayer(
+      'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+      Object.assign({className: cls}, worldOpts));
+    const chinaLayer = cls => L.tileLayer(gaodeUrl,
+      Object.assign({className: cls, bounds: GAODE_BOX}, tileOpts));
+
     const mapStyles = {
-      'Dim': L.tileLayer(gaodeUrl, Object.assign({className: 'tiles-dark'}, tileOpts)),
-      'Light': L.tileLayer(gaodeUrl, Object.assign({className: 'tiles-soft'}, tileOpts)),
+      'Dim': L.layerGroup([worldLayer('tiles-dark'), chinaLayer('tiles-dark')]),
+      'Light': L.layerGroup([worldLayer('tiles-soft'), chinaLayer('tiles-soft')]),
       'Satellite': L.layerGroup([
-        L.tileLayer('https://webst0{s}.is.autonavi.com/appmaptile?style=6&x={x}&y={y}&z={z}', tileOpts),
+        // 🌍 outside China: Esri World Imagery + place names (Gaode has no detailed imagery there)
+        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+          {maxZoom: 18, maxNativeZoom: 17, noWrap: true, attribution: 'Imagery &copy; Esri'}),
+        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
+          {maxZoom: 18, maxNativeZoom: 17, noWrap: true}),
+        // 🇨🇳 inside China: Gaode on top
+        L.tileLayer('https://webst0{s}.is.autonavi.com/appmaptile?style=6&x={x}&y={y}&z={z}',
+          Object.assign({bounds: GAODE_BOX}, tileOpts)),
         // Gaode satellite labels exist only in Chinese (lang=en is ignored)
         ...(MAP_LANG === 'zh_cn' ? [L.tileLayer('https://webst0{s}.is.autonavi.com/appmaptile?lang=' + MAP_LANG + '&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
-          {subdomains: ['1', '2', '3', '4'], maxZoom: 18})] : [L.tileLayer(gaodeUrl, Object.assign({className: 'tiles-labels-en'}, tileOpts))]),
+          {subdomains: ['1', '2', '3', '4'], maxZoom: 18, bounds: GAODE_BOX})] : [L.tileLayer(gaodeUrl, Object.assign({className: 'tiles-labels-en', bounds: GAODE_BOX}, tileOpts))]),
       ]),
     };
     let mapStyle = 'Light';
