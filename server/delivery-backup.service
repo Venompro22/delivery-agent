@@ -1,0 +1,7 @@
+[Unit]
+Description=Daily backup of delivery-agent data
+
+[Service]
+Type=oneshot
+User=scr-ysf2006
+ExecStart=/usr/local/bin/delivery-backup.sh

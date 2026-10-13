@@ -1,0 +1,14 @@
+[Unit]
+Description=Delivery Agent
+After=network.target
+
+[Service]
+User=scr-ysf2006
+WorkingDirectory=/home/scr-ysf2006/delivery-agent
+ExecStart=/home/scr-ysf2006/delivery-agent/.venv/bin/gunicorn --bind 127.0.0.1:8001 fileapp:app
+Restart=always
+# DASHBOARD_PASSWORD is set in delivery.service.d/secrets.conf (never in git)
+Environment="DRIVER_LAT=30.2741"
+Environment="DRIVER_LNG=120.1551"
+[Install]
+WantedBy=multi-user.target
