@@ -260,7 +260,10 @@
       #sidebar { width: 100%; box-shadow: none; }
       input, button { font-size: 16px; }
     }
-  </style>
+      /* 🛰️ English labels on satellite: invert the Light map (white text on black),
+       then 'screen' blend makes black transparent → only the text stays */
+    .tiles-labels-en { filter: invert(1) grayscale(1) contrast(3); mix-blend-mode: screen; }
+</style>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/inter@5.0.18/400.css" media="print" onload="this.media='all'"/>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/inter@5.0.18/500.css" media="print" onload="this.media='all'"/>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/inter@5.0.18/600.css" media="print" onload="this.media='all'"/>
@@ -336,22 +339,33 @@
     // 🗺️ map labels follow the page language (中文 / EN)
     let MAP_LANG = 'en';
     try { MAP_LANG = (localStorage.getItem('lang') || ((navigator.language || '').startsWith('zh') ? 'zh' : 'en')) === 'zh' ? 'zh_cn' : 'en'; } catch (e) {}
-    const map = L.map('map').setView([31.2304, 121.4737], 13);
+    // 🧱 One world only: no endless repeating, no empty space on the sides
+    const MAP_BOUNDS = L.latLngBounds([-85, -180], [85, 180]);
+    const map = L.map('map', {
+      maxBounds: MAP_BOUNDS,
+      maxBoundsViscosity: 1.0,
+      minZoom: 4,
+    }).setView([31.2304, 121.4737], 13);
+    // smallest zoom where the world fills the whole screen (depends on the screen size)
+    const fitWorld = () => map.setMinZoom(map.getBoundsZoom(MAP_BOUNDS, true));
+    fitWorld();
+    window.addEventListener('resize', fitWorld);
     // 🍎 Map styles: 🌙 Dark (Apple-like) · ☀️ Light · 🛰️ Satellite — your choice is remembered
     const TILE_SCALE = 1;
     const gaodeUrl = 'https://webrd0{s}.is.autonavi.com/appmaptile?lang=' + MAP_LANG +
       '&size=1&scale=' + TILE_SCALE + '&style=8&x={x}&y={y}&z={z}';
-    const tileOpts = {subdomains: ['1', '2', '3', '4'], maxZoom: 18, attribution: '&copy; AutoNavi'};
+    const tileOpts = {subdomains: ['1', '2', '3', '4'], maxZoom: 18, noWrap: true, attribution: '&copy; AutoNavi'};
     const mapStyles = {
-      '🌗 Dim': L.tileLayer(gaodeUrl, Object.assign({className: 'tiles-dark'}, tileOpts)),
-      '☀️ Light': L.tileLayer(gaodeUrl, Object.assign({className: 'tiles-soft'}, tileOpts)),
-      '🛰️ Satellite': L.layerGroup([
+      'Dim': L.tileLayer(gaodeUrl, Object.assign({className: 'tiles-dark'}, tileOpts)),
+      'Light': L.tileLayer(gaodeUrl, Object.assign({className: 'tiles-soft'}, tileOpts)),
+      'Satellite': L.layerGroup([
         L.tileLayer('https://webst0{s}.is.autonavi.com/appmaptile?style=6&x={x}&y={y}&z={z}', tileOpts),
-        L.tileLayer('https://webst0{s}.is.autonavi.com/appmaptile?style=8&x={x}&y={y}&z={z}',
-          {subdomains: ['1', '2', '3', '4'], maxZoom: 18}),
+        // Gaode satellite labels exist only in Chinese (lang=en is ignored)
+        ...(MAP_LANG === 'zh_cn' ? [L.tileLayer('https://webst0{s}.is.autonavi.com/appmaptile?lang=' + MAP_LANG + '&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
+          {subdomains: ['1', '2', '3', '4'], maxZoom: 18})] : [L.tileLayer(gaodeUrl, Object.assign({className: 'tiles-labels-en'}, tileOpts))]),
       ]),
     };
-    let mapStyle = '☀️ Light';
+    let mapStyle = 'Light';
     try { const saved = localStorage.getItem('mapStyle'); if (mapStyles[saved]) mapStyle = saved; } catch (e) {}
     mapStyles[mapStyle].addTo(map);
     L.control.layers(mapStyles, null, {position: 'topleft'}).addTo(map);
