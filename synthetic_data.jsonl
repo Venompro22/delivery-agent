@@ -1,0 +1,240 @@
+{"text": "我要一桶水", "intent": "new_order", "source": "synthetic"}
+{"text": "送两桶水过来 12栋502", "intent": "new_order", "source": "synthetic"}
+{"text": "老板 来桶水", "intent": "new_order", "source": "synthetic"}
+{"text": "明天上午送3桶到公司", "intent": "new_order", "source": "synthetic"}
+{"text": "帮忙送桶农夫山泉 谢谢", "intent": "new_order", "source": "synthetic"}
+{"text": "下单 两桶 地址还是老地方", "intent": "new_order", "source": "synthetic"}
+{"text": "要水要水 宿舍8号楼", "intent": "new_order", "source": "synthetic"}
+{"text": "有水吗 送一桶到图书馆前台", "intent": "new_order", "source": "synthetic"}
+{"text": "再来两桶 跟上次一样", "intent": "new_order", "source": "synthetic"}
+{"text": "麻烦送一桶怡宝 5点前", "intent": "new_order", "source": "synthetic"}
+{"text": "订水 4桶 文二路88号", "intent": "new_order", "source": "synthetic"}
+{"text": "我们办公室要5桶 尽快", "intent": "new_order", "source": "synthetic"}
+{"text": "来一桶 到了打我电话13912345678", "intent": "new_order", "source": "synthetic"}
+{"text": "今天能送吗 一桶就行", "intent": "new_order", "source": "synthetic"}
+{"text": "帮我订两桶水哈 西湖区阳光小区3单元", "intent": "new_order", "source": "synthetic"}
+{"text": "水喝完了 送一桶来", "intent": "new_order", "source": "synthetic"}
+{"text": "老板在吗 要两桶水 急", "intent": "new_order", "source": "synthetic"}
+{"text": "下午送水 三桶 公司前台", "intent": "new_order", "source": "synthetic"}
+{"text": "一桶水 学生宿舍5栋 302", "intent": "new_order", "source": "synthetic"}
+{"text": "需要两箱矿泉水 送到店里", "intent": "new_order", "source": "synthetic"}
+{"text": "我想订水 地址是体育馆旁边", "intent": "new_order", "source": "synthetic"}
+{"text": "给我留两桶 晚上送", "intent": "new_order", "source": "synthetic"}
+{"text": "嗨 要一桶 放门口就行", "intent": "new_order", "source": "synthetic"}
+{"text": "订3桶 周六上午送", "intent": "new_order", "source": "synthetic"}
+{"text": "送桶水呗 老地址", "intent": "new_order", "source": "synthetic"}
+{"text": "要水 2桶 南门保安室", "intent": "new_order", "source": "synthetic"}
+{"text": "帮我送一桶 18号楼 谢啦😊", "intent": "new_order", "source": "synthetic"}
+{"text": "来两桶水 越快越好", "intent": "new_order", "source": "synthetic"}
+{"text": "订水！1桶！实验楼B201", "intent": "new_order", "source": "synthetic"}
+{"text": "要一桶 微信转账可以吗", "intent": "new_order", "source": "synthetic"}
+{"text": "麻烦帮我叫桶水", "intent": "new_order", "source": "synthetic"}
+{"text": "宿舍没水了 能送一桶吗", "intent": "new_order", "source": "synthetic"}
+{"text": "两桶纯净水 送到食堂后门", "intent": "new_order", "source": "synthetic"}
+{"text": "我要水 三桶 公司地址发你了", "intent": "new_order", "source": "synthetic"}
+{"text": "加一桶 跟刚才那单一起", "intent": "new_order", "source": "synthetic"}
+{"text": "帮我下个单 一桶水 东区6栋", "intent": "new_order", "source": "synthetic"}
+{"text": "送水 一桶 尽量中午前", "intent": "new_order", "source": "synthetic"}
+{"text": "来桶水 老王家", "intent": "new_order", "source": "synthetic"}
+{"text": "我们要4桶 会议室用", "intent": "new_order", "source": "synthetic"}
+{"text": "每周一桶 这周的帮我送一下", "intent": "new_order", "source": "synthetic"}
+{"text": "不要了", "intent": "cancel", "source": "synthetic"}
+{"text": "取消订单", "intent": "cancel", "source": "synthetic"}
+{"text": "刚才那桶水不要了 谢谢", "intent": "cancel", "source": "synthetic"}
+{"text": "算了 取消吧", "intent": "cancel", "source": "synthetic"}
+{"text": "帮我取消一下 买到了", "intent": "cancel", "source": "synthetic"}
+{"text": "订单取消 不好意思", "intent": "cancel", "source": "synthetic"}
+{"text": "今天的水不用送了", "intent": "cancel", "source": "synthetic"}
+{"text": "别送了 我出门了", "intent": "cancel", "source": "synthetic"}
+{"text": "取消 13800138001", "intent": "cancel", "source": "synthetic"}
+{"text": "那个订单撤销吧", "intent": "cancel", "source": "synthetic"}
+{"text": "不用送了 已经有人送过了", "intent": "cancel", "source": "synthetic"}
+{"text": "我下错单了 取消", "intent": "cancel", "source": "synthetic"}
+{"text": "麻烦取消我的水", "intent": "cancel", "source": "synthetic"}
+{"text": "水先不要了 下次再说", "intent": "cancel", "source": "synthetic"}
+{"text": "退单", "intent": "cancel", "source": "synthetic"}
+{"text": "今天不要水了 明天再订", "intent": "cancel", "source": "synthetic"}
+{"text": "刚刚订的两桶取消掉", "intent": "cancel", "source": "synthetic"}
+{"text": "不要送了哈 抱歉", "intent": "cancel", "source": "synthetic"}
+{"text": "订单不要了 钱退我", "intent": "cancel", "source": "synthetic"}
+{"text": "改主意了 不要了", "intent": "cancel", "source": "synthetic"}
+{"text": "取消下午那单", "intent": "cancel", "source": "synthetic"}
+{"text": "我那单取消一下谢谢", "intent": "cancel", "source": "synthetic"}
+{"text": "别送 公司今天放假", "intent": "cancel", "source": "synthetic"}
+{"text": "不需要了 朋友送来了", "intent": "cancel", "source": "synthetic"}
+{"text": "帮我把订单删了", "intent": "cancel", "source": "synthetic"}
+{"text": "取消取消 不要了", "intent": "cancel", "source": "synthetic"}
+{"text": "这单不要了 太慢了", "intent": "cancel", "source": "synthetic"}
+{"text": "水不要了 退款吧", "intent": "cancel", "source": "synthetic"}
+{"text": "今天先取消 改天", "intent": "cancel", "source": "synthetic"}
+{"text": "我想取消订单 可以吗", "intent": "cancel", "source": "synthetic"}
+{"text": "不用来了", "intent": "cancel", "source": "synthetic"}
+{"text": "订单作废", "intent": "cancel", "source": "synthetic"}
+{"text": "那两桶算了", "intent": "cancel", "source": "synthetic"}
+{"text": "抱歉 刚才下单的取消", "intent": "cancel", "source": "synthetic"}
+{"text": "先别送了 等我通知", "intent": "cancel", "source": "synthetic"}
+{"text": "取消订单 下错地址了", "intent": "cancel", "source": "synthetic"}
+{"text": "我不要水了", "intent": "cancel", "source": "synthetic"}
+{"text": "这次不订了 取消", "intent": "cancel", "source": "synthetic"}
+{"text": "帮忙撤单", "intent": "cancel", "source": "synthetic"}
+{"text": "今天别送水了", "intent": "cancel", "source": "synthetic"}
+{"text": "我的水呢", "intent": "question", "source": "synthetic"}
+{"text": "水什么时候到", "intent": "question", "source": "synthetic"}
+{"text": "到哪了", "intent": "question", "source": "synthetic"}
+{"text": "还要多久", "intent": "question", "source": "synthetic"}
+{"text": "我的订单到哪里了 13800138001", "intent": "question", "source": "synthetic"}
+{"text": "送水的师傅出发了吗", "intent": "question", "source": "synthetic"}
+{"text": "怎么还没到", "intent": "question", "source": "synthetic"}
+{"text": "大概几点能送到", "intent": "question", "source": "synthetic"}
+{"text": "等了一个小时了 水呢", "intent": "question", "source": "synthetic"}
+{"text": "今天能到吗", "intent": "question", "source": "synthetic"}
+{"text": "请问我的水送了吗", "intent": "question", "source": "synthetic"}
+{"text": "师傅到哪了", "intent": "question", "source": "synthetic"}
+{"text": "多久能到啊", "intent": "question", "source": "synthetic"}
+{"text": "订单状态怎么样了", "intent": "question", "source": "synthetic"}
+{"text": "水还没来", "intent": "question", "source": "synthetic"}
+{"text": "几点到？", "intent": "question", "source": "synthetic"}
+{"text": "快到了吗", "intent": "question", "source": "synthetic"}
+{"text": "什么时候送过来", "intent": "question", "source": "synthetic"}
+{"text": "已经下单了 什么时候送", "intent": "question", "source": "synthetic"}
+{"text": "能告诉我大概时间吗", "intent": "question", "source": "synthetic"}
+{"text": "怎么这么慢 到哪了", "intent": "question", "source": "synthetic"}
+{"text": "请问还要等多久", "intent": "question", "source": "synthetic"}
+{"text": "还在路上吗", "intent": "question", "source": "synthetic"}
+{"text": "有没有出发", "intent": "question", "source": "synthetic"}
+{"text": "帮我查一下订单", "intent": "question", "source": "synthetic"}
+{"text": "我的订单处理了吗", "intent": "question", "source": "synthetic"}
+{"text": "水快到了没", "intent": "question", "source": "synthetic"}
+{"text": "司机电话多少 问下到哪了", "intent": "question", "source": "synthetic"}
+{"text": "今天还送吗", "intent": "question", "source": "synthetic"}
+{"text": "还没到 怎么回事", "intent": "question", "source": "synthetic"}
+{"text": "等好久了", "intent": "question", "source": "synthetic"}
+{"text": "师傅几点过来", "intent": "question", "source": "synthetic"}
+{"text": "我订的水呢？？", "intent": "question", "source": "synthetic"}
+{"text": "预计几点到", "intent": "question", "source": "synthetic"}
+{"text": "送了没", "intent": "question", "source": "synthetic"}
+{"text": "麻烦看下我的订单", "intent": "question", "source": "synthetic"}
+{"text": "在路上了吗师傅", "intent": "question", "source": "synthetic"}
+{"text": "到哪儿了亲", "intent": "question", "source": "synthetic"}
+{"text": "我早上订的水还没到", "intent": "question", "source": "synthetic"}
+{"text": "水到底什么时候来", "intent": "question", "source": "synthetic"}
+{"text": "已送达", "intent": "delivered", "source": "synthetic"}
+{"text": "送到了", "intent": "delivered", "source": "synthetic"}
+{"text": "水已经放门口了", "intent": "delivered", "source": "synthetic"}
+{"text": "到了 放前台了", "intent": "delivered", "source": "synthetic"}
+{"text": "已送到 请查收", "intent": "delivered", "source": "synthetic"}
+{"text": "送达 5号楼", "intent": "delivered", "source": "synthetic"}
+{"text": "放保安室了", "intent": "delivered", "source": "synthetic"}
+{"text": "已经送到了 谢谢", "intent": "delivered", "source": "synthetic"}
+{"text": "货已送达", "intent": "delivered", "source": "synthetic"}
+{"text": "水送到了 请签收", "intent": "delivered", "source": "synthetic"}
+{"text": "到了 放在门口", "intent": "delivered", "source": "synthetic"}
+{"text": "已交给本人", "intent": "delivered", "source": "synthetic"}
+{"text": "送完了", "intent": "delivered", "source": "synthetic"}
+{"text": "已经放楼下了", "intent": "delivered", "source": "synthetic"}
+{"text": "放你们办公室了", "intent": "delivered", "source": "synthetic"}
+{"text": "签收了", "intent": "delivered", "source": "synthetic"}
+{"text": "已经送到宿舍了", "intent": "delivered", "source": "synthetic"}
+{"text": "送达 客户已收", "intent": "delivered", "source": "synthetic"}
+{"text": "水到了", "intent": "delivered", "source": "synthetic"}
+{"text": "已放在指定位置", "intent": "delivered", "source": "synthetic"}
+{"text": "送到了 放门卫那", "intent": "delivered", "source": "synthetic"}
+{"text": "已完成配送", "intent": "delivered", "source": "synthetic"}
+{"text": "已经交给前台", "intent": "delivered", "source": "synthetic"}
+{"text": "搞定 送到了", "intent": "delivered", "source": "synthetic"}
+{"text": "水已放门口 记得拿", "intent": "delivered", "source": "synthetic"}
+{"text": "送到啦", "intent": "delivered", "source": "synthetic"}
+{"text": "订单已送达 13900139002", "intent": "delivered", "source": "synthetic"}
+{"text": "已送 3楼", "intent": "delivered", "source": "synthetic"}
+{"text": "送好了", "intent": "delivered", "source": "synthetic"}
+{"text": "已送到家门口", "intent": "delivered", "source": "synthetic"}
+{"text": "到了 已经给你了", "intent": "delivered", "source": "synthetic"}
+{"text": "已经搬上去了", "intent": "delivered", "source": "synthetic"}
+{"text": "送到 已放厨房", "intent": "delivered", "source": "synthetic"}
+{"text": "两桶都送到了", "intent": "delivered", "source": "synthetic"}
+{"text": "已经送达 请确认", "intent": "delivered", "source": "synthetic"}
+{"text": "货到了", "intent": "delivered", "source": "synthetic"}
+{"text": "送到店里了", "intent": "delivered", "source": "synthetic"}
+{"text": "已送到 拍照了", "intent": "delivered", "source": "synthetic"}
+{"text": "水给你放好了", "intent": "delivered", "source": "synthetic"}
+{"text": "完成 已送", "intent": "delivered", "source": "synthetic"}
+{"text": "堵车了 晚一点到", "intent": "delay", "source": "synthetic"}
+{"text": "要晚点 不好意思", "intent": "delay", "source": "synthetic"}
+{"text": "路上堵 大概晚20分钟", "intent": "delay", "source": "synthetic"}
+{"text": "车坏了 会迟到", "intent": "delay", "source": "synthetic"}
+{"text": "下雨 可能晚一点", "intent": "delay", "source": "synthetic"}
+{"text": "师傅这边有点忙 晚点送", "intent": "delay", "source": "synthetic"}
+{"text": "今天单子多 会晚到", "intent": "delay", "source": "synthetic"}
+{"text": "前面出车祸了 堵住了", "intent": "delay", "source": "synthetic"}
+{"text": "晚半小时到", "intent": "delay", "source": "synthetic"}
+{"text": "要迟到了 抱歉", "intent": "delay", "source": "synthetic"}
+{"text": "电动车没电了 晚点到", "intent": "delay", "source": "synthetic"}
+{"text": "还有几单 你的要晚一点", "intent": "delay", "source": "synthetic"}
+{"text": "堵死了 晚十分钟", "intent": "delay", "source": "synthetic"}
+{"text": "路上封了 绕路 晚点", "intent": "delay", "source": "synthetic"}
+{"text": "不好意思 迟到一会儿", "intent": "delay", "source": "synthetic"}
+{"text": "可能要6点以后了", "intent": "delay", "source": "synthetic"}
+{"text": "今天人手不够 会晚", "intent": "delay", "source": "synthetic"}
+{"text": "晚到一点 请稍等", "intent": "delay", "source": "synthetic"}
+{"text": "等红灯 晚几分钟", "intent": "delay", "source": "synthetic"}
+{"text": "下大雨 送慢一点", "intent": "delay", "source": "synthetic"}
+{"text": "单子太多 晚点到你那", "intent": "delay", "source": "synthetic"}
+{"text": "我会晚15分钟", "intent": "delay", "source": "synthetic"}
+{"text": "今天会延迟", "intent": "delay", "source": "synthetic"}
+{"text": "迟到了 正在赶过去", "intent": "delay", "source": "synthetic"}
+{"text": "车被堵了 稍等", "intent": "delay", "source": "synthetic"}
+{"text": "要推迟到明天了", "intent": "delay", "source": "synthetic"}
+{"text": "今天送不了 明天早上送", "intent": "delay", "source": "synthetic"}
+{"text": "晚一小时左右", "intent": "delay", "source": "synthetic"}
+{"text": "路况不好 会晚", "intent": "delay", "source": "synthetic"}
+{"text": "导航绕远了 晚点到", "intent": "delay", "source": "synthetic"}
+{"text": "正在赶来 晚一点", "intent": "delay", "source": "synthetic"}
+{"text": "货还没到店 会晚", "intent": "delay", "source": "synthetic"}
+{"text": "晚点哈", "intent": "delay", "source": "synthetic"}
+{"text": "有点堵 别急", "intent": "delay", "source": "synthetic"}
+{"text": "要晚 抱歉抱歉", "intent": "delay", "source": "synthetic"}
+{"text": "大概晚到七点", "intent": "delay", "source": "synthetic"}
+{"text": "这边拥堵 延迟一点", "intent": "delay", "source": "synthetic"}
+{"text": "可能会耽误一会儿", "intent": "delay", "source": "synthetic"}
+{"text": "暴雨 晚到", "intent": "delay", "source": "synthetic"}
+{"text": "电梯坏了 要晚一点", "intent": "delay", "source": "synthetic"}
+{"text": "客户不在家", "intent": "not_home", "source": "synthetic"}
+{"text": "敲门没人", "intent": "not_home", "source": "synthetic"}
+{"text": "电话不接 15800158003", "intent": "not_home", "source": "synthetic"}
+{"text": "没人开门", "intent": "not_home", "source": "synthetic"}
+{"text": "打电话没人接", "intent": "not_home", "source": "synthetic"}
+{"text": "客户不在 怎么办", "intent": "not_home", "source": "synthetic"}
+{"text": "家里没人", "intent": "not_home", "source": "synthetic"}
+{"text": "到了没人", "intent": "not_home", "source": "synthetic"}
+{"text": "联系不上客户", "intent": "not_home", "source": "synthetic"}
+{"text": "没人应 放门口吗", "intent": "not_home", "source": "synthetic"}
+{"text": "门锁着 没人", "intent": "not_home", "source": "synthetic"}
+{"text": "客户电话关机", "intent": "not_home", "source": "synthetic"}
+{"text": "宿舍没人", "intent": "not_home", "source": "synthetic"}
+{"text": "等了十分钟没人来", "intent": "not_home", "source": "synthetic"}
+{"text": "客户不在 要退回吗", "intent": "not_home", "source": "synthetic"}
+{"text": "打了三个电话都没接", "intent": "not_home", "source": "synthetic"}
+{"text": "没人在家 先回去了", "intent": "not_home", "source": "synthetic"}
+{"text": "到门口了 没人", "intent": "not_home", "source": "synthetic"}
+{"text": "人不在 下次送", "intent": "not_home", "source": "synthetic"}
+{"text": "找不到人", "intent": "not_home", "source": "synthetic"}
+{"text": "客户说不在家", "intent": "not_home", "source": "synthetic"}
+{"text": "对方没接电话", "intent": "not_home", "source": "synthetic"}
+{"text": "敲了半天门没反应", "intent": "not_home", "source": "synthetic"}
+{"text": "没人签收", "intent": "not_home", "source": "synthetic"}
+{"text": "办公室没人 下班了", "intent": "not_home", "source": "synthetic"}
+{"text": "前台没人", "intent": "not_home", "source": "synthetic"}
+{"text": "联系不上 电话打不通", "intent": "not_home", "source": "synthetic"}
+{"text": "客户出去了", "intent": "not_home", "source": "synthetic"}
+{"text": "家里没人 放哪", "intent": "not_home", "source": "synthetic"}
+{"text": "电话占线 没人接", "intent": "not_home", "source": "synthetic"}
+{"text": "按门铃没人", "intent": "not_home", "source": "synthetic"}
+{"text": "在楼下了 电话不接", "intent": "not_home", "source": "synthetic"}
+{"text": "客户不在 留言了", "intent": "not_home", "source": "synthetic"}
+{"text": "没人取", "intent": "not_home", "source": "synthetic"}
+{"text": "保安说人不在", "intent": "not_home", "source": "synthetic"}
+{"text": "他不在家 怎么处理", "intent": "not_home", "source": "synthetic"}
+{"text": "到了 人不在", "intent": "not_home", "source": "synthetic"}
+{"text": "无人应答", "intent": "not_home", "source": "synthetic"}
+{"text": "电话无人接听", "intent": "not_home", "source": "synthetic"}
+{"text": "人呢 敲门没开", "intent": "not_home", "source": "synthetic"}

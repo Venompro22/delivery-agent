@@ -137,16 +137,13 @@ def train(data, epochs=501, lr=0.5, verbose=True):
     return W, b, vocab
 
 
-def load_feedback():
-    """🎡 Extra training examples confirmed/corrected in the dashboard (feedback.jsonl)."""
+def _load_jsonl(filename, exam, known, seen):
+    """Read one JSONL file of {"text", "intent"} rows → [(text, intent_index)]."""
     import json
-    from eval_set import EVAL
-    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "feedback.jsonl")
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), filename)
     if not os.path.exists(path):
         return []
-    exam = {t for t, _ in EVAL}       # 🔒 never train on the final exam (no data leakage!)
-    known = {t for t, _ in DATA}
-    extra, seen = [], set()
+    rows = []
     with open(path, encoding="utf-8") as f:
         for line in f:
             try:
@@ -157,8 +154,19 @@ def load_feedback():
             if not text or intent not in INTENTS or text in exam or text in known or text in seen:
                 continue
             seen.add(text)
-            extra.append((text, INTENTS.index(intent)))
-    return extra
+            rows.append((text, INTENTS.index(intent)))
+    return rows
+
+
+def load_feedback():
+    """🎡 Extra training examples: real feedback from the dashboard + synthetic starter data."""
+    from eval_set import EVAL
+    exam = {t for t, _ in EVAL}       # 🔒 never train on the final exam (no data leakage!)
+    known = {t for t, _ in DATA}
+    seen = set()
+    real = _load_jsonl("feedback.jsonl", exam, known, seen)
+    synthetic = _load_jsonl("synthetic_data.jsonl", exam, known, seen)
+    return real + synthetic
 
 
 if __name__ == "__main__":
