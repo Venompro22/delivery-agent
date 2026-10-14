@@ -158,7 +158,7 @@ def _load_jsonl(filename, exam, known, seen):
     return rows
 
 
-def load_feedback():
+def load_feedback(include_synthetic=True):
     """🎡 Extra training examples: real feedback from the dashboard + synthetic starter data."""
     from eval_set import EVAL
     exam = {t for t, _ in EVAL}       # 🔒 never train on the final exam (no data leakage!)
@@ -166,7 +166,7 @@ def load_feedback():
     seen = set()
     real = _load_jsonl("feedback.jsonl", exam, known, seen)
     synthetic = _load_jsonl("synthetic_data.jsonl", exam, known, seen)
-    return real + synthetic
+    return real + synthetic if include_synthetic else real
 
 
 if __name__ == "__main__":

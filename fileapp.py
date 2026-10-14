@@ -385,13 +385,14 @@ def retrain_model():
     examples = DATA + load_feedback()
     W, b, vocab = train(examples, verbose=False)
     np.savez(MODEL_PATH, W=W, b=b, vocab=vocab)
-    return len(examples), len(examples) - len(DATA)
+    real = len(load_feedback(include_synthetic=False))
+    return len(examples), real, len(examples) - len(DATA) - real
 
 
 if os.environ.get("SKIP_AUTO_RETRAIN") != "1":
     try:   # on every start/deploy, include the feedback collected on this server
-        _n, _fb = retrain_model()
-        print(f"🧠 Intent model ready: {_n} examples ({_fb} from feedback)", flush=True)
+        _n, _fb, _syn = retrain_model()
+        print(f"🧠 Intent model ready: {_n} examples ({_fb} real feedback + {_syn} synthetic)", flush=True)
     except Exception as e:
         print(f"⚠️ Could not retrain at start: {e}", flush=True)
 
@@ -399,8 +400,8 @@ if os.environ.get("SKIP_AUTO_RETRAIN") != "1":
 @app.route("/api/retrain", methods=["POST"])
 @owner_required
 def retrain():
-    total, from_feedback = retrain_model()
-    print(f"🧠 Retrained: {total} examples ({from_feedback} from feedback)", flush=True)
+    total, from_feedback, synthetic = retrain_model()
+    print(f"🧠 Retrained: {total} examples ({from_feedback} real feedback + {synthetic} synthetic)", flush=True)
     return jsonify({"ok": True, "examples": total, "from_feedback": from_feedback})
 
 
