@@ -263,6 +263,13 @@
       /* 🛰️ English labels on satellite: invert the Light map (white text on black),
        then 'screen' blend makes black transparent → only the text stays */
     .tiles-labels-en { filter: invert(1) grayscale(1) contrast(3); mix-blend-mode: screen; }
+    /* ➕ manual order form, folded by default (the AI inbox is the main way) */
+    .manual-order { border: 1px solid var(--border); border-radius: 10px; padding: 0 12px; margin: 8px 0; }
+    .manual-order > summary { cursor: pointer; padding: 10px 0; color: var(--muted); font-size: 13px; list-style: none; }
+    .manual-order > summary::-webkit-details-marker { display: none; }
+    .manual-order > summary::before { content: "+ "; color: var(--accent-text); }
+    .manual-order[open] > summary::before { content: "− "; }
+    .manual-order[open] { padding-bottom: 12px; }
 </style>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/inter@5.0.18/400.css" media="print" onload="this.media='all'"/>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/inter@5.0.18/500.css" media="print" onload="this.media='all'"/>
@@ -310,6 +317,8 @@
        <button onclick="handleMessage()">🤖 Handle message</button>
     <div id="fb"></div>
     <div id="ai-history"></div>
+    <details class="manual-order" id="manual-order">
+      <summary>Add order manually</summary>
     <input id="name" placeholder="Customer name"/>
     <input id="phone" placeholder="Phone (optional)" inputmode="tel"/>
     <input id="note" placeholder="Address / notes (optional) — e.g. Bldg 5, floor 3" maxlength="200"/>
@@ -320,6 +329,7 @@
     </div>
     <input id="promise" placeholder="Promise in minutes (optional)" inputmode="numeric"/>
     <button onclick="addOrder()">Add order</button>
+    </details>
     <div id="error" class="error"></div>
     <div id="toast" class="toast"></div>
 
@@ -405,6 +415,7 @@
       const lat = e.latlng.lat.toFixed(5);
       const lng = e.latlng.lng.toFixed(5);
       document.getElementById('lat').value = lat;
+      document.getElementById('manual-order').open = true;
       document.getElementById('lng').value = lng;
       if (pickMarker) map.removeLayer(pickMarker);
       pickMarker = L.marker([lat, lng]).addTo(map)
@@ -468,6 +479,7 @@
       if (!res.ok) { showError(d.error || 'Could not read the message.'); return; }
 
       if (d.name) document.getElementById('name').value = d.name;
+      document.getElementById('manual-order').open = true;
       if (d.phone) document.getElementById('phone').value = d.phone;
       if (d.address) document.getElementById('note').value = d.address;
       if (d.deadline) {
