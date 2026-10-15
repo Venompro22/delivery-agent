@@ -30,7 +30,12 @@
       color: var(--danger-text); background: rgba(229,72,77,0.12); border: 1px solid var(--danger);
       border-radius: 8px; padding: 8px 10px; font-size: 13px; margin-bottom: 10px;
     }
-  </style>
+      .link { display: block; margin-top: 16px; font-size: 13px; color: var(--accent-text); text-decoration: none; }
+    .ok {
+      color: var(--text); background: rgba(31,157,85,0.12); border: 1px solid var(--ok);
+      border-radius: 8px; padding: 12px; font-size: 14px; margin-bottom: 6px;
+    }
+</style>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/inter@5.0.18/400.css" media="print" onload="this.media='all'"/>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/inter@5.0.18/500.css" media="print" onload="this.media='all'"/>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/inter@5.0.18/600.css" media="print" onload="this.media='all'"/>
@@ -40,10 +45,12 @@
 <body>
   <form class="card" method="post" action="/login">
     <h1>Delivery Agent</h1>
-    <div class="sub">Enter the dashboard password</div>
+    <div class="sub">Drivers: phone + password · Owner: password only</div>
     {% if error %}<div class="error">{{ error }}</div>{% endif %}
-    <input type="password" name="password" placeholder="Password" autofocus required/>
+    <input type="tel" name="phone" placeholder="Phone (drivers)" inputmode="numeric" maxlength="11" autocomplete="username"/>
+    <input type="password" name="password" placeholder="Password" autocomplete="current-password" required/>
     <button type="submit">Log in</button>
+    <a class="link" href="/signup">New driver? Create an account</a>
   </form>
   <script src="/static/i18n.js"></script>
   <script src="/static/pro.js"></script>

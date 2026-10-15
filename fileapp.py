@@ -19,6 +19,7 @@ from models import Order, Driver, OrderStatus
 from geo import GeoService
 from optimizer import optimize_route, route_summary
 from store import OrderStore
+from users import UserStore
 from order_parser import parse_message
 from agent import handle_message
 import numpy as np
@@ -91,9 +92,15 @@ def current_role():
 
 
 def is_logged_in() -> bool:
-    return (session.get("auth") is True
+    if not (session.get("auth") is True
             and current_role() in ("owner", "driver")
-            and session.get("v") == session_version())
+            and session.get("v") == session_version()):
+        return False
+    uid = session.get("uid")
+    if uid:                                   # 👤 driver account → blocked = out right now
+        user = users.get(uid)
+        return bool(user and user["status"] == "approved")
+    return True
 
 
 def login_required(view):
@@ -135,6 +142,7 @@ driver = Driver(
 )
 geo = GeoService(avg_speed_kmh=driver.avg_speed_kmh)
 store = OrderStore()
+users = UserStore()
 
 
 def fmt(epoch):
@@ -156,8 +164,17 @@ def login():
             error = "Too many attempts. Wait 10 minutes."
         else:
             given = request.form.get("password", "")
-            role = None
-            if hmac.compare_digest(given.encode(), DASHBOARD_PASSWORD.encode()):
+            phone = request.form.get("phone", "").strip()
+            role, uid = None, None
+            if phone:                                 # 👤 driver account
+                user = users.check_login(phone, given)
+                if user and user["status"] == "approved":
+                    role, uid = "driver", user["id"]
+                elif user and user["status"] == "pending":
+                    error = "Your account is waiting for approval."
+                elif user:
+                    error = "This account is blocked."
+            elif hmac.compare_digest(given.encode(), DASHBOARD_PASSWORD.encode()):
                 role = "owner"
             elif DRIVER_PASSWORD and hmac.compare_digest(given.encode(), DRIVER_PASSWORD.encode()):
                 role = "driver"
@@ -167,6 +184,8 @@ def login():
                 session["auth"] = True
                 session["role"] = role
                 session["v"] = session_version()
+                if uid:
+                    session["uid"] = uid
                 session.permanent = True
                 print(f"Login from {ip} as {role}", flush=True)
                 return redirect(url_for("home") if role == "owner" else url_for("driver_page"))
@@ -174,8 +193,23 @@ def login():
             _failed_logins[ip] = (count + 1, first)
             print(f"Wrong password from {ip}", flush=True)
             time.sleep(1)
-            error = "Wrong password."
+            error = error or "Wrong password."
     return render_template("login.html", error=error)
+
+
+@app.route("/signup", methods=["GET", "POST"])
+def signup():
+    """👤 Drivers create an account; it waits until the owner approves it."""
+    error = done = None
+    if request.method == "POST":
+        try:
+            user = users.create(request.form.get("phone", ""), request.form.get("name", ""),
+                                request.form.get("password", ""))
+            print(f"👤 New driver signup: {user['name']} ({user['phone']}) — pending", flush=True)
+            done = True
+        except ValueError as e:
+            error = str(e)
+    return render_template("signup.html", error=error, done=done)
 
 
 @app.route("/logout")

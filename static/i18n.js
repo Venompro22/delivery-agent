@@ -59,6 +59,19 @@
     "Deliveries — last 7 days": "近 7 天送达量", "Busiest hours": "最忙时段",
     "Dim": "暗色", "Light": "浅色", "Satellite": "卫星",
     "Add order manually": "手动添加订单",
+    "Drivers: phone + password · Owner: password only": "司机：手机号+密码 · 店主：只填密码",
+    "Phone (drivers)": "手机号（司机）", "New driver? Create an account": "新司机？注册账号",
+    "Your account is waiting for approval.": "您的账号正在等待审核。",
+    "This account is blocked.": "该账号已被停用。",
+    "Create a driver account": "注册司机账号", "Account created!": "账号已创建！",
+    "Wait for the owner to approve it, then log in.": "请等待店主审核，通过后即可登录。",
+    "Your account will be active after the owner approves it.": "店主审核通过后，账号即可使用。",
+    "Full name": "姓名", "Phone number": "手机号", "Password (8+ characters)": "密码（至少8位）",
+    "Sign up": "注册", "Already have an account? Log in": "已有账号？登录", "Back to login": "返回登录",
+    "phone must be an 11-digit China mobile number": "请输入11位中国手机号",
+    "name must be 1-40 characters": "姓名需为1-40个字符",
+    "password must be at least 8 characters": "密码至少8位",
+    "this phone number is already registered": "该手机号已注册",
   };
   const PAIRS = Object.entries(ZH).sort((a, b) => b[0].length - a[0].length);
   const tr = s => { for (const [en, zh] of PAIRS) if (s.includes(en)) s = s.split(en).join(zh); return s; };
