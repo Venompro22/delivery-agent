@@ -29,6 +29,7 @@ else
 fi
 echo "📤 2/4 Uploading files..."
 scp -q -r templates static "$SERVER:$REMOTE_DIR/"
+rsync -a --delete static/ "$SERVER:/srv/delivery-static/"   # served by nginx directly
 scp -q "${FILES[@]}" "$SERVER:$REMOTE_DIR/"
 
 echo "🔄 3/4 Restarting service..."
