@@ -51,7 +51,7 @@
     async function load() {
       const card = document.getElementById('card');
       try {
-        const res = await fetch('/api/track/' + encodeURIComponent(orderId));
+        const res = await fetch('/api/track/' + encodeURIComponent(orderId) + '?k=' + encodeURIComponent(new URLSearchParams(location.search).get('k') || ''));
         const d = await res.json();
         if (!d.ok) {
           card.innerHTML = '<div class="logo">❓</div><h1>Order not found</h1>' +

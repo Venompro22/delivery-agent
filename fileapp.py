@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+import hashlib
 import hmac
 import json
 import os
@@ -147,6 +149,13 @@ def bad_request(message):
     return jsonify({"ok": False, "error": message}), 400
 
 
+def track_key(order_id: str) -> str:
+    """🔑 The secret half of a customer's tracking link. Only this server can make it."""
+    secret = app.secret_key if isinstance(app.secret_key, bytes) else str(app.secret_key).encode()
+    mac = hmac.new(secret, b"track:" + order_id.encode(), hashlib.sha256).digest()
+    return base64.urlsafe_b64encode(mac[:16]).decode().rstrip("=")
+
+
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if is_logged_in():
@@ -263,6 +272,7 @@ def api_route():
             {
                 "sequence": o.sequence,
                 "id": o.id,
+                "track_key": track_key(o.id),
                 "name": o.customer_name,
                 "phone": o.phone,
                 "note": o.note,
@@ -586,6 +596,7 @@ def list_orders():
         created = datetime.fromtimestamp(o.created_at) if o.created_at else None
         items.append({
             "id": o.id,
+            "track_key": track_key(o.id),
             "name": o.customer_name,
             "phone": o.phone,
             "note": o.note,
@@ -605,6 +616,9 @@ def list_orders():
 @app.route("/api/track/<order_id>")
 def api_track(order_id):
     """Public info for ONE order — safe to share with the customer."""
+    given = request.args.get("k", "").encode()
+    if not hmac.compare_digest(given, track_key(order_id).encode()):
+        return jsonify({"ok": False, "error": "order not found"}), 404   # same answer: no hints
     order = store.get(order_id)
     if not order:
         return jsonify({"ok": False, "error": "order not found"}), 404

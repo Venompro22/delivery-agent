@@ -797,8 +797,8 @@
       }[c]));
     }
 
-    async function share(id) {
-      const url = `${location.origin}/track/${id}`;
+    async function share(id, key) {
+      const url = `${location.origin}/track/${id}?k=${key}`;
       try {
         await navigator.clipboard.writeText(url);
         alert('Tracking link copied ✅ ' + url);
@@ -941,7 +941,7 @@
           <div class="actions">
             <a class="nav" href="${navUrl(s)}" target="_blank" rel="noopener">🧭 Navigate</a>
             ${s.phone ? `<a class="nav call" href="tel:${s.phone}">📞 Call</a>` : ''}
-            <button class="share" onclick="share('${s.id}')">🔗 Share</button>
+            <button class="share" onclick="share('${s.id}', '${s.track_key}')">🔗 Share</button>
             <button onclick="deliver('${s.id}')">✓ Delivered</button>
           </div>
         </div>`;

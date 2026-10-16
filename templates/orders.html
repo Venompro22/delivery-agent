@@ -104,8 +104,8 @@
       return `https://uri.amap.com/navigation?to=${o.lng},${o.lat},${encodeURIComponent(o.name)}&mode=car&callnative=1`;
     }
 
-    async function share(id) {
-      const url = `${location.origin}/track/${id}`;
+    async function share(id, key) {
+      const url = `${location.origin}/track/${id}?k=${key}`;
       try { await navigator.clipboard.writeText(url); alert('Tracking link copied ✅ ' + url); }
       catch (e) { prompt('Copy this tracking link for the customer:', url); }
     }
@@ -165,7 +165,7 @@
           <div class="actions">
             <a class="btn" href="${navUrl(o)}" target="_blank" rel="noopener">🧭 Navigate</a>
             ${o.phone ? `<a class="btn call" href="tel:${esc(o.phone)}">📞 Call</a>` : ''}
-            <button class="btn share" onclick="share('${o.id}')">🔗 Share</button>
+            <button class="btn share" onclick="share('${o.id}', '${o.track_key}')">🔗 Share</button>
             ${o.status === 'pending' ? `<button class="btn" onclick="editOrder('${o.id}')">✏️ Edit</button>
             <button class="btn cancel" onclick="cancelOrder('${o.id}')">✕ Cancel</button>` : ''}
           </div>
