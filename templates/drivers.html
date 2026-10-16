@@ -5,33 +5,19 @@
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>Drivers - Delivery Agent</title>
   <link rel="stylesheet" href="/static/pro.css"/>
-  <style>
-    * { box-sizing: border-box; }
-    body { margin: 0; background: var(--bg); color: var(--text); font-family: -apple-system, "Segoe UI", sans-serif; }
-    .wrap { max-width: 720px; margin: 0 auto; padding: 24px 16px; }
-    .top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
-    h1 { font-size: 20px; margin: 0; }
-    .back { color: var(--accent-text); text-decoration: none; font-size: 14px; }
-    .row { display: flex; align-items: center; gap: 10px; background: var(--surface);
-           border: 1px solid var(--border); border-radius: 12px; padding: 14px; margin-bottom: 10px; }
-    .who { flex: 1; min-width: 0; }
-    .name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
-    .meta { color: var(--muted); font-size: 13px; margin-top: 2px; }
-    .badge { font-size: 12px; padding: 3px 8px; border-radius: 999px; border: 1px solid; white-space: nowrap; }
-    .badge.pending { color: var(--warn); }
-    .badge.approved { color: var(--ok); }
-    .badge.blocked { color: var(--danger-text); }
-    button { padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border); background: transparent;
-             color: var(--text); cursor: pointer; font-size: 13px; }
-    button.approve { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
-    button.block { color: var(--danger-text); border-color: var(--danger); }
-    .empty { color: var(--muted); text-align: center; padding: 40px 0; }
-  </style>
+  <link rel="stylesheet" href="/static/css/drivers.css"/>
 </head>
 <body>
   <div class="wrap">
     <div class="top"><h1>Driver accounts</h1><a class="back" href="/">Dashboard</a></div>
     <div id="list"><div class="empty">Loading…</div></div>
+    <div class="row danger">
+      <div class="who">
+        <div class="name">Log out everyone</div>
+        <div class="meta">Every phone and computer must log in again.</div>
+      </div>
+      <button class="block" onclick="logoutAll()">Log out everyone</button>
+    </div>
   </div>
   <script>
     const LABEL = {pending: 'Waiting', approved: 'Approved', blocked: 'Blocked'};
@@ -73,6 +59,12 @@
         list.append(row);
       }
     }
+    async function logoutAll() {
+      if (!confirm('Log out everyone, including you?')) return;
+      await fetch('/api/logout-all', {method: 'POST'});
+      location.href = '/login';
+    }
+
     load();
   </script>
   <script src="/static/i18n.js"></script>

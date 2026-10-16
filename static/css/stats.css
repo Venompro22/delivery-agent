@@ -1,0 +1,21 @@
+/* stats page */
+* { box-sizing: border-box; }
+body { font-family: -apple-system, "Segoe UI", sans-serif; margin: 0; background: var(--bg); color: var(--text); }
+.wrap { max-width: 900px; margin: 0 auto; padding: 24px 20px 40px; }
+.top { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; }
+.top h1 { font-size: 22px; margin: 0; flex: 1; }
+.back { font-size: 13px; color: var(--muted); text-decoration: none;
+        border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; }
+.kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.kpi { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 16px; }
+.kpi .l { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.07em; }
+.kpi .n { font-size: 30px; font-weight: 700; margin-top: 6px; font-variant-numeric: tabular-nums; }
+.kpi .s { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.charts { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+.chart { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 16px; }
+.chart h3 { font-size: 13px; margin: 0 0 12px; color: var(--text-2); font-weight: 600; }
+.chart-box { position: relative; height: 220px; }
+@media (max-width: 720px) {
+  .kpis { grid-template-columns: repeat(2, 1fr); }
+  .charts { grid-template-columns: 1fr; }
+}
