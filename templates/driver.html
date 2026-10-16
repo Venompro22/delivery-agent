@@ -5,9 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
   <meta name="theme-color" content="#0f1115"/>
   <title>Driver - Delivery Agent</title>
-  <link rel="stylesheet" href="/static/css/driver.css"/>
-  <link rel="stylesheet" href="/static/vendor/inter/inter.css" media="print" onload="this.media='all'"/>
-  <link rel="stylesheet" href="/static/pro.css"/>
+  <link rel="stylesheet" href="/static/css/driver.css?v={{ asset_v }}"/>
+  <link rel="stylesheet" href="/static/vendor/inter/inter.css?v={{ asset_v }}" media="print" onload="this.media='all'"/>
+  <link rel="stylesheet" href="/static/pro.css?v={{ asset_v }}"/>
 </head>
 <body>
   <div class="wrap">
@@ -136,7 +136,7 @@
     load();
     setInterval(() => { if (!document.hidden) load(); }, 10000);
   </script>
-  <script src="/static/i18n.js"></script>
-  <script src="/static/pro.js"></script>
+  <script src="/static/i18n.js?v={{ asset_v }}"></script>
+  <script src="/static/pro.js?v={{ asset_v }}"></script>
 </body>
 </html>

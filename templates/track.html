@@ -4,9 +4,9 @@
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>Track your order</title>
-  <link rel="stylesheet" href="/static/css/track.css"/>
-  <link rel="stylesheet" href="/static/vendor/inter/inter.css" media="print" onload="this.media='all'"/>
-  <link rel="stylesheet" href="/static/pro.css"/>
+  <link rel="stylesheet" href="/static/css/track.css?v={{ asset_v }}"/>
+  <link rel="stylesheet" href="/static/vendor/inter/inter.css?v={{ asset_v }}" media="print" onload="this.media='all'"/>
+  <link rel="stylesheet" href="/static/pro.css?v={{ asset_v }}"/>
 </head>
 <body>
   <div class="card" id="card">
@@ -62,7 +62,7 @@
     load();
     setInterval(load, 15000);
   </script>
-  <script src="/static/i18n.js"></script>
-  <script src="/static/pro.js"></script>
+  <script src="/static/i18n.js?v={{ asset_v }}"></script>
+  <script src="/static/pro.js?v={{ asset_v }}"></script>
 </body>
 </html>

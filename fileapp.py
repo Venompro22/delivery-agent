@@ -138,6 +138,26 @@ driver = Driver(
 geo = GeoService(avg_speed_kmh=driver.avg_speed_kmh)
 store = OrderStore()
 users = UserStore()
+
+
+def _asset_version() -> str:
+    """🔖 A fingerprint of everything in static/: it changes whenever any file there changes."""
+    h = hashlib.sha256()
+    root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
+    for dirpath, _, files in sorted(os.walk(root)):
+        for name in sorted(files):
+            with open(os.path.join(dirpath, name), "rb") as f:
+                h.update(name.encode())
+                h.update(f.read())
+    return h.hexdigest()[:10]
+
+
+ASSET_V = _asset_version()
+
+
+@app.context_processor
+def inject_asset_version():
+    return {"asset_v": ASSET_V}
 limiter = LoginLimiter()
 
 
