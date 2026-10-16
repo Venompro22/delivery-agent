@@ -75,6 +75,8 @@
     "Driver accounts": "司机账号", "Drivers": "司机管理", "Waiting": "待审核",
     "Approved": "已通过", "Blocked": "已停用", "Approve": "通过", "Block": "停用",
     "No drivers yet.": "暂无司机。",
+    "Log out everyone": "全部退出登录",
+    "Every phone and computer must log in again.": "所有手机和电脑都需要重新登录。",
     "password is too easy to guess": "密码太简单，容易被猜到",
     "Too many new accounts from this network today. Try again tomorrow.": "该网络今天注册的账号过多，请明天再试。",
   };
@@ -102,14 +104,16 @@
     const btn = document.createElement('button');
     btn.textContent = lang === 'zh' ? 'EN' : '中文';
     btn.title = 'Language / 语言';
-    btn.style.cssText = 'position:fixed;top:10px;right:10px;z-index:10000;width:auto;margin:0;' +
-      'padding:6px 12px;font-size:13px;border-radius:20px;border:1px solid var(--accent);' +
-      'background:var(--surface);color:var(--text);cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.4)';
+    const slot = document.querySelector('[data-lang-slot]');   // a page can choose where it goes
+    btn.style.cssText = 'width:auto;margin:0;padding:5px 10px;font-size:12px;border-radius:20px;' +
+      'border:1px solid var(--border,#2a2e37);background:var(--surface,#1a1d24);' +
+      'color:var(--text,#e8eaed);cursor:pointer;' +
+      (slot ? '' : 'position:fixed;bottom:28px;right:12px;z-index:10000;box-shadow:0 2px 8px rgba(0,0,0,.4);');
     btn.onclick = () => {
       try { localStorage.setItem('lang', lang === 'zh' ? 'en' : 'zh'); } catch (e) {}
       location.reload();
     };
-    document.body.appendChild(btn);
+    (slot || document.body).appendChild(btn);
     if (lang !== 'zh') return;
     document.documentElement.lang = 'zh';
     translate(document.body);
