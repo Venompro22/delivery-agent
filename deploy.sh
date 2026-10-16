@@ -19,8 +19,16 @@ print('    ✅ route logic OK')
 "
 echo "🧪    Running tests..."
 python3 -m pytest -q || { echo "❌ Tests failed — NOT deploying"; exit 1; }
+if [ "${SKIP_AUDIT:-}" = "1" ]; then
+  echo "⚠️     Skipping the security audit (SKIP_AUDIT=1)"
+else
+  echo "🛡️    Checking packages for known vulnerabilities (here + on the server)..."
+  ssh "$SERVER" "~/$REMOTE_DIR/.venv/bin/pip freeze" > /tmp/delivery-server-req.txt
+  python3 -m pip_audit --progress-spinner off -r requirements.txt -r /tmp/delivery-server-req.txt \
+    || { echo "❌ Vulnerable packages — NOT deploying (details: pip-audit -r /tmp/delivery-server-req.txt --desc)"; exit 1; }
+fi
 echo "📤 2/4 Uploading files..."
-scp -q -r templates static scr-ysf2006@172.20.10.6:~/delivery-agent/
+scp -q -r templates static "$SERVER:$REMOTE_DIR/"
 scp -q "${FILES[@]}" "$SERVER:$REMOTE_DIR/"
 
 echo "🔄 3/4 Restarting service..."

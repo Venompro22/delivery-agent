@@ -1,3 +1,4 @@
 flask
 requests
-gunicornwerkzeug>=3.1.9
+gunicorn
+werkzeug>=3.1.9
