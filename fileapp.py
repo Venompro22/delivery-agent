@@ -20,6 +20,7 @@ from geo import GeoService
 from optimizer import optimize_route, route_summary
 from store import OrderStore
 from users import UserStore, public
+from limiter import LoginLimiter
 from order_parser import parse_message
 from agent import handle_message
 import numpy as np
@@ -74,7 +75,6 @@ if not DASHBOARD_PASSWORD:
     print(f"Temporary password for this run: {DASHBOARD_PASSWORD}", flush=True)
 
 DRIVER_PASSWORD = os.environ.get("DRIVER_PASSWORD")   # optional: second password for drivers
-_failed_logins = {}
 SESSION_VERSION_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".session_version")
 
 
@@ -128,13 +128,6 @@ def owner_required(view):
     return wrapper
 
 
-def too_many_attempts(ip: str) -> bool:
-    count, first = _failed_logins.get(ip, (0, 0.0))
-    if time.time() - first > 600:
-        _failed_logins.pop(ip, None)
-        return False
-    return count >= 5
-
 driver = Driver(
     name="Driver 1",
     lat=float(os.environ.get("DRIVER_LAT", "31.2304")),
@@ -143,6 +136,7 @@ driver = Driver(
 geo = GeoService(avg_speed_kmh=driver.avg_speed_kmh)
 store = OrderStore()
 users = UserStore()
+limiter = LoginLimiter()
 
 
 def fmt(epoch):
@@ -160,11 +154,11 @@ def login():
     error = None
     if request.method == "POST":
         ip = request.headers.get("X-Real-IP") or request.remote_addr or "?"
-        if too_many_attempts(ip):
+        phone = request.form.get("phone", "").strip()
+        if limiter.blocked(ip, phone):
             error = "Too many attempts. Wait 10 minutes."
         else:
             given = request.form.get("password", "")
-            phone = request.form.get("phone", "").strip()
             role, uid = None, None
             if phone:                                 # 👤 driver account
                 user = users.check_login(phone, given)
@@ -179,7 +173,7 @@ def login():
             elif DRIVER_PASSWORD and hmac.compare_digest(given.encode(), DRIVER_PASSWORD.encode()):
                 role = "driver"
             if role:
-                _failed_logins.pop(ip, None)
+                limiter.success(phone)
                 session.clear()
                 session["auth"] = True
                 session["role"] = role
@@ -189,10 +183,9 @@ def login():
                 session.permanent = True
                 print(f"Login from {ip} as {role}", flush=True)
                 return redirect(url_for("home") if role == "owner" else url_for("driver_page"))
-            count, first = _failed_logins.get(ip, (0, time.time()))
-            _failed_logins[ip] = (count + 1, first)
-            print(f"Wrong password from {ip}", flush=True)
-            time.sleep(1)
+            if error is None:                  # pending/blocked = right password, not a guess
+                limiter.fail(ip, phone)
+                print(f"Wrong password from {ip}" + (f" for {phone}" if phone else ""), flush=True)
             error = error or "Wrong password."
     return render_template("login.html", error=error)
 

@@ -12,6 +12,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import fileapp                      # noqa: E402
 from store import OrderStore        # noqa: E402
+from users import UserStore         # noqa: E402
+from limiter import LoginLimiter    # noqa: E402
 
 
 @pytest.fixture
@@ -21,7 +23,8 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr(fileapp, "SESSION_VERSION_PATH", str(tmp_path / ".session_version"))
     monkeypatch.setattr(fileapp, "FEEDBACK_PATH", str(tmp_path / "feedback.jsonl"))
     monkeypatch.setattr(fileapp.time, "sleep", lambda seconds: None)
-    fileapp._failed_logins.clear()
+    fileapp.users = UserStore(str(tmp_path / "test.db"))
+    fileapp.limiter = LoginLimiter(str(tmp_path / "test.db"))
     return fileapp.app.test_client()
 
 
