@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Drivers - Delivery Agent</title>
+  <link rel="stylesheet" href="/static/pro.css"/>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); font-family: -apple-system, "Segoe UI", sans-serif; }
+    .wrap { max-width: 720px; margin: 0 auto; padding: 24px 16px; }
+    .top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+    h1 { font-size: 20px; margin: 0; }
+    .back { color: var(--accent-text); text-decoration: none; font-size: 14px; }
+    .row { display: flex; align-items: center; gap: 10px; background: var(--surface);
+           border: 1px solid var(--border); border-radius: 12px; padding: 14px; margin-bottom: 10px; }
+    .who { flex: 1; min-width: 0; }
+    .name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+    .meta { color: var(--muted); font-size: 13px; margin-top: 2px; }
+    .badge { font-size: 12px; padding: 3px 8px; border-radius: 999px; border: 1px solid; white-space: nowrap; }
+    .badge.pending { color: var(--warn); }
+    .badge.approved { color: var(--ok); }
+    .badge.blocked { color: var(--danger-text); }
+    button { padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border); background: transparent;
+             color: var(--text); cursor: pointer; font-size: 13px; }
+    button.approve { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+    button.block { color: var(--danger-text); border-color: var(--danger); }
+    .empty { color: var(--muted); text-align: center; padding: 40px 0; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top"><h1>Driver accounts</h1><a class="back" href="/">Dashboard</a></div>
+    <div id="list"><div class="empty">Loading…</div></div>
+  </div>
+  <script>
+    const LABEL = {pending: 'Waiting', approved: 'Approved', blocked: 'Blocked'};
+
+    // 🛡️ textContent only: names are typed by strangers, never treat them as HTML (XSS)
+    function el(tag, cls, text) {
+      const e = document.createElement(tag);
+      if (cls) e.className = cls;
+      if (text !== undefined) e.textContent = text;
+      return e;
+    }
+
+    function button(text, cls, id, status) {
+      const b = el('button', cls, text);
+      b.onclick = async () => {
+        if (status === 'blocked' && !confirm('Block this driver? They are logged out right now.')) return;
+        await fetch('/api/drivers/' + encodeURIComponent(id) + '/status', {
+          method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({status})});
+        load();
+      };
+      return b;
+    }
+
+    async function load() {
+      const res = await fetch('/api/drivers');
+      if (!res.ok) { location.href = '/login'; return; }
+      const drivers = await res.json();
+      const list = document.getElementById('list');
+      list.replaceChildren();
+      if (!drivers.length) { list.append(el('div', 'empty', 'No drivers yet.')); return; }
+      for (const d of drivers) {
+        const row = el('div', 'row');
+        const who = el('div', 'who');
+        const since = new Date(d.created_at * 1000).toLocaleDateString();
+        who.append(el('div', 'name', d.name), el('div', 'meta', d.phone + ' · ' + since));
+        row.append(who, el('span', 'badge ' + d.status, LABEL[d.status]));
+        if (d.status !== 'approved') row.append(button('Approve', 'approve', d.id, 'approved'));
+        if (d.status !== 'blocked') row.append(button('Block', 'block', d.id, 'blocked'));
+        list.append(row);
+      }
+    }
+    load();
+  </script>
+  <script src="/static/i18n.js"></script>
+  <script src="/static/pro.js"></script>
+</body>
+</html>

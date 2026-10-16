@@ -72,6 +72,9 @@
     "name must be 1-40 characters": "姓名需为1-40个字符",
     "password must be at least 8 characters": "密码至少8位",
     "this phone number is already registered": "该手机号已注册",
+    "Driver accounts": "司机账号", "Drivers": "司机管理", "Waiting": "待审核",
+    "Approved": "已通过", "Blocked": "已停用", "Approve": "通过", "Block": "停用",
+    "No drivers yet.": "暂无司机。",
   };
   const PAIRS = Object.entries(ZH).sort((a, b) => b[0].length - a[0].length);
   const tr = s => { for (const [en, zh] of PAIRS) if (s.includes(en)) s = s.split(en).join(zh); return s; };

@@ -19,7 +19,7 @@ from models import Order, Driver, OrderStatus
 from geo import GeoService
 from optimizer import optimize_route, route_summary
 from store import OrderStore
-from users import UserStore
+from users import UserStore, public
 from order_parser import parse_message
 from agent import handle_message
 import numpy as np
@@ -210,6 +210,32 @@ def signup():
         except ValueError as e:
             error = str(e)
     return render_template("signup.html", error=error, done=done)
+
+
+@app.route("/drivers")
+@owner_required
+def drivers_page():
+    return render_template("drivers.html")
+
+
+@app.route("/api/drivers")
+@owner_required
+def list_drivers():
+    """👤 Every driver account (never the password hash), pending ones first."""
+    return jsonify([public(u) for u in users.all()])
+
+
+@app.route("/api/drivers/<user_id>/status", methods=["POST"])
+@owner_required
+def set_driver_status(user_id):
+    """✅ Approve or ⛔ block a driver account."""
+    status = str((request.get_json(silent=True) or {}).get("status", ""))
+    if status not in ("approved", "blocked"):
+        return bad_request("status must be approved or blocked")
+    if not users.set_status(user_id, status):
+        return jsonify({"ok": False}), 404
+    print(f"👤 Driver {user_id} → {status}", flush=True)
+    return jsonify({"ok": True})
 
 
 @app.route("/logout")
