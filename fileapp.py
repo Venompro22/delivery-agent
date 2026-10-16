@@ -246,7 +246,7 @@ def set_driver_status(user_id):
     return jsonify({"ok": True})
 
 
-@app.route("/logout")
+@app.route("/logout", methods=["POST"])
 def logout():
     session.clear()
     return redirect(url_for("login"))

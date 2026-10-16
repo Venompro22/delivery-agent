@@ -30,3 +30,16 @@
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();
 })();
+
+
+// 🚪 Logout is a POST (a GET could be triggered by another website, e.g. with an <img>)
+document.addEventListener('click', (e) => {
+  const link = e.target.closest('a[href="/logout"]');
+  if (!link) return;
+  e.preventDefault();
+  const form = document.createElement('form');
+  form.method = 'post';
+  form.action = '/logout';
+  document.body.appendChild(form);
+  form.submit();
+});
