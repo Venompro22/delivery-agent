@@ -75,6 +75,8 @@
     "Driver accounts": "司机账号", "Drivers": "司机管理", "Waiting": "待审核",
     "Approved": "已通过", "Blocked": "已停用", "Approve": "通过", "Block": "停用",
     "No drivers yet.": "暂无司机。",
+    "password is too easy to guess": "密码太简单，容易被猜到",
+    "Too many new accounts from this network today. Try again tomorrow.": "该网络今天注册的账号过多，请明天再试。",
   };
   const PAIRS = Object.entries(ZH).sort((a, b) => b[0].length - a[0].length);
   const tr = s => { for (const [en, zh] of PAIRS) if (s.includes(en)) s = s.split(en).join(zh); return s; };

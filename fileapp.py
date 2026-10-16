@@ -204,13 +204,19 @@ def signup():
     """👤 Drivers create an account; it waits until the owner approves it."""
     error = done = None
     if request.method == "POST":
-        try:
-            user = users.create(request.form.get("phone", ""), request.form.get("name", ""),
-                                request.form.get("password", ""))
-            print(f"👤 New driver signup: {user['name']} ({user['phone']}) — pending", flush=True)
-            done = True
-        except ValueError as e:
-            error = str(e)
+        ip = request.headers.get("X-Real-IP") or request.remote_addr or "?"
+        if limiter.signup_blocked(ip):
+            error = "Too many new accounts from this network today. Try again tomorrow."
+        else:
+            try:
+                user = users.create(request.form.get("phone", ""), request.form.get("name", ""),
+                                    request.form.get("password", ""))
+                limiter.signup_done(ip)
+                print(f"👤 New driver signup: {user['name']} ({user['phone']}) from {ip} — pending",
+                      flush=True)
+                done = True
+            except ValueError as e:
+                error = str(e)
     return render_template("signup.html", error=error, done=done)
 
 

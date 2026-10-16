@@ -29,6 +29,24 @@ PHONE_RE = re.compile(r"1[3-9]\d{9}")   # mainland China mobile: 11 digits, star
 STATUSES = ("pending", "approved", "blocked")
 _DUMMY_HASH = generate_password_hash("timing-safe-dummy")
 
+# The most used passwords (8+ characters) — attackers always try these first
+COMMON_PASSWORDS = {
+    "password", "password1", "password123", "iloveyou", "qwertyui", "qwerty123",
+    "1qaz2wsx", "1q2w3e4r", "a1234567", "a12345678", "aa123456", "qq123456",
+    "abc12345", "abc123456", "123456789a", "123qweasd", "11223344", "147258369",
+    "123123123", "asdfghjk", "zxcvbnm123", "woaini1314", "5201314520", "1314520520",
+}
+SEQUENCES = ("01234567890", "09876543210", "abcdefghijklmnopqrstuvwxyz", "qwertyuiopasdfghjklzxcvbnm")
+
+
+def weak_password(password: str, phone: str = "") -> bool:
+    """True if the password is easy to guess."""
+    p = password.lower()
+    return (p in COMMON_PASSWORDS
+            or len(set(p)) < 4                         # 88888888, 11112222, 12121212
+            or any(p in seq for seq in SEQUENCES)      # 12345678, abcdefgh, qwertyui
+            or bool(phone and phone in password))      # the phone number itself
+
 
 class UserStore:
     def __init__(self, path: str = os.path.join(HERE, "orders.db")):
@@ -62,6 +80,8 @@ class UserStore:
             raise ValueError("name must be 1-40 characters")
         if len(password) < 8:
             raise ValueError("password must be at least 8 characters")
+        if weak_password(password, phone):
+            raise ValueError("password is too easy to guess")
         user_id = secrets.token_hex(8)
         con = self._connect()
         try:
