@@ -83,6 +83,38 @@
 
     load();
   </script>
+  <div class="wrap-drivers">
+    <h2 class="section">Drivers — last 7 days</h2>
+    <div id="driver-stats"></div>
+  </div>
+  <script>
+    (async () => {
+      const res = await fetch('/api/stats');
+      if (!res.ok) return;
+      const {drivers} = await res.json();
+      const box = document.getElementById('driver-stats');
+      if (!drivers || !drivers.length) { box.textContent = 'No deliveries yet.'; return; }
+      const table = document.createElement('table');
+      table.className = 'driver-table';
+      const head = table.createTHead().insertRow();
+      for (const h of ['Driver', 'Today', '7 days', 'Median time', 'On time', 'Late']) {
+        const th = document.createElement('th');
+        th.textContent = h;
+        head.append(th);
+      }
+      const body = table.createTBody();
+      for (const d of drivers) {
+        const row = body.insertRow();
+        for (const v of [d.name, d.today, d.week,
+                         d.median_minutes == null ? '--' : d.median_minutes + ' min',
+                         d.on_time_pct == null ? '--' : d.on_time_pct + '%', d.late]) {
+          row.insertCell().textContent = v;
+        }
+        if (d.late) row.lastChild.className = 'bad';
+      }
+      box.append(table);
+    })();
+  </script>
   <script src="/static/i18n.js?v={{ asset_v }}"></script>
   <script src="/static/pro.js?v={{ asset_v }}"></script>
 </body>

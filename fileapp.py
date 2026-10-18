@@ -673,11 +673,19 @@ def api_stats():
     minutes = []
     by_hour = [0] * 24
     on_time = late = 0
+    per_driver = {}                               # driver id → their numbers (same rules as above)
 
     for o in store.all():
         if o.status != OrderStatus.DELIVERED or not o.delivered_at:
             continue
         done = datetime.fromtimestamp(o.delivered_at)
+        p = per_driver.setdefault(o.driver_id, {"today": 0, "week": 0, "minutes": [], "on_time": 0, "late": 0})
+        p["today"] += done.date() == today
+        p["week"] += done.date() in per_day
+        if o.created_at:
+            p["minutes"].append((o.delivered_at - o.created_at) / 60)
+        if o.promised_by:
+            p["on_time" if o.delivered_at <= o.promised_by else "late"] += 1
         if done.date() in per_day:
             per_day[done.date()] += 1
         by_hour[done.hour] += 1
@@ -690,7 +698,18 @@ def api_stats():
                 late += 1
 
     promised = on_time + late
+    names = {u["id"]: u["name"] for u in users.all()}
+    drivers = sorted((
+        {"name": names.get(d, "Deleted account") if d else "No driver",
+         "today": p["today"],
+         "week": p["week"],
+         "median_minutes": round(statistics.median(p["minutes"])) if p["minutes"] else None,
+         "on_time_pct": round(p["on_time"] / (p["on_time"] + p["late"]) * 100)
+                        if p["on_time"] + p["late"] else None,
+         "late": p["late"]}
+        for d, p in per_driver.items()), key=lambda r: -r["week"])
     return jsonify({
+        "drivers": drivers,
         "days": [d.strftime("%m-%d") for d in days],
         "delivered": [per_day[d] for d in days],
         "by_hour": by_hour,
