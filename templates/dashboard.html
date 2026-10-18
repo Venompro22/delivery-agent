@@ -532,6 +532,28 @@
       }[c]));
     }
 
+    let DRIVERS = [];                       // approved driver accounts, for the assign menus
+    async function loadDrivers() {
+      try {
+        const res = await fetch('/api/drivers');
+        if (res.ok) DRIVERS = (await res.json()).filter(d => d.status === 'approved');
+      } catch (e) {}
+    }
+    loadDrivers();
+
+    function driverSelect(s) {
+      if (!DRIVERS.length) return '';
+      const options = ['<option value="">Everyone (pool)</option>'].concat(DRIVERS.map(d =>
+        `<option value="${esc(d.id)}"${d.id === s.driver_id ? ' selected' : ''}>${esc(d.name)}</option>`));
+      return `<select class="assign" onchange="assign('${s.id}', this.value)">${options.join('')}</select>`;
+    }
+
+    async function assign(id, driverId) {
+      await fetch('/api/orders/' + encodeURIComponent(id) + '/assign', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({driver_id: driverId || null})});
+    }
+
     async function share(id, key) {
       const url = `${location.origin}/track/${id}?k=${key}`;
       try {
@@ -676,7 +698,7 @@
           <div class="actions">
             <a class="nav" href="${navUrl(s)}" target="_blank" rel="noopener">🧭 Navigate</a>
             ${s.phone ? `<a class="nav call" href="tel:${s.phone}">📞 Call</a>` : ''}
-            <button class="share" onclick="share('${s.id}', '${s.track_key}')">🔗 Share</button>
+            <button class="share" onclick="share('${s.id}', '${s.track_key}')">🔗 Share</button>${driverSelect(s)}
             <button onclick="deliver('${s.id}')">✓ Delivered</button>
           </div>
         </div>`;

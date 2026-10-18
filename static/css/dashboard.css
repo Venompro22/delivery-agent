@@ -262,3 +262,6 @@ button:hover { background: var(--accent-hover); }
 .manual-order > summary::before { content: "+ "; color: var(--accent-text); }
 .manual-order[open] > summary::before { content: "− "; }
 .manual-order[open] { padding-bottom: 12px; }
+
+.assign { margin-left: 6px; max-width: 140px; padding: 4px 6px; font-size: 12px; border-radius: 6px;
+          background: var(--surface); color: var(--text); border: 1px solid var(--border); }

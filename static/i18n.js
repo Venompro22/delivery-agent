@@ -85,6 +85,7 @@
     "Your password was reset. Choose a new one to continue.": "你的密码已被重置，请设置新密码后继续。",
     "Reset password": "重置密码", "Password changed": "密码已修改", "Password reset": "密码已重置",
     "password is too long": "密码太长",
+    "Everyone (pool)": "所有司机（待分配）",
     "Every phone and computer must log in again.": "所有手机和电脑都需要重新登录。",
     "password is too easy to guess": "密码太简单，容易被猜到",
     "Too many new accounts from this network today. Try again tomorrow.": "该网络今天注册的账号过多，请明天再试。",

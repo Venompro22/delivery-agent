@@ -72,6 +72,9 @@ class UserStore:
                 con.execute("ALTER TABLE users ADD COLUMN pw_version INTEGER NOT NULL DEFAULT 0")
             if "must_change" not in cols:     # 1 after an owner reset
                 con.execute("ALTER TABLE users ADD COLUMN must_change INTEGER NOT NULL DEFAULT 0")
+            for col in ("lat", "lng", "located_at"):     # 📍 last GPS position (no history kept)
+                if col not in cols:
+                    con.execute(f"ALTER TABLE users ADD COLUMN {col} REAL")
             con.commit()
         finally:
             con.close()
@@ -164,6 +167,16 @@ class UserStore:
         finally:
             con.close()
         return True
+
+    def set_location(self, user_id: str, lat: float, lng: float) -> None:
+        """📍 Only the latest position is kept — never a history of where a driver has been."""
+        con = self._connect()
+        try:
+            con.execute("UPDATE users SET lat = ?, lng = ?, located_at = ? WHERE id = ?",
+                        (lat, lng, time.time(), user_id))
+            con.commit()
+        finally:
+            con.close()
 
     def reset_password(self, user_id: str) -> Optional[str]:
         """Owner resets a forgotten password: a temporary one the driver must change."""

@@ -171,6 +171,23 @@ def bad_request(message):
     return jsonify({"ok": False, "error": message}), 400
 
 
+def driver_for(uid):
+    """🚚 This account's driver: its own GPS position, or the default start point."""
+    user = users.get(uid) if uid else None
+    if user and user.get("lat") is not None:
+        return Driver(name=user["name"], lat=user["lat"], lng=user["lng"])
+    return driver
+
+
+def visible_to_me(order) -> bool:
+    """👤 The owner sees everything; a driver sees their own orders + the unassigned pool."""
+    return current_role() == "owner" or order.driver_id in (None, session.get("uid"))
+
+
+def my_orders() -> list:
+    return [o for o in store.all() if visible_to_me(o)]
+
+
 def client_ip() -> str:
     return request.headers.get("X-Real-IP") or request.remote_addr or "?"
 
@@ -358,12 +375,14 @@ def home():
 @app.route("/api/route")
 @login_required
 def api_route():
-    route = optimize_route(driver, store.all(), geo)
+    mine = my_orders()
+    me = driver_for(session.get("uid"))
+    route = optimize_route(me, mine, geo)
     summary = route_summary(route)
     late_ids = set(summary.get("late_orders", []))
-    delivered = sum(1 for o in store.all() if o.status == OrderStatus.DELIVERED)
+    delivered = sum(1 for o in mine if o.status == OrderStatus.DELIVERED)
     data = {
-        "driver": {"lat": driver.lat, "lng": driver.lng, "name": driver.name},
+        "driver": {"lat": me.lat, "lng": me.lng, "name": me.name},
         "summary": {
             "stops": summary["stops"],
             "total_km": summary["total_km"],
@@ -376,6 +395,7 @@ def api_route():
                 "sequence": o.sequence,
                 "id": o.id,
                 "track_key": track_key(o.id),
+                "driver_id": o.driver_id,
                 "name": o.customer_name,
                 "phone": o.phone,
                 "note": o.note,
@@ -445,13 +465,36 @@ def add_order():
 @login_required
 def deliver_order(order_id):
     order = store.get(order_id)
-    if order:
+    if order and visible_to_me(order):            # 🛡️ never someone else's order (IDOR)
+        if order.status != OrderStatus.PENDING:
+            return bad_request("order is not open")
+        if order.driver_id is None and session.get("uid"):
+            order.driver_id = session["uid"]      # a pool order belongs to whoever delivers it
         order.status = OrderStatus.DELIVERED
         order.delivered_at = time.time()
         store.save()
         print(f"✅ Delivered: {order.customer_name}", flush=True)
         return jsonify({"ok": True})
     return jsonify({"ok": False}), 404
+
+@app.route("/api/orders/<order_id>/assign", methods=["POST"])
+@owner_required
+def assign_order(order_id):
+    """👤 Give an order to a driver, or back to the pool (driver_id = null)."""
+    order = store.get(order_id)
+    if not order:
+        return jsonify({"ok": False}), 404
+    driver_id = (request.get_json(silent=True) or {}).get("driver_id")
+    if driver_id is not None:
+        u = users.get(str(driver_id))
+        if not u or u["status"] != "approved":
+            return bad_request("unknown or not approved driver")
+        driver_id = u["id"]
+    order.driver_id = driver_id
+    store.save()
+    print(f"👤 Assigned: {order.customer_name} → {driver_id or 'pool'}", flush=True)
+    return jsonify({"ok": True})
+
 
 @app.route("/api/orders/<order_id>/cancel", methods=["POST"])
 @owner_required
@@ -674,8 +717,11 @@ def update_driver_location():
         return bad_request("lat and lng must be numbers")
     if not (-90 <= lat <= 90 and -180 <= lng <= 180):
         return bad_request("lat/lng out of range")
-    driver.lat, driver.lng = lat, lng
-    print(f"📍 Driver location: ({lat:.5f}, {lng:.5f})", flush=True)
+    uid = session.get("uid")
+    if uid:
+        users.set_location(uid, lat, lng)        # 📍 this driver's own position
+    else:
+        driver.lat, driver.lng = lat, lng        # the owner moves the default start point
     return jsonify({"ok": True, "lat": lat, "lng": lng})
 
 
@@ -701,6 +747,7 @@ def list_orders():
         items.append({
             "id": o.id,
             "track_key": track_key(o.id),
+            "driver_id": o.driver_id,
             "name": o.customer_name,
             "phone": o.phone,
             "note": o.note,
@@ -732,7 +779,8 @@ def api_track(order_id):
         return jsonify({"ok": True, "status": "cancelled", "name": order.customer_name})
 
     # Where is this order in the current route?
-    route = optimize_route(driver, store.all(), geo)
+    same_driver = [o for o in store.all() if o.driver_id == order.driver_id]
+    route = optimize_route(driver_for(order.driver_id), same_driver, geo)
     me = next((o for o in route if o.id == order_id), None)
     return jsonify({
         "ok": True,
