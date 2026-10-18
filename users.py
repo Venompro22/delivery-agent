@@ -48,12 +48,30 @@ def weak_password(password: str, phone: str = "") -> bool:
             or bool(phone and phone in password))      # the phone number itself
 
 
+TEMP_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789"   # no 0/O, 1/l/I
+
+
+def check_password_rules(password: str, phone: str = "") -> None:
+    """Raises ValueError if the password is not acceptable."""
+    if len(password) < 8:
+        raise ValueError("password must be at least 8 characters")
+    if len(password) > 128:
+        raise ValueError("password is too long")
+    if weak_password(password, phone):
+        raise ValueError("password is too easy to guess")
+
+
 class UserStore:
     def __init__(self, path: str = os.path.join(HERE, "orders.db")):
         self.path = path
         con = self._connect()
         try:
             con.execute(SCHEMA)
+            cols = {r[1] for r in con.execute("PRAGMA table_info(users)")}
+            if "pw_version" not in cols:      # +1 at every password change → old sessions die
+                con.execute("ALTER TABLE users ADD COLUMN pw_version INTEGER NOT NULL DEFAULT 0")
+            if "must_change" not in cols:     # 1 after an owner reset
+                con.execute("ALTER TABLE users ADD COLUMN must_change INTEGER NOT NULL DEFAULT 0")
             con.commit()
         finally:
             con.close()
@@ -78,10 +96,7 @@ class UserStore:
             raise ValueError("phone must be an 11-digit China mobile number")
         if not 1 <= len(name) <= 40:
             raise ValueError("name must be 1-40 characters")
-        if len(password) < 8:
-            raise ValueError("password must be at least 8 characters")
-        if weak_password(password, phone):
-            raise ValueError("password is too easy to guess")
+        check_password_rules(password, phone)
         user_id = secrets.token_hex(8)
         con = self._connect()
         try:
@@ -132,6 +147,28 @@ class UserStore:
         finally:
             con.close()
         return cur.rowcount == 1
+
+    def set_password(self, user_id: str, password: str, must_change: bool = False) -> bool:
+        """New password. pw_version + 1 → every other device is logged out."""
+        user = self.get(user_id)
+        if not user:
+            return False
+        check_password_rules(password, user["phone"])
+        con = self._connect()
+        try:
+            con.execute(
+                "UPDATE users SET password_hash = ?, pw_version = pw_version + 1, must_change = ? "
+                "WHERE id = ?",
+                (generate_password_hash(password), int(must_change), user_id))
+            con.commit()
+        finally:
+            con.close()
+        return True
+
+    def reset_password(self, user_id: str) -> Optional[str]:
+        """Owner resets a forgotten password: a temporary one the driver must change."""
+        temp = "".join(secrets.choice(TEMP_ALPHABET) for _ in range(12))
+        return temp if self.set_password(user_id, temp, must_change=True) else None
 
 
 def public(user: dict) -> dict:

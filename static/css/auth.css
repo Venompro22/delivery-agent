@@ -29,3 +29,4 @@ button {
   color: var(--text); background: rgba(31,157,85,0.12); border: 1px solid var(--ok);
   border-radius: 8px; padding: 12px; font-size: 14px; margin-bottom: 6px;
 }
+.ok { color: var(--ok); font-size: 14px; margin-bottom: 12px; }

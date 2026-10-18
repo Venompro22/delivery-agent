@@ -71,3 +71,28 @@ def test_weak_passwords_are_refused(users, password):
 
 def test_a_good_password_is_accepted(users):
     assert users.create("13800138000", "Ali", "blue-river-42")["status"] == "pending"
+
+
+def test_set_password_bumps_the_version(users):
+    u = users.create("13800138000", "Ali", "blue-river-42")
+    assert u["pw_version"] == 0
+    users.set_password(u["id"], "green-hill-77")
+    assert users.check_login("13800138000", "green-hill-77")
+    assert not users.check_login("13800138000", "blue-river-42")
+    assert users.get(u["id"])["pw_version"] == 1
+
+
+def test_set_password_refuses_weak(users):
+    u = users.create("13800138000", "Ali", "blue-river-42")
+    with pytest.raises(ValueError):
+        users.set_password(u["id"], "12345678")
+
+
+def test_reset_password_forces_a_change(users):
+    u = users.create("13800138000", "Ali", "blue-river-42")
+    temp = users.reset_password(u["id"])
+    assert len(temp) == 12
+    assert users.check_login("13800138000", temp)
+    assert users.get(u["id"])["must_change"] == 1
+    users.set_password(u["id"], "green-hill-77")
+    assert users.get(u["id"])["must_change"] == 0

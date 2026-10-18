@@ -14,6 +14,7 @@ import fileapp                      # noqa: E402
 from store import OrderStore        # noqa: E402
 from users import UserStore         # noqa: E402
 from limiter import LoginLimiter    # noqa: E402
+from audit import AuditLog          # noqa: E402
 
 
 @pytest.fixture
@@ -25,6 +26,7 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr(fileapp.time, "sleep", lambda seconds: None)
     fileapp.users = UserStore(str(tmp_path / "test.db"))
     fileapp.limiter = LoginLimiter(str(tmp_path / "test.db"))
+    fileapp.audit = AuditLog(str(tmp_path / "test.db"))
     return fileapp.app.test_client()
 
 

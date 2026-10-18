@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>My account - Delivery Agent</title>
+  <link rel="stylesheet" href="/static/pro.css?v={{ asset_v }}"/>
+  <link rel="stylesheet" href="/static/css/auth.css?v={{ asset_v }}"/>
+</head>
+<body>
+  <form class="card" method="post" action="/account">
+    <h1>Change password</h1>
+    {% if must_change %}
+    <div class="sub">Your password was reset. Choose a new one to continue.</div>
+    {% else %}
+    <div class="sub">{{ user.name }} · {{ user.phone }}</div>
+    {% endif %}
+    {% if error %}<div class="error">{{ error }}</div>{% endif %}
+    {% if done %}<div class="ok">Password changed ✅</div>{% endif %}
+    <input type="password" name="current" placeholder="Current password" autocomplete="current-password" required/>
+    <input type="password" name="new" placeholder="New password (8+ characters)" autocomplete="new-password" minlength="8" required/>
+    <button type="submit">Save</button>
+    {% if not must_change %}<a class="link" href="/driver">Back</a>{% endif %}
+  </form>
+  <script src="/static/i18n.js?v={{ asset_v }}"></script>
+  <script src="/static/pro.js?v={{ asset_v }}"></script>
+</body>
+</html>

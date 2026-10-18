@@ -11,6 +11,8 @@
   <div class="wrap">
     <div class="top"><h1>Driver accounts</h1><a class="back" href="/">Dashboard</a></div>
     <div id="list"><div class="empty">Loading…</div></div>
+    <h2 class="section">Security log</h2>
+    <div id="log"><div class="empty">Loading…</div></div>
     <div class="row danger">
       <div class="who">
         <div class="name">Log out everyone</div>
@@ -37,6 +39,7 @@
         await fetch('/api/drivers/' + encodeURIComponent(id) + '/status', {
           method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({status})});
         load();
+        loadLog();
       };
       return b;
     }
@@ -56,6 +59,7 @@
         row.append(who, el('span', 'badge ' + d.status, LABEL[d.status]));
         if (d.status !== 'approved') row.append(button('Approve', 'approve', d.id, 'approved'));
         if (d.status !== 'blocked') row.append(button('Block', 'block', d.id, 'blocked'));
+        if (d.status === 'approved') row.append(resetButton(d));
         list.append(row);
       }
     }
@@ -65,7 +69,49 @@
       location.href = '/login';
     }
 
+    const EVENTS = {
+      login: 'Login', login_failed: 'Wrong password', login_blocked: 'Too many tries',
+      signup: 'New account', signup_blocked: 'Signup refused',
+      approved: 'Approved', blocked: 'Blocked', logout_all: 'Logged out everyone',
+      password_changed: 'Password changed', password_change_failed: 'Wrong password',
+      password_reset: 'Password reset'};
+    const BAD = new Set(['login_failed', 'login_blocked', 'signup_blocked', 'blocked',
+                     'password_change_failed']);
+
+    function resetButton(d) {
+      const b = el('button', '', 'Reset password');
+      b.onclick = async () => {
+        if (!confirm('Give ' + d.name + ' a new temporary password?')) return;
+        const res = await fetch('/api/drivers/' + encodeURIComponent(d.id) + '/reset-password',
+                                {method: 'POST'});
+        const data = await res.json();
+        if (data.ok) prompt('Send this to ' + d.name + ' on WeChat. They must change it after logging in:',
+                            data.password);
+        loadLog();
+      };
+      return b;
+    }
+
+    async function loadLog() {
+      const res = await fetch('/api/security-log');
+      if (!res.ok) return;
+      const events = await res.json();
+      const box = document.getElementById('log');
+      box.replaceChildren();
+      if (!events.length) { box.append(el('div', 'empty', 'No events yet.')); return; }
+      for (const e of events) {
+        const row = el('div', 'log-row' + (BAD.has(e.event) ? ' bad' : ''));
+        row.append(
+          el('span', 'log-time', new Date(e.at * 1000).toLocaleString()),
+          el('span', 'log-event', EVENTS[e.event] || e.event),
+          el('span', 'log-who', [e.who, e.detail].filter(Boolean).join(' · ')),
+          el('span', 'log-ip', e.ip));
+        box.append(row);
+      }
+    }
+
     load();
+    loadLog();
   </script>
   <script src="/static/i18n.js?v={{ asset_v }}"></script>
   <script src="/static/pro.js?v={{ asset_v }}"></script>

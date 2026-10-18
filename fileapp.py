@@ -23,6 +23,7 @@ from optimizer import optimize_route, route_summary
 from store import OrderStore
 from users import UserStore, public
 from limiter import LoginLimiter
+from audit import AuditLog
 from order_parser import parse_message
 from agent import handle_message
 import numpy as np
@@ -101,7 +102,8 @@ def is_logged_in() -> bool:
     uid = session.get("uid")
     if uid:                                   # 👤 driver account → blocked = out right now
         user = users.get(uid)
-        return bool(user and user["status"] == "approved")
+        return bool(user and user["status"] == "approved"
+                    and user["pw_version"] == session.get("pv", 0))   # password changed → out
     return True
 
 
@@ -159,6 +161,7 @@ ASSET_V = _asset_version()
 def inject_asset_version():
     return {"asset_v": ASSET_V}
 limiter = LoginLimiter()
+audit = AuditLog()
 
 
 def fmt(epoch):
@@ -167,6 +170,10 @@ def fmt(epoch):
 
 def bad_request(message):
     return jsonify({"ok": False, "error": message}), 400
+
+
+def client_ip() -> str:
+    return request.headers.get("X-Real-IP") or request.remote_addr or "?"
 
 
 def track_key(order_id: str) -> str:
@@ -186,6 +193,7 @@ def login():
         phone = request.form.get("phone", "").strip()
         if limiter.blocked(ip, phone):
             error = "Too many attempts. Wait 10 minutes."
+            audit.add("login_blocked", ip, phone or "owner")
         else:
             given = request.form.get("password", "")
             role, uid = None, None
@@ -209,11 +217,14 @@ def login():
                 session["v"] = session_version()
                 if uid:
                     session["uid"] = uid
+                    session["pv"] = users.get(uid)["pw_version"]
                 session.permanent = True
                 print(f"Login from {ip} as {role}", flush=True)
+                audit.add("login", ip, phone or "owner", role)
                 return redirect(url_for("home") if role == "owner" else url_for("driver_page"))
             if error is None:                  # pending/blocked = right password, not a guess
                 limiter.fail(ip, phone)
+                audit.add("login_failed", ip, phone or "owner")
                 print(f"Wrong password from {ip}" + (f" for {phone}" if phone else ""), flush=True)
             error = error or "Wrong password."
     return render_template("login.html", error=error)
@@ -227,11 +238,13 @@ def signup():
         ip = request.headers.get("X-Real-IP") or request.remote_addr or "?"
         if limiter.signup_blocked(ip):
             error = "Too many new accounts from this network today. Try again tomorrow."
+            audit.add("signup_blocked", ip)
         else:
             try:
                 user = users.create(request.form.get("phone", ""), request.form.get("name", ""),
                                     request.form.get("password", ""))
                 limiter.signup_done(ip)
+                audit.add("signup", ip, user["phone"], user["name"])
                 print(f"👤 New driver signup: {user['name']} ({user['phone']}) from {ip} — pending",
                       flush=True)
                 done = True
@@ -263,7 +276,74 @@ def set_driver_status(user_id):
     if not users.set_status(user_id, status):
         return jsonify({"ok": False}), 404
     print(f"👤 Driver {user_id} → {status}", flush=True)
+    u = users.get(user_id)
+    audit.add(status, client_ip(), "owner", f"{u['name']} ({u['phone']})" if u else user_id)
     return jsonify({"ok": True})
+
+
+@app.before_request
+def force_password_change():
+    """🔑 After an owner reset, the driver can't do anything until they choose a new password."""
+    uid = session.get("uid")
+    if not uid or request.path in ("/account", "/logout", "/login") or request.path.startswith("/static/"):
+        return None
+    user = users.get(uid)
+    if user and user["must_change"]:
+        if request.path.startswith("/api/"):
+            return jsonify({"ok": False, "error": "change your password first"}), 403
+        return redirect(url_for("account"))
+    return None
+
+
+@app.route("/account", methods=["GET", "POST"])
+@login_required
+def account():
+    """🔑 A driver changes their own password."""
+    uid = session.get("uid")
+    if not uid:                                   # the owner has no account here
+        return redirect(url_for("home"))
+    user = users.get(uid)
+    ip = client_ip()
+    error = done = None
+    if request.method == "POST":
+        if limiter.blocked(ip, user["phone"]):
+            error = "Too many attempts. Wait 10 minutes."
+        elif not users.check_login(user["phone"], request.form.get("current", "")):
+            limiter.fail(ip, user["phone"])
+            audit.add("password_change_failed", ip, user["phone"])
+            error = "Current password is wrong."
+        else:
+            try:
+                users.set_password(uid, request.form.get("new", ""))
+                session["pv"] = users.get(uid)["pw_version"]      # this device stays logged in
+                audit.add("password_changed", ip, user["phone"])
+                done = True
+            except ValueError as e:
+                error = str(e)
+    user = users.get(uid)
+    return render_template("account.html", user=public(user), error=error, done=done,
+                           must_change=bool(user["must_change"]))
+
+
+@app.route("/api/drivers/<user_id>/reset-password", methods=["POST"])
+@owner_required
+def reset_driver_password(user_id):
+    """🔑 Owner gives a driver a temporary password (shown once)."""
+    temp = users.reset_password(user_id)
+    if not temp:
+        return jsonify({"ok": False}), 404
+    u = users.get(user_id)
+    audit.add("password_reset", client_ip(), "owner", f"{u['name']} ({u['phone']})")
+    res = jsonify({"ok": True, "password": temp})
+    res.headers["Cache-Control"] = "no-store"     # never keep a password in any cache
+    return res
+
+
+@app.route("/api/security-log")
+@owner_required
+def security_log():
+    """📜 The last 50 security events, newest first."""
+    return jsonify(audit.recent(50))
 
 
 @app.route("/logout", methods=["POST"])
@@ -577,6 +657,7 @@ def api_stats():
 @owner_required
 def logout_all():
     """🚪 Log out everyone (owner + all drivers) right now."""
+    audit.add("logout_all", client_ip(), "owner")
     new = session_version() + 1
     with open(SESSION_VERSION_PATH, "w") as f:
         f.write(str(new))

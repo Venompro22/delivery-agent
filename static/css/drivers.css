@@ -20,3 +20,15 @@ button.approve { background: var(--accent); border-color: var(--accent); color: 
 button.block { color: var(--danger-text); border-color: var(--danger); }
 .empty { color: var(--muted); text-align: center; padding: 40px 0; }
 .danger { margin-top: 28px; border-color: var(--danger); }
+
+.section { font-size: 13px; color: var(--muted); font-weight: 600; text-transform: uppercase;
+           letter-spacing: .04em; margin: 28px 0 8px; }
+.log-row { display: grid; grid-template-columns: 150px 130px 1fr auto; gap: 10px; align-items: center;
+           padding: 8px 4px; font-size: 13px; border-bottom: 1px solid var(--border); }
+.log-row.bad .log-event { color: var(--danger-text); font-weight: 600; }
+.log-time, .log-ip { color: var(--muted); }
+.log-who { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 600px) {
+  .log-row { grid-template-columns: 1fr auto; }
+  .log-who { grid-column: 1 / -1; }
+}
