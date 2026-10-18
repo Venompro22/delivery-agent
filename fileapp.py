@@ -409,6 +409,12 @@ def api_route():
             for o in route
         ],
     }
+    if current_role() == "owner":                 # 🗺️ every driver on the owner's map
+        now = time.time()
+        data["drivers"] = [
+            {"id": u["id"], "name": u["name"], "lat": u["lat"], "lng": u["lng"],
+             "age": round(now - (u["located_at"] or 0))}
+            for u in users.all() if u["status"] == "approved" and u.get("lat") is not None]
     return jsonify(data)
 
 

@@ -657,9 +657,33 @@
       driverPos = to;
     }
 
+    const driversLayer = L.layerGroup().addTo(map);
+    const driverPins = {};                       // driver id → its marker
+
+    function drawDrivers(list) {
+      const seen = new Set();
+      for (const d of list) {
+        seen.add(d.id);
+        const fresh = d.age < 300;               // GPS older than 5 minutes = grey
+        const icon = L.divIcon({className: '', iconSize: null,
+          html: `<div class="driver-pin${fresh ? '' : ' stale'}">${esc(d.name)}</div>`});
+        const tip = esc(d.name) + ' — ' + (fresh ? 'live' : Math.round(d.age / 60) + ' min ago');
+        if (driverPins[d.id]) {
+          driverPins[d.id].setLatLng([d.lat, d.lng]).setIcon(icon).setTooltipContent(tip);
+        } else {
+          driverPins[d.id] = L.marker([d.lat, d.lng], {icon, zIndexOffset: 1000})
+            .bindTooltip(tip).addTo(driversLayer);
+        }
+      }
+      for (const id of Object.keys(driverPins)) {          // drivers that disappeared
+        if (!seen.has(id)) { driversLayer.removeLayer(driverPins[id]); delete driverPins[id]; }
+      }
+    }
+
     async function refresh() {
       const res = await api('/api/route');
       const data = await res.json();
+      drawDrivers(data.drivers || []);       // before the check below: drivers move even when orders don't
 
       // Same data as last time? Only update the clock — no redraw, no flicker.
       const signature = JSON.stringify([data.driver, data.summary, data.stops]);

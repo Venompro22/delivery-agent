@@ -265,3 +265,12 @@ button:hover { background: var(--accent-hover); }
 
 .assign { margin-left: 6px; max-width: 140px; padding: 4px 6px; font-size: 12px; border-radius: 6px;
           background: var(--surface); color: var(--text); border: 1px solid var(--border); }
+
+/* 🗺️ one pin per driver on the owner's map */
+.driver-pin { position: relative; display: inline-block; transform: translate(-50%, -140%);
+              white-space: nowrap; padding: 3px 9px; border-radius: 999px; font-size: 12px; font-weight: 600;
+              background: var(--ok); color: #fff; box-shadow: 0 2px 6px rgba(0, 0, 0, .4); }
+.driver-pin::after { content: ""; position: absolute; left: 50%; bottom: -5px; margin-left: -5px;
+                     border: 5px solid transparent; border-bottom: 0; border-top-color: var(--ok); }
+.driver-pin.stale { background: var(--muted); }
+.driver-pin.stale::after { border-top-color: var(--muted); }
