@@ -5,7 +5,6 @@ import sys
 import pytest
 
 os.environ["DASHBOARD_PASSWORD"] = "owner-pass"
-os.environ["DRIVER_PASSWORD"] = "driver-pass"
 os.environ["SKIP_AUTO_RETRAIN"] = "1"
 os.environ.pop("COOKIE_SECURE", None)
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -32,3 +31,11 @@ def client(tmp_path, monkeypatch):
 
 def login(c, password):
     return c.post("/login", data={"password": password})
+
+
+def login_driver(c, phone="13900139000", password="driver-pass-42"):
+    """Log in as an approved driver account (created the first time)."""
+    if not fileapp.users.by_phone(phone):
+        u = fileapp.users.create(phone, "Test Driver", password)
+        fileapp.users.set_status(u["id"], "approved")
+    return c.post("/login", data={"phone": phone, "password": password})

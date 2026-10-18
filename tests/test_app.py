@@ -1,5 +1,5 @@
 """🧪 Automatic checks for the Delivery Agent. Run: python3 -m pytest -q"""
-from conftest import login
+from conftest import login, login_driver
 import fileapp
 
 
@@ -24,18 +24,18 @@ def test_api_needs_login(client):
 
 
 def test_driver_lands_on_driver_page(client):
-    r = login(client, "driver-pass")
+    r = login_driver(client)
     assert r.headers["Location"].endswith("/driver")
 
 
 def test_driver_cannot_see_owner_pages(client):
-    login(client, "driver-pass")
+    login_driver(client)
     assert client.get("/stats").headers["Location"].endswith("/driver")
     assert client.get("/api/stats").status_code == 403
 
 
 def test_driver_can_use_driver_tools(client):
-    login(client, "driver-pass")
+    login_driver(client)
     assert client.get("/driver").status_code == 200
     assert client.get("/api/route").status_code == 200
 
@@ -55,7 +55,7 @@ def test_bad_order_is_refused(client):
 
 def test_logout_all_kicks_out_other_devices(client):
     driver = fileapp.app.test_client()
-    login(driver, "driver-pass")
+    login_driver(driver)
     assert driver.get("/api/route").status_code == 200
 
     login(client, "owner-pass")
@@ -74,3 +74,7 @@ def test_orders_survive_a_restart(client):
     client.post("/api/orders", json={"name": "王芳", "lat": "30.2", "lng": "120.1"})
     again = fileapp.OrderStore(fileapp.store.path)     # like restarting the server
     assert [o.customer_name for o in again.all()] == ["王芳"]
+
+def test_old_shared_driver_password_is_gone(client):
+    login(client, "driver-pass")
+    assert client.get("/driver").status_code == 302      # not logged in → sent to /login

@@ -77,7 +77,6 @@ if not DASHBOARD_PASSWORD:
     print("WARNING: DASHBOARD_PASSWORD is not set.", flush=True)
     print(f"Temporary password for this run: {DASHBOARD_PASSWORD}", flush=True)
 
-DRIVER_PASSWORD = os.environ.get("DRIVER_PASSWORD")   # optional: second password for drivers
 SESSION_VERSION_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".session_version")
 
 
@@ -104,7 +103,7 @@ def is_logged_in() -> bool:
         user = users.get(uid)
         return bool(user and user["status"] == "approved"
                     and user["pw_version"] == session.get("pv", 0))   # password changed → out
-    return True
+    return current_role() == "owner"          # a driver session must belong to an account
 
 
 def login_required(view):
@@ -207,8 +206,6 @@ def login():
                     error = "This account is blocked."
             elif hmac.compare_digest(given.encode(), DASHBOARD_PASSWORD.encode()):
                 role = "owner"
-            elif DRIVER_PASSWORD and hmac.compare_digest(given.encode(), DRIVER_PASSWORD.encode()):
-                role = "driver"
             if role:
                 limiter.success(phone)
                 session.clear()
