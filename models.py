@@ -30,6 +30,7 @@ class Order:
     # Deliver-by promise as epoch seconds; None means no promise
     promised_by: Optional[float] = None
     status: OrderStatus = OrderStatus.PENDING
+    driver_id: Optional[str] = None   # 👤 the driver account it's assigned to (None = nobody yet)
     created_at: float = field(default_factory=time.time)
     id: str = field(default_factory=lambda: uuid.uuid4().hex[:8])
 

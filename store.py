@@ -11,7 +11,7 @@ from models import Order
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 COLUMNS = ["id", "customer_name", "lat", "lng", "phone", "note", "service_minutes",
-           "promised_by", "status", "created_at", "delivered_at"]
+           "promised_by", "status", "created_at", "delivered_at", "driver_id"]
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS orders (
@@ -25,7 +25,8 @@ CREATE TABLE IF NOT EXISTS orders (
     promised_by     REAL,
     status          TEXT NOT NULL DEFAULT 'pending',
     created_at      REAL,
-    delivered_at    REAL
+    delivered_at    REAL,
+    driver_id       TEXT
 )
 """
 
@@ -37,6 +38,10 @@ class OrderStore:
         con = sqlite3.connect(self.path)
         try:
             con.execute(SCHEMA)
+            cols = {r[1] for r in con.execute("PRAGMA table_info(orders)")}
+            if "driver_id" not in cols:         # migration: databases made before driver accounts
+                con.execute("ALTER TABLE orders ADD COLUMN driver_id TEXT")
+            con.commit()
         finally:
             con.close()
         self._import_old_json()
