@@ -2,3 +2,4 @@ flask
 requests
 gunicorn
 werkzeug>=3.1.9
+certifi>=2026.10.19
