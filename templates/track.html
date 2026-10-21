@@ -4,64 +4,100 @@
   <meta charset="utf-8"/>
   <link rel="icon" type="image/svg+xml" href="/static/logo.svg?v={{ asset_v }}"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Track your order</title>
+  <title>智送管家</title>
   <link rel="stylesheet" href="/static/css/track.css?v={{ asset_v }}"/>
   <link rel="stylesheet" href="/static/vendor/inter/inter.css?v={{ asset_v }}" media="print" onload="this.media='all'"/>
   <link rel="stylesheet" href="/static/pro.css?v={{ asset_v }}"/>
 </head>
 <body>
-  <div class="card" id="card">
-    <div class="logo">🚚</div>
-    <h1>Loading…</h1>
-  </div>
+  <header class="brand">
+    <img src="/static/logo.svg?v={{ asset_v }}" alt=""/>
+    <span>智送管家</span>
+  </header>
+  <main class="card" id="card" data-order="{{ order_id }}">
+    <div class="icon">🚚</div>
+  </main>
   <script>
-    const orderId = {{ order_id|tojson }};
+    const orderId = document.getElementById('card').dataset.order;
+
+    // Customers are in China: Chinese unless the phone (or the language button) says otherwise
+    let lang = 'zh';
+    try { lang = localStorage.getItem('lang') || (navigator.language.startsWith('zh') ? 'zh' : 'en'); } catch (e) {}
+    const T = {
+      en: {
+        title: 'Track your order', notFound: 'Order not found', checkLink: 'Please check your tracking link.',
+        delivered: 'Delivered!', enjoy: 'Enjoy', cancelled: 'Order cancelled', hi: 'Hi',
+        onWay: 'Your order is on the way', eta: 'Estimated arrival', next: "You're next!",
+        before: n => `${n} stop${n === 1 ? '' : 's'} before you`, promised: 'Promised by',
+        updates: 'Updates automatically', conn: 'Connection problem', retry: 'Retrying…',
+        s1: 'Order received', s2: 'On the way', s3: 'Delivered', you: 'You'},
+      zh: {
+        title: '订单追踪', notFound: '未找到订单', checkLink: '请检查您的追踪链接。',
+        delivered: '已送达！', enjoy: '祝您愉快', cancelled: '订单已取消', hi: '您好',
+        onWay: '您的订单正在配送中', eta: '预计送达时间', next: '下一站就是您！',
+        before: n => `前面还有 ${n} 站`, promised: '承诺送达',
+        updates: '自动更新', conn: '网络连接问题', retry: '正在重试…',
+        s1: '已接单', s2: '配送中', s3: '已送达', you: '您'},
+    }[lang === 'en' ? 'en' : 'zh'];
+    document.title = T.title + ' · 智送管家';
+
     function esc(t) {
       return String(t).replace(/[&<>"']/g, c => ({
         '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
       }[c]));
     }
+
+    // Order received → On the way → Delivered
+    function steps(current) {
+      return '<ol class="steps">' + [T.s1, T.s2, T.s3].map((s, i) =>
+        `<li class="${i < current ? 'done' : i === current ? 'now' : ''}">${s}</li>`).join('') + '</ol>';
+    }
+
+    // 🚚 ● ● ● You  (one dot per stop before the customer, at most 5)
+    function queue(n) {
+      const dots = '<span class="stop"></span>'.repeat(Math.min(n, 5));
+      const more = n > 5 ? `<span class="more">+${n - 5}</span>` : '';
+      return `<div class="queue"><span class="truck">🚚</span>${dots}${more}<span class="you">${T.you}</span></div>`;
+    }
+
+    let timer = null;
+    function stop() { clearInterval(timer); }
+
     async function load() {
       const card = document.getElementById('card');
       try {
-        const res = await fetch('/api/track/' + encodeURIComponent(orderId) + '?k=' + encodeURIComponent(new URLSearchParams(location.search).get('k') || ''));
+        const k = new URLSearchParams(location.search).get('k') || '';
+        const res = await fetch('/api/track/' + encodeURIComponent(orderId) + '?k=' + encodeURIComponent(k));
         const d = await res.json();
         if (!d.ok) {
-          card.innerHTML = '<div class="logo">❓</div><h1>Order not found</h1>' +
-            '<div class="sub">Please check your tracking link.</div>';
-          return;
+          card.innerHTML = `<div class="icon">❓</div><h1>${T.notFound}</h1><div class="sub">${T.checkLink}</div>`;
+          return stop();
         }
         if (d.status === 'delivered') {
-          card.innerHTML = `<div class="logo">✅</div><h1 class="done">Delivered!</h1>
-            <div class="sub">Enjoy, ${esc(d.name)} 🎉</div>`;
-          return;
+          card.innerHTML = `<div class="icon">✅</div><h1 class="done">${T.delivered}</h1>
+            <div class="sub">${T.enjoy}, ${esc(d.name)} 🎉</div>${steps(3)}`;
+          return stop();
         }
         if (d.status === 'cancelled') {
-          card.innerHTML = '<div class="logo">⛔</div><h1>Order cancelled</h1>';
-          return;
+          card.innerHTML = `<div class="icon">⛔</div><h1>${T.cancelled}</h1>`;
+          return stop();
         }
-        const before = d.stops_before === 0
-          ? "You're next! 🎯"
-          : `${d.stops_before} stop${d.stops_before === 1 ? '' : 's'} before you`;
+        const n = d.stops_before;
         card.innerHTML = `
-          <div class="logo">🚚</div>
-          <h1>Hi ${esc(d.name)} 👋</h1>
-          <div class="sub">Your order is on the way</div>
-          <div class="label">Estimated arrival</div>
-          <div class="big">${d.eta}</div>
-          <div class="row">
-            <div class="box"><div class="label">Position</div><div class="v">#${d.position}</div></div>
-            <div class="box"><div class="label">Queue</div><div class="v" style="font-size:14px">${before}</div></div>
-          </div>
-          ${d.promise ? `<div class="sub" style="margin-top:14px">Promised by ${d.promise}</div>` : ''}
-          <div class="foot">Updates automatically · ${new Date().toLocaleTimeString()}</div>`;
+          <h1>${T.hi}, ${esc(d.name)} 👋</h1>
+          <div class="sub">${T.onWay}</div>
+          ${steps(1)}
+          <div class="label">${T.eta}</div>
+          <div class="big">${esc(d.eta)}</div>
+          ${d.promise ? `<div class="sub">${T.promised} ${esc(d.promise)}</div>` : ''}
+          ${n == null ? '' : queue(n) + `<div class="queue-text">${n === 0 ? T.next + ' 🎯' : T.before(n)}</div>`}
+          <div class="foot">${T.updates} · ${new Date().toLocaleTimeString()}</div>`;
       } catch (e) {
-        card.innerHTML = '<div class="logo">📡</div><h1>Connection problem</h1>' +
-          '<div class="sub">Retrying…</div>';
+        card.innerHTML = `<div class="icon">📡</div><h1>${T.conn}</h1><div class="sub">${T.retry}</div>`;
       }
     }
     load();
-    setInterval(load, 15000);
+    timer = setInterval(load, 15000);
   </script>
   <script src="/static/i18n.js?v={{ asset_v }}"></script>
   <script src="/static/pro.js?v={{ asset_v }}"></script>
