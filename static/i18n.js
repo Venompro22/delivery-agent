@@ -1,6 +1,6 @@
 (function () {
   const ZH = {
-    "Smart routing dashboard": "智能配送调度台", "Delivery Agent": "智能配送助手",
+    "Smart routing dashboard": "智能配送调度台", "智送管家": "智送管家",
     "Use my location": "使用我的位置", "Live GPS: off": "实时定位：关", "Live GPS: on": "实时定位：开",
     "Paste a WeChat message here…": "在此粘贴微信消息…", "Handle message": "AI 处理消息",
     "Customer name": "客户姓名", "Phone (optional)": "电话（选填）",
@@ -52,7 +52,7 @@
     "GPS stopped": "定位已停止", "left": "剩余", "finish": "完成", "Sent": "已发送",
     "Enter the dashboard password": "请输入调度台密码", "Password": "密码", "Log in": "登录",
     "Wrong password.": "密码错误。", "Too many attempts. Wait 10 minutes.": "尝试次数过多，请等待10分钟。",
-    "Stats - Delivery Agent": "统计 - 智能配送助手", "Stats": "统计",
+    "Stats - 智送管家": "统计 - 智送管家", "Stats": "统计",
     "This week": "本周", "orders delivered": "已送达订单",
     "Median time": "中位时长", "minutes per order": "分钟/单",
     "On time": "准时率", "of promised orders": "占承诺订单",
