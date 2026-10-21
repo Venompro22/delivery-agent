@@ -2,6 +2,7 @@
 <html>
 <head>
   <meta charset="utf-8"/>
+  <link rel="icon" type="image/svg+xml" href="/static/logo.svg?v={{ asset_v }}"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>Login - 智送管家</title>
   <link rel="stylesheet" href="/static/css/auth.css?v={{ asset_v }}"/>
@@ -10,6 +11,7 @@
 </head>
 <body>
   <form class="card" method="post" action="/login">
+    <img class="brand-logo" src="/static/logo.svg?v={{ asset_v }}" alt=""/>
     <h1>智送管家</h1>
     <div class="sub">Drivers: phone + password · Owner: password only</div>
     {% if error %}<div class="error">{{ error }}</div>{% endif %}

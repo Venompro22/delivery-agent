@@ -30,3 +30,4 @@ button {
   border-radius: 8px; padding: 12px; font-size: 14px; margin-bottom: 6px;
 }
 .ok { color: var(--ok); font-size: 14px; margin-bottom: 12px; }
+.brand-logo { display: block; width: 56px; height: 56px; margin: 0 auto 12px; border-radius: 14px; }
