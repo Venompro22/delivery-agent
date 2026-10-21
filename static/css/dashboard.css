@@ -274,3 +274,6 @@ button:hover { background: var(--accent-hover); }
                      border: 5px solid transparent; border-bottom: 0; border-top-color: var(--ok); }
 .driver-pin.stale { background: var(--muted); }
 .driver-pin.stale::after { border-top-color: var(--muted); }
+
+/* the nav links sit above the title box (it was covering their top half) */
+#sidebar .brand .links { position: relative; z-index: 5; }

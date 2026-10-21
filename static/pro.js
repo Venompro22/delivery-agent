@@ -43,3 +43,9 @@ document.addEventListener('click', (e) => {
   document.body.appendChild(form);
   form.submit();
 });
+
+
+// ☰ close the menu when clicking anywhere else
+document.addEventListener('click', (e) => {
+  document.querySelectorAll('details.menu[open]').forEach(m => { if (!m.contains(e.target)) m.removeAttribute('open'); });
+});

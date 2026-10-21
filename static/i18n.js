@@ -86,6 +86,7 @@
     "Reset password": "重置密码", "Password changed": "密码已修改", "Password reset": "密码已重置",
     "password is too long": "密码太长",
     "Everyone (pool)": "所有司机（待分配）",
+    "Driver view": "司机端", "Menu": "菜单",
     "Drivers — last 7 days": "司机 — 最近7天", "Today": "今天", "7 days": "7天", "Late": "迟到",
     "No driver": "未分配", "Deleted account": "已删除账号", "No deliveries yet.": "暂无配送记录。",
     "Every phone and computer must log in again.": "所有手机和电脑都需要重新登录。",

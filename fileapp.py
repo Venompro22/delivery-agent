@@ -157,6 +157,12 @@ ASSET_V = _asset_version()
 
 
 @app.context_processor
+def inject_role():
+    """☰ The menu shows owner links or driver links."""
+    return {"role": current_role() if session.get("auth") else None}
+
+
+@app.context_processor
 def inject_asset_version():
     return {"asset_v": ASSET_V}
 limiter = LoginLimiter()

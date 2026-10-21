@@ -19,15 +19,16 @@
         <h2>智送管家</h2>
         <div class="subtitle">Smart routing dashboard</div>
       </div>
-      <nav class="links">
-        <a class="logout" href="/driver" title="Driver view">🚚 Driver</a>
-        <a class="logout" href="/orders" title="All orders">📋 Orders</a>
-        <a class="logout" href="/stats" title="Stats">📊 Stats</a>
-        <a class="logout" href="/drivers" title="Drivers">👤 Drivers</a>
-        <a class="logout" href="/logout" title="Log out">Logout</a>
-        <span data-lang-slot style="margin-left:6px"></span>
-      </nav>
+      <span class="lang-slot" data-lang-slot></span>
+      {% include "_menu.html" %}
     </div>
+
+    <nav class="tabs">
+      <a href="/orders"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg><span>Orders</span></a>
+      <a href="/stats"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg><span>Stats</span></a>
+      <a href="/drivers"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="7" r="4"/><path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2M16 3.13a4 4 0 0 1 0 7.75M21 21v-2a4 4 0 0 0-3-3.87"/></svg><span>Drivers</span></a>
+      <a href="/driver"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 3h15v13H1zM16 8h4l3 3v5h-7z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg><span>Driver view</span></a>
+    </nav>
 
     <div class="gps-row">
       <button class="gps-btn" onclick="locateOnce()">📍 Use my location</button>
@@ -86,8 +87,14 @@
     // 🗺️ map labels follow the page language (中文 / EN)
     let MAP_LANG = 'en';
     try { MAP_LANG = (localStorage.getItem('lang') || ((navigator.language || '').startsWith('zh') ? 'zh' : 'en')) === 'zh' ? 'zh_cn' : 'en'; } catch (e) {}
-    // 🧱 One world only: no endless repeating, no empty space on the sides
+    // 🌍 The whole world, one copy (no repeating, no empty sides)
     const MAP_BOUNDS = L.latLngBounds([-85, -180], [85, 180]);
+    // Same box as wgs2gcj(): inside it the pins are GCJ-02 (Gaode's coordinates)
+    const GAODE_BOX = L.latLngBounds([0.8293, 72.004], [55.8271, 137.8347]);
+    // Where Gaode is drawn: China and close around (further out Gaode is empty or dark)
+    const CHINA_VIEW = L.latLngBounds([18, 73], [54, 135.5]);
+    // Gaode only from city-level zoom: zoomed out, Esri everywhere = no visible box
+    const GAODE_MIN_ZOOM = 6;
     const map = L.map('map', {
       maxBounds: MAP_BOUNDS,
       maxBoundsViscosity: 1.0,
@@ -102,32 +109,28 @@
     const gaodeUrl = 'https://webrd0{s}.is.autonavi.com/appmaptile?lang=' + MAP_LANG +
       '&size=1&scale=' + TILE_SCALE + '&style=8&x={x}&y={y}&z={z}';
     const tileOpts = {subdomains: ['1', '2', '3', '4'], maxZoom: 18, noWrap: true, attribution: '&copy; AutoNavi'};
-    // 🌍 Gaode has detail only in China → everywhere else use CARTO (OpenStreetMap data).
-    // Same box as wgs2gcj(): inside it coordinates are GCJ-02 (Gaode), outside WGS-84 (CARTO).
-    const GAODE_BOX = L.latLngBounds([0.8293, 72.004], [55.8271, 137.8347]);
-    const worldOpts = {subdomains: 'abcd', maxZoom: 18, noWrap: true,
-                       attribution: '&copy; OpenStreetMap &copy; CARTO'};
-    const worldLayer = cls => L.tileLayer(
-      'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-      Object.assign({className: cls}, worldOpts));
     const chinaLayer = cls => L.tileLayer(gaodeUrl,
-      Object.assign({className: cls, bounds: GAODE_BOX}, tileOpts));
+      Object.assign({className: cls, bounds: CHINA_VIEW, minZoom: GAODE_MIN_ZOOM}, tileOpts));
+    // 🌍 Everywhere else: Esri basemaps (no API key needed)
+    const ESRI = 'https://server.arcgisonline.com/ArcGIS/rest/services/';
+    const esri = (name, opts) => L.tileLayer(ESRI + name + '/MapServer/tile/{z}/{y}/{x}',
+      Object.assign({maxZoom: 18, maxNativeZoom: 16, noWrap: true, attribution: '&copy; Esri'}, opts));
 
     const mapStyles = {
-      'Dim': L.layerGroup([worldLayer('tiles-dark'), chinaLayer('tiles-dark')]),
-      'Light': L.layerGroup([worldLayer('tiles-soft'), chinaLayer('tiles-soft')]),
+      'Dim': L.layerGroup([esri('Canvas/World_Dark_Gray_Base'), esri('Canvas/World_Dark_Gray_Reference'),
+                    chinaLayer('tiles-dark')]),
+      'Light': L.layerGroup([esri('Canvas/World_Light_Gray_Base'), esri('Canvas/World_Light_Gray_Reference'),
+                      chinaLayer('tiles-soft')]),
       'Satellite': L.layerGroup([
-        // 🌍 outside China: Esri World Imagery + place names (Gaode has no detailed imagery there)
-        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-          {maxZoom: 18, maxNativeZoom: 17, noWrap: true, attribution: 'Imagery &copy; Esri'}),
-        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
-          {maxZoom: 18, maxNativeZoom: 17, noWrap: true}),
-        // 🇨🇳 inside China: Gaode on top
+        // 🌍 the world: Esri imagery + place names
+        esri('World_Imagery', {maxNativeZoom: 17}),
+        esri('Reference/World_Boundaries_and_Places', {maxNativeZoom: 17}),
+        // 🇨🇳 China, close zoom: Gaode imagery (same coordinates as the pins)
         L.tileLayer('https://webst0{s}.is.autonavi.com/appmaptile?style=6&x={x}&y={y}&z={z}',
-          Object.assign({bounds: GAODE_BOX}, tileOpts)),
+          Object.assign({bounds: CHINA_VIEW, minZoom: GAODE_MIN_ZOOM}, tileOpts)),
         // Gaode satellite labels exist only in Chinese (lang=en is ignored)
         ...(MAP_LANG === 'zh_cn' ? [L.tileLayer('https://webst0{s}.is.autonavi.com/appmaptile?lang=' + MAP_LANG + '&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
-          {subdomains: ['1', '2', '3', '4'], maxZoom: 18, bounds: GAODE_BOX})] : [L.tileLayer(gaodeUrl, Object.assign({className: 'tiles-labels-en', bounds: GAODE_BOX}, tileOpts))]),
+          {subdomains: ['1', '2', '3', '4'], maxZoom: 18, bounds: CHINA_VIEW, minZoom: GAODE_MIN_ZOOM})] : [L.tileLayer(gaodeUrl, Object.assign({className: 'tiles-labels-en', bounds: CHINA_VIEW, minZoom: GAODE_MIN_ZOOM}, tileOpts))]),
       ]),
     };
     let mapStyle = 'Light';

@@ -1,0 +1,16 @@
+{% if role == "owner" %}
+<a href="/logout" class="menu icon-btn" title="Logout" aria-label="Logout">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+</a>
+{% else %}
+<details class="menu">
+  <summary aria-label="Menu">☰</summary>
+  <nav class="menu-list">
+    {% if role != "owner" %}
+    <a href="/driver">Driver</a>
+    <a href="/account">Password</a>
+    {% endif %}
+    <a href="/logout" class="menu-logout">Logout</a>
+  </nav>
+</details>
+{% endif %}
