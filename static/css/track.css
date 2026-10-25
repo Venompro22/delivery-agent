@@ -37,3 +37,27 @@ h1.done { color: var(--ok); }
 .queue-text { font-size: 15px; font-weight: 600; }
 
 .foot { margin-top: 22px; font-size: 12px; color: var(--muted); }
+/* ⭐ Delivery rating stars */
+.stars {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+.star {
+  font-size: 40px;
+  color: #ffb400;
+  cursor: pointer;
+  line-height: 1;
+  transition: transform 0.1s ease;
+  user-select: none;
+}
+.star:hover {
+  transform: scale(1.2);
+}
+.rated {
+  font-size: 32px;
+  color: #ffb400;
+  margin-top: 10px;
+  letter-spacing: 2px;
+}

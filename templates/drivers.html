@@ -56,7 +56,9 @@
         const row = el('div', 'row');
         const who = el('div', 'who');
         const since = new Date(d.created_at * 1000).toLocaleDateString();
-        who.append(el('div', 'name', d.name), el('div', 'meta', d.phone + ' · ' + since));
+        let meta = d.phone + ' · ' + since;
+        if (d.avg_rating != null) meta += ` · \u2b50 ${d.avg_rating} (${d.rated_count})`;
+        who.append(el('div', 'name', d.name), el('div', 'meta', meta));
         row.append(who, el('span', 'badge ' + d.status, LABEL[d.status]));
         if (d.status !== 'approved') row.append(button('Approve', 'approve', d.id, 'approved'));
         if (d.status !== 'blocked') row.append(button('Block', 'block', d.id, 'blocked'));

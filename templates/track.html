@@ -30,14 +30,16 @@
         onWay: 'Your order is on the way', eta: 'Estimated arrival', next: "You're next!",
         before: n => `${n} stop${n === 1 ? '' : 's'} before you`, promised: 'Promised by',
         updates: 'Updates automatically', conn: 'Connection problem', retry: 'Retrying…',
-        s1: 'Order received', s2: 'On the way', s3: 'Delivered', you: 'You'},
+        s1: 'Order received', s2: 'On the way', s3: 'Delivered', you: 'You',
+        rateMe: 'How did it go? Tap to rate', thanks: 'Thanks for the feedback! \ud83d\ude4c'},
       zh: {
         title: '订单追踪', notFound: '未找到订单', checkLink: '请检查您的追踪链接。',
         delivered: '已送达！', enjoy: '祝您愉快', cancelled: '订单已取消', hi: '您好',
         onWay: '您的订单正在配送中', eta: '预计送达时间', next: '下一站就是您！',
         before: n => `前面还有 ${n} 站`, promised: '承诺送达',
         updates: '自动更新', conn: '网络连接问题', retry: '正在重试…',
-        s1: '已接单', s2: '配送中', s3: '已送达', you: '您'},
+        s1: '已接单', s2: '配送中', s3: '已送达', you: '您',
+        rateMe: '给骑手打个分吧', thanks: '谢啦~ \ud83d\ude4c'},
     }[lang === 'en' ? 'en' : 'zh'];
     document.title = T.title + ' · 智送管家';
 
@@ -63,6 +65,32 @@
     let timer = null;
     function stop() { clearInterval(timer); }
 
+    function stars(current) {
+      // If already rated, show it locked. Otherwise show clickable empty stars.
+      if (current) {
+        const filled = '\u2b50'.repeat(current) + '\u2606'.repeat(5 - current);
+        return `<div class="rated">${filled}<div class="sub">${T.thanks}</div></div>`;
+      }
+      let html = `<div class="sub">${T.rateMe}</div><div class="stars">`;
+      for (let i = 1; i <= 5; i++) {
+        html += `<span class="star" onclick="rate(${i})">\u2606</span>`;
+      }
+      return html + '</div>';
+    }
+
+    async function rate(n) {
+      const k = new URLSearchParams(location.search).get('k') || '';
+      try {
+        const res = await fetch('/api/track/' + encodeURIComponent(orderId) + '/rate?k=' + encodeURIComponent(k),
+          { method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ rating: n }) });
+        const d = await res.json();
+        if (d.ok) {
+          document.getElementById('rate-box').innerHTML = stars(n);
+        }
+      } catch (e) { /* ignore: customer can retry */ }
+    }
+
     async function load() {
       const card = document.getElementById('card');
       try {
@@ -75,7 +103,8 @@
         }
         if (d.status === 'delivered') {
           card.innerHTML = `<div class="icon">✅</div><h1 class="done">${T.delivered}</h1>
-            <div class="sub">${T.enjoy}, ${esc(d.name)} 🎉</div>${steps(3)}`;
+            <div class="sub">${T.enjoy}, ${esc(d.name)} 🎉</div>${steps(3)}
+            <div id="rate-box">${stars(d.rating)}</div>`;
           return stop();
         }
         if (d.status === 'cancelled') {

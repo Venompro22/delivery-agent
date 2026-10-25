@@ -283,7 +283,20 @@ def drivers_page():
 @owner_required
 def list_drivers():
     """👤 Every driver account (never the password hash), pending ones first."""
-    return jsonify([public(u) for u in users.all()])
+    # Collect every rating per driver in one pass.
+    ratings: dict[str, list[int]] = {}
+    for o in store.all():
+        if o.driver_id and o.rating:
+            ratings.setdefault(o.driver_id, []).append(o.rating)
+
+    result = []
+    for u in users.all():
+        row = public(u)
+        rs = ratings.get(u["id"], [])
+        row["rated_count"] = len(rs)
+        row["avg_rating"] = round(sum(rs) / len(rs), 1) if rs else None
+        result.append(row)
+    return jsonify(result)
 
 
 @app.route("/api/drivers/<user_id>/status", methods=["POST"])
@@ -831,7 +844,7 @@ def api_track(order_id):
     if not order:
         return jsonify({"ok": False, "error": "order not found"}), 404
     if order.status == OrderStatus.DELIVERED:
-        return jsonify({"ok": True, "status": "delivered", "name": order.customer_name})
+        return jsonify({"ok": True, "status": "delivered", "name": order.customer_name, "rating": order.rating})
     if order.status == OrderStatus.CANCELLED:
         return jsonify({"ok": True, "status": "cancelled", "name": order.customer_name})
 
@@ -850,6 +863,32 @@ def api_track(order_id):
         "lat": order.lat,
         "lng": order.lng,
     })
+
+
+@app.route("/api/track/<order_id>/rate", methods=["POST"])
+def api_rate(order_id):
+    """The customer rates their delivery (1-5). Public, but needs the signed key."""
+    given = request.args.get("k", "").encode()
+    if not hmac.compare_digest(given, track_key(order_id).encode()):
+        return jsonify({"ok": False, "error": "order not found"}), 404   # same answer: no hints
+    order = store.get(order_id)
+    if not order:
+        return jsonify({"ok": False, "error": "order not found"}), 404
+    if order.status != OrderStatus.DELIVERED:
+        return bad_request("you can only rate a delivered order")
+    if order.rating is not None:
+        return bad_request("this order is already rated")
+    body = request.get_json(silent=True) or {}
+    try:
+        stars = int(body.get("rating"))
+    except (TypeError, ValueError):
+        return bad_request("rating must be a number")
+    if not 1 <= stars <= 5:
+        return bad_request("rating must be between 1 and 5")
+    order.rating = stars
+    store.save()
+    print(f"⭐ Rated: {order.customer_name} → {stars}/5", flush=True)
+    return jsonify({"ok": True, "rating": stars})
 
 
 @app.route("/track/<order_id>")
