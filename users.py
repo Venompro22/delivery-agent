@@ -1,6 +1,7 @@
 """👤 Driver accounts: sign up → pending → approved by the owner (or blocked)."""
 from __future__ import annotations
 
+import math
 import os
 import re
 import secrets
@@ -21,7 +22,8 @@ CREATE TABLE IF NOT EXISTS users (
     role          TEXT NOT NULL DEFAULT 'driver',
     status        TEXT NOT NULL DEFAULT 'pending',
     created_at    REAL NOT NULL,
-    approved_at   REAL
+    approved_at   REAL,
+    seen_at       REAL
 )
 """
 
@@ -72,7 +74,7 @@ class UserStore:
                 con.execute("ALTER TABLE users ADD COLUMN pw_version INTEGER NOT NULL DEFAULT 0")
             if "must_change" not in cols:     # 1 after an owner reset
                 con.execute("ALTER TABLE users ADD COLUMN must_change INTEGER NOT NULL DEFAULT 0")
-            for col in ("lat", "lng", "located_at"):     # 📍 last GPS position (no history kept)
+            for col in ("lat", "lng", "located_at", "seen_at"):     # 📍 last GPS position (no history kept)
                 if col not in cols:
                     con.execute(f"ALTER TABLE users ADD COLUMN {col} REAL")
             con.commit()
@@ -178,10 +180,60 @@ class UserStore:
         finally:
             con.close()
 
+    def get_seen_at(self, user_id: str) -> float:
+        """When this driver last looked at their orders (0 if never)."""
+        row = self._one("SELECT seen_at FROM users WHERE id = ?", (user_id,))
+        return (row and row["seen_at"]) or 0.0
+
+    def mark_seen(self, user_id: str) -> None:
+        """Mark that the driver has now seen their orders (resets the badge)."""
+        con = self._connect()
+        try:
+            con.execute("UPDATE users SET seen_at = ? WHERE id = ?",
+                        (time.time(), user_id))
+            con.commit()
+        finally:
+            con.close()
+
     def reset_password(self, user_id: str) -> Optional[str]:
         """Owner resets a forgotten password: a temporary one the driver must change."""
         temp = "".join(secrets.choice(TEMP_ALPHABET) for _ in range(12))
         return temp if self.set_password(user_id, temp, must_change=True) else None
+
+
+def haversine(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
+    """Distance in km between two GPS points (Haversine formula)."""
+    R = 6371.0  # Earth radius in km
+    phi1 = math.radians(lat1)
+    phi2 = math.radians(lat2)
+    d_phi = math.radians(lat2 - lat1)
+    d_lambda = math.radians(lng2 - lng1)
+    a = (math.sin(d_phi / 2) ** 2
+         + math.cos(phi1) * math.cos(phi2) * math.sin(d_lambda / 2) ** 2)
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+    return R * c
+
+
+def find_nearest_driver(users_db, order_lat: float, order_lng: float):
+    """Pick the closest approved driver that has a known GPS position.
+
+    Returns the driver dict (nearest one), or None if no approved
+    driver currently has a location. Distance is in km via haversine.
+    """
+    best = None
+    best_dist = None
+    for u in users_db.all():
+        if u["role"] != "driver":
+            continue
+        if u["status"] != "approved":
+            continue
+        if u["lat"] is None or u["lng"] is None:
+            continue
+        dist = haversine(u["lat"], u["lng"], order_lat, order_lng)
+        if best_dist is None or dist < best_dist:
+            best = u
+            best_dist = dist
+    return best
 
 
 def public(user: dict) -> dict:

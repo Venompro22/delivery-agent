@@ -21,7 +21,7 @@ from models import Order, Driver, OrderStatus
 from geo import GeoService
 from optimizer import optimize_route, route_summary
 from store import OrderStore
-from users import UserStore, public
+from users import UserStore, public, find_nearest_driver
 from limiter import LoginLimiter
 from audit import AuditLog
 from order_parser import parse_message
@@ -387,6 +387,15 @@ def api_route():
     summary = route_summary(route)
     late_ids = set(summary.get("late_orders", []))
     delivered = sum(1 for o in mine if o.status == OrderStatus.DELIVERED)
+    # Badge: orders assigned to me that arrived after I last looked.
+    new_count = 0
+    uid = session.get("uid")
+    if uid and current_role() != "owner":
+        seen = users.get_seen_at(uid)
+        new_count = sum(1 for o in mine
+                        if o.driver_id == uid
+                        and (o.created_at or 0) > seen
+                        and o.status == OrderStatus.PENDING)
     data = {
         "driver": {"lat": me.lat, "lng": me.lng, "name": me.name},
         "summary": {
@@ -395,6 +404,7 @@ def api_route():
             "finish": fmt(summary.get("finish_epoch")),
             "late_count": len(late_ids),
             "delivered": delivered,
+            "new_count": new_count,
         },
         "stops": [
             {
@@ -468,6 +478,11 @@ def add_order():
         kw["promised_by"] = time.time() + minutes * 60
 
     order = Order(customer_name=name, lat=lat, lng=lng, phone=phone, note=note, **kw)
+    # Auto-assign to the nearest approved driver that has a GPS position.
+    # If none is available, driver_id stays None and the order sits in the pool.
+    nearest = find_nearest_driver(users, order.lat, order.lng)
+    if nearest:
+        order.driver_id = nearest["id"]
     store.add(order)
     print(f"📦 New order: {order.customer_name} ({order.lat}, {order.lng})", flush=True)
     return jsonify({"ok": True, "id": order.id})
@@ -753,6 +768,17 @@ def update_driver_location():
         users.set_location(uid, lat, lng)        # 📍 this driver's own position
     else:
         driver.lat, driver.lng = lat, lng        # the owner moves the default start point
+    return jsonify({"ok": True})
+
+
+@app.route("/api/driver/mark-seen", methods=["POST"])
+@login_required
+def mark_orders_seen():
+    """The driver has seen their orders — clear the 'new' badge."""
+    uid = session.get("uid")
+    if uid:
+        users.mark_seen(uid)
+    return jsonify({"ok": True})
     return jsonify({"ok": True, "lat": lat, "lng": lng})
 
 
