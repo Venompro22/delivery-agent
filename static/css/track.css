@@ -61,3 +61,14 @@ h1.done { color: var(--ok); }
   margin-top: 10px;
   letter-spacing: 2px;
 }
+
+/* 📷 Delivery proof photo */
+.proof {
+  display: block;
+  width: 100%;
+  max-width: 320px;
+  margin: 16px auto;
+  border-radius: 12px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
+  object-fit: cover;
+}

@@ -31,7 +31,8 @@
         before: n => `${n} stop${n === 1 ? '' : 's'} before you`, promised: 'Promised by',
         updates: 'Updates automatically', conn: 'Connection problem', retry: 'Retrying…',
         s1: 'Order received', s2: 'On the way', s3: 'Delivered', you: 'You',
-        rateMe: 'How did it go? Tap to rate', thanks: 'Thanks for the feedback! \ud83d\ude4c'},
+        rateMe: 'How did it go? Tap to rate', thanks: 'Thanks for the feedback! \ud83d\ude4c',
+        proofAlt: 'Delivery photo'},
       zh: {
         title: '订单追踪', notFound: '未找到订单', checkLink: '请检查您的追踪链接。',
         delivered: '已送达！', enjoy: '祝您愉快', cancelled: '订单已取消', hi: '您好',
@@ -39,7 +40,8 @@
         before: n => `前面还有 ${n} 站`, promised: '承诺送达',
         updates: '自动更新', conn: '网络连接问题', retry: '正在重试…',
         s1: '已接单', s2: '配送中', s3: '已送达', you: '您',
-        rateMe: '给骑手打个分吧', thanks: '谢啦~ \ud83d\ude4c'},
+        rateMe: '给骑手打个分吧', thanks: '谢啦~ \ud83d\ude4c',
+        proofAlt: '送达照片'},
     }[lang === 'en' ? 'en' : 'zh'];
     document.title = T.title + ' · 智送管家';
 
@@ -102,8 +104,13 @@
           return stop();
         }
         if (d.status === 'delivered') {
+          const k = new URLSearchParams(location.search).get('k') || '';
+          const photo = d.has_proof
+            ? `<img class="proof" src="/api/track/${encodeURIComponent(orderId)}/proof?k=${encodeURIComponent(k)}" alt="${T.proofAlt}"/>`
+            : '';
           card.innerHTML = `<div class="icon">✅</div><h1 class="done">${T.delivered}</h1>
             <div class="sub">${T.enjoy}, ${esc(d.name)} 🎉</div>${steps(3)}
+            ${photo}
             <div id="rate-box">${stars(d.rating)}</div>`;
           return stop();
         }

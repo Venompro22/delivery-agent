@@ -911,7 +911,7 @@ def api_track(order_id):
     if not order:
         return jsonify({"ok": False, "error": "order not found"}), 404
     if order.status == OrderStatus.DELIVERED:
-        return jsonify({"ok": True, "status": "delivered", "name": order.customer_name, "rating": order.rating})
+        return jsonify({"ok": True, "status": "delivered", "name": order.customer_name, "rating": order.rating, "has_proof": bool(order.proof)})
     if order.status == OrderStatus.CANCELLED:
         return jsonify({"ok": True, "status": "cancelled", "name": order.customer_name})
 
@@ -956,6 +956,19 @@ def api_rate(order_id):
     store.save()
     print(f"⭐ Rated: {order.customer_name} → {stars}/5", flush=True)
     return jsonify({"ok": True, "rating": stars})
+
+
+@app.route("/api/track/<order_id>/proof")
+def track_proof(order_id):
+    """📷 Serve the delivery photo to the customer — needs the signed key, no login."""
+    given = request.args.get("k", "").encode()
+    if not hmac.compare_digest(given, track_key(order_id).encode()):
+        return jsonify({"ok": False, "error": "order not found"}), 404   # same answer: no hints
+    order = store.get(order_id)
+    if not order or not order.proof:
+        return jsonify({"ok": False, "error": "no photo"}), 404
+    # send_from_directory is safe: it refuses paths that escape PROOF_DIR.
+    return send_from_directory(PROOF_DIR, order.proof, max_age=0)
 
 
 @app.route("/track/<order_id>")

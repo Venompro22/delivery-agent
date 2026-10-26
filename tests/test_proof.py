@@ -70,3 +70,36 @@ def test_download_missing_photo_is_404(client):
     fileapp.store.orders.append(o)
     got = client.get(f"/api/orders/{o.id}/proof")      # never uploaded
     assert got.status_code == 404
+
+
+def _put_photo(order):
+    """Helper: attach a real photo file to a delivered order."""
+    import os
+    order.proof = f"{order.id}.jpg"
+    with open(os.path.join(fileapp.PROOF_DIR, order.proof), "wb") as f:
+        f.write(b"\xff\xd8\xff\xe0" + b"\x00" * 40)
+
+
+def test_customer_sees_photo_with_right_key(client):
+    o = _delivered()
+    fileapp.store.orders.append(o)
+    _put_photo(o)
+    key = fileapp.track_key(o.id)
+    r = client.get(f"/api/track/{o.id}/proof?k={key}")
+    assert r.status_code == 200
+
+
+def test_customer_wrong_key_rejected(client):
+    o = _delivered()
+    fileapp.store.orders.append(o)
+    _put_photo(o)
+    r = client.get(f"/api/track/{o.id}/proof?k=WRONG")
+    assert r.status_code == 404
+
+
+def test_track_proof_404_when_no_photo(client):
+    o = _delivered()
+    fileapp.store.orders.append(o)
+    key = fileapp.track_key(o.id)
+    r = client.get(f"/api/track/{o.id}/proof?k={key}")   # no photo attached
+    assert r.status_code == 404
