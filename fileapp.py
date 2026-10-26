@@ -77,6 +77,17 @@ def security_headers(resp):
     resp.headers["X-Content-Type-Options"] = "nosniff"
     resp.headers["X-Frame-Options"] = "DENY"
     resp.headers["Referrer-Policy"] = "same-origin"
+    resp.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline'; "       # TODO: drop 'unsafe-inline' once inline JS is moved to files
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data: https://server.arcgisonline.com https://*.is.autonavi.com; "
+        "connect-src 'self'; "
+        "font-src 'self'; "
+        "object-src 'none'; "
+        "base-uri 'self'; "
+        "frame-ancestors 'none'"
+    )
     resp.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=(self)"
     return resp
 
