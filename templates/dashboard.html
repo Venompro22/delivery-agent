@@ -42,7 +42,7 @@
       <button class="gps-btn sim-btn" id="sim-btn" onclick="simulate()">▶️ Simulate</button>
     </div>
     {% endif %}
-        <textarea id="paste" rows="2" placeholder="📋 Paste a WeChat message here…"></textarea>
+        <textarea id="paste" rows="2" placeholder="📋 Paste a WeChat message here…" autocomplete="off"></textarea>
     {% if dev_mode %}
     <div class="chips"><span class="chips-label">💬 Try:</span>
       <button class="chip" onclick="tryMsg(this)">我的水在哪里 13800138001</button>
@@ -57,15 +57,15 @@
     <div id="ai-history"></div>
     <details class="manual-order" id="manual-order">
       <summary>Add order manually</summary>
-    <input id="name" placeholder="Customer name"/>
-    <input id="phone" placeholder="Phone (optional)" inputmode="tel"/>
-    <input id="note" placeholder="Address / notes (optional) — e.g. Bldg 5, floor 3" maxlength="200"/>
+    <input id="name" placeholder="Customer name" autocomplete="off"/>
+    <input id="phone" placeholder="Phone (optional)" inputmode="tel" autocomplete="off"/>
+    <input id="note" placeholder="Address / notes (optional) — e.g. Bldg 5, floor 3" maxlength="200" autocomplete="off"/>
     <div class="hint">📍 Tap the map to set the location</div>
     <div class="coords">
-      <input id="lat" placeholder="Latitude" inputmode="decimal"/>
-      <input id="lng" placeholder="Longitude" inputmode="decimal"/>
+      <input id="lat" placeholder="Latitude" inputmode="decimal" autocomplete="off"/>
+      <input id="lng" placeholder="Longitude" inputmode="decimal" autocomplete="off"/>
     </div>
-    <input id="promise" placeholder="Promise in minutes (optional)" inputmode="numeric"/>
+    <input id="promise" placeholder="Promise in minutes (optional)" inputmode="numeric" autocomplete="off"/>
     <button onclick="addOrder()">Add order</button>
     </details>
     <div id="error" class="error"></div>
