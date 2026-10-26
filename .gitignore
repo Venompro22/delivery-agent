@@ -16,4 +16,5 @@ feedback.jsonl
 orders.db
 intent_model.npz
 __pycache__/
-*.bak
+*.bak*
+proofs/
