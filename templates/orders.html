@@ -105,12 +105,13 @@
             <b>${esc(o.name)}</b>
             <span class="badge ${o.status}">${o.status}</span>
           </div>
-          <div class="meta">🕒 ${o.created}${o.promise ? ' · promised ' + o.promise : ''}${o.phone ? ' · 📞 ' + esc(o.phone) : ''}</div>
+          <div class="meta">🕒 ${o.created}${o.promise ? ' · promised ' + o.promise : ''}${o.phone ? ' · 📞 ' + esc(o.phone) : ''}${o.rating ? ' · ' + '⭐'.repeat(o.rating) : ''}</div>
           ${o.note ? `<div class="note">📝 ${esc(o.note)}</div>` : ''}
           <div class="actions">
             <a class="btn" href="${navUrl(o)}" target="_blank" rel="noopener">🧭 Navigate</a>
             ${o.phone ? `<a class="btn call" href="tel:${esc(o.phone)}">📞 Call</a>` : ''}
             <button class="btn share" onclick="share('${o.id}', '${o.track_key}')">🔗 Share</button>
+            ${o.has_proof ? `<a class="btn photo" href="/api/orders/${o.id}/proof" target="_blank" rel="noopener">📷 Photo</a>` : ''}
             ${o.status === 'pending' ? `<button class="btn" onclick="editOrder('${o.id}')">✏️ Edit</button>
             <button class="btn cancel" onclick="cancelOrder('${o.id}')">✕ Cancel</button>` : ''}
           </div>

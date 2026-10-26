@@ -32,6 +32,7 @@ class Order:
     status: OrderStatus = OrderStatus.PENDING
     driver_id: Optional[str] = None   # 👤 the driver account it's assigned to (None = nobody yet)
     rating: Optional[int] = None      # ⭐ customer rating 1-5 after delivery (None = not rated)
+    proof: Optional[str] = None       # 📷 filename of the delivery photo (None = no photo)
     created_at: float = field(default_factory=time.time)
     id: str = field(default_factory=lambda: uuid.uuid4().hex[:8])
 

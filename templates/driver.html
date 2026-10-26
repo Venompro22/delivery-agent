@@ -88,6 +88,9 @@
         <div class="row">
           ${s.phone ? `<a class="btn call" href="tel:${esc(s.phone)}">📞 Call</a>` : ''}
           <button class="btn done" onclick="deliver()">✅ Delivered</button>
+          <input type="file" id="proof-input" accept="image/*" capture="environment"
+                 style="display:none" onchange="deliverWithPhoto(this)">
+          <button class="btn photo" onclick="document.getElementById('proof-input').click()">📷 + Photo</button>
         </div>
       </div>`;
       document.getElementById('next').innerHTML = data.stops.length > 1 ? '<h3>Up next</h3>' +
@@ -98,6 +101,22 @@
     async function seenOrders() {
       await api('/api/driver/mark-seen', { method: 'POST' });
       document.getElementById('new-banner').style.display = 'none';
+    }
+
+    async function deliverWithPhoto(input) {
+      if (!current || !input.files[0]) return;
+      const s = current, photo = input.files[0];
+      input.value = '';                          // let the same file be picked again later
+      // 1) mark delivered first (the upload endpoint needs a delivered order)
+      await api(`/api/orders/${s.id}/deliver`, { method: 'POST' });
+      // 2) then upload the photo
+      const form = new FormData();
+      form.append('photo', photo);
+      const res = await fetch(`/api/orders/${s.id}/proof`, { method: 'POST', body: form });
+      const d = await res.json();
+      if (navigator.vibrate) navigator.vibrate(80);
+      toast(d.ok ? `✅ ${s.name} delivered 📷` : `✅ delivered, but photo failed`);
+      load();
     }
 
     async function deliver() {

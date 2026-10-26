@@ -15,7 +15,7 @@ from datetime import datetime, timedelta
 from functools import wraps
 
 from flask import (Flask, request, jsonify, render_template,
-                   session, redirect, url_for, abort)
+                   session, redirect, url_for, abort, send_from_directory)
 
 from models import Order, Driver, OrderStatus
 from geo import GeoService
@@ -61,6 +61,15 @@ app.config.update(
     SESSION_COOKIE_SECURE=os.environ.get("COOKIE_SECURE") == "1",
     PERMANENT_SESSION_LIFETIME=timedelta(days=30),
 )
+
+# 📷 Delivery proof photos live OUTSIDE static/, so nginx can't serve them directly.
+# They are served only through a login-protected endpoint (see /api/orders/<id>/proof).
+HERE = os.path.dirname(os.path.abspath(__file__))
+PROOF_DIR = os.environ.get("PROOF_DIR", os.path.join(HERE, "proofs"))
+os.makedirs(PROOF_DIR, exist_ok=True)
+MAX_PROOF_BYTES = 5 * 1024 * 1024          # 5 MB per photo
+ALLOWED_PROOF_TYPES = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}
+
 
 @app.after_request
 def security_headers(resp):
@@ -517,6 +526,51 @@ def deliver_order(order_id):
         return jsonify({"ok": True})
     return jsonify({"ok": False}), 404
 
+@app.route("/api/orders/<order_id>/proof", methods=["POST"])
+@login_required
+def upload_proof(order_id):
+    """📷 The driver uploads a delivery photo. Stored outside static/, login-only."""
+    order = store.get(order_id)
+    if not order or not visible_to_me(order):     # 🛡️ never someone else's order (IDOR)
+        return jsonify({"ok": False}), 404
+    if order.status != OrderStatus.DELIVERED:
+        return bad_request("photo is only for a delivered order")
+
+    file = request.files.get("photo")
+    if not file or not file.filename:
+        return bad_request("no photo uploaded")
+
+    ext = ALLOWED_PROOF_TYPES.get(file.mimetype)
+    if not ext:
+        return bad_request("photo must be JPEG, PNG or WebP")
+
+    # Read with a hard size cap, so a huge file can't fill the disk.
+    data = file.read(MAX_PROOF_BYTES + 1)
+    if len(data) > MAX_PROOF_BYTES:
+        return bad_request("photo is too large (max 5 MB)")
+
+    filename = f"{order_id}{ext}"                 # order_id is a random uuid; never the user's name
+    with open(os.path.join(PROOF_DIR, filename), "wb") as f:
+        f.write(data)
+    order.proof = filename
+    store.save()
+    print(f"📷 Proof saved: {order.customer_name} ({len(data)} bytes)", flush=True)
+    return jsonify({"ok": True})
+
+
+@app.route("/api/orders/<order_id>/proof", methods=["GET"])
+@login_required
+def get_proof(order_id):
+    """📷 Serve a delivery photo — login-only, and never someone else's order."""
+    order = store.get(order_id)
+    if not order or not visible_to_me(order):     # 🛡️ IDOR protection
+        return jsonify({"ok": False}), 404
+    if not order.proof:
+        return jsonify({"ok": False, "error": "no photo"}), 404
+    # send_from_directory is safe: it refuses paths that escape PROOF_DIR.
+    return send_from_directory(PROOF_DIR, order.proof, max_age=0)
+
+
 @app.route("/api/orders/<order_id>/assign", methods=["POST"])
 @owner_required
 def assign_order(order_id):
@@ -830,6 +884,8 @@ def list_orders():
             "delivered": fmt(o.delivered_at) if o.delivered_at else None,
             "minutes": round((o.delivered_at - o.created_at) / 60)
                        if o.delivered_at and o.created_at else None,
+            "has_proof": bool(o.proof),       # 📷 is there a delivery photo?
+            "rating": o.rating,               # ⭐ customer rating, if any
         })
     return jsonify(items)
 

@@ -11,7 +11,7 @@ from models import Order
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 COLUMNS = ["id", "customer_name", "lat", "lng", "phone", "note", "service_minutes",
-           "promised_by", "status", "created_at", "delivered_at", "driver_id", "rating"]
+           "promised_by", "status", "created_at", "delivered_at", "driver_id", "rating", "proof"]
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS orders (
@@ -27,7 +27,8 @@ CREATE TABLE IF NOT EXISTS orders (
     created_at      REAL,
     delivered_at    REAL,
     driver_id       TEXT,
-    rating          INTEGER
+    rating          INTEGER,
+    proof           TEXT
 )
 """
 
@@ -44,6 +45,8 @@ class OrderStore:
                 con.execute("ALTER TABLE orders ADD COLUMN driver_id TEXT")
             if "rating" not in cols:            # migration: databases made before ratings
                 con.execute("ALTER TABLE orders ADD COLUMN rating INTEGER")
+            if "proof" not in cols:             # migration: databases made before proof photos
+                con.execute("ALTER TABLE orders ADD COLUMN proof TEXT")
             con.commit()
         finally:
             con.close()

@@ -12,7 +12,9 @@ OLD_SCHEMA = """CREATE TABLE orders (
 
 def test_driver_id_is_written():
     row = OrderStore._row(Order(customer_name="A", lat=30.0, lng=120.0, driver_id="abc123"))
-    assert row[-2] == "abc123"   # driver_id (rating was added after it)
+    # Look up driver_id by its column position, so adding columns later never breaks this.
+    from store import COLUMNS
+    assert row[COLUMNS.index("driver_id")] == "abc123"
 
 
 def test_old_database_gets_the_new_column(tmp_path):
