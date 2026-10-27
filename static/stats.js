@@ -47,14 +47,13 @@
         },
         options: baseOptions(),
       });
+
+      renderDrivers(d.drivers);
     }
 
     load();
 
-    (async () => {
-      const res = await fetch('/api/stats');
-      if (!res.ok) return;
-      const {drivers} = await res.json();
+    function renderDrivers(drivers) {
       const box = document.getElementById('driver-stats');
       if (!drivers || !drivers.length) { box.textContent = 'No deliveries yet.'; return; }
       const table = document.createElement('table');
@@ -76,4 +75,4 @@
         if (d.late) row.lastChild.className = 'bad';
       }
       box.append(table);
-    })();
+    }

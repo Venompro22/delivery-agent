@@ -1,5 +1,10 @@
 /* 🎨 Design tokens — every color in the app comes from here */
 :root {
+  /* The palette below is dark. Say so, or the browser paints scrollbars and
+     other native controls in the light theme: a white scrollbar band shows up
+     on any element that overflows, such as the sidebar or the paste box. */
+  color-scheme: dark;
+
   /* surfaces */
   --bg: #0f1115;           /* page background */
   --surface: #1a1d24;      /* cards, panels, inputs */

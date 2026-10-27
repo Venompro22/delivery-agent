@@ -148,6 +148,18 @@ input.invalid { border-color: var(--danger); }
   background: var(--bg); border: 1px solid var(--accent); border-radius: 8px;
   color: var(--text); font-size: 14px; font-family: inherit;
 }
+/* Chrome's default resize grip is pale diagonal lines that ignore border-radius,
+   so they streak across the rounded corner while dragging. Draw a muted grip
+   instead, inset far enough to clear the 8px radius. */
+#paste::-webkit-resizer {
+  background: transparent;
+  background-image: linear-gradient(135deg,
+    transparent 0 46%, var(--faint) 46% 54%, transparent 54% 68%,
+    var(--faint) 68% 76%, transparent 76%);
+  background-size: 8px 8px;
+  background-position: bottom 6px right 6px;
+  background-repeat: no-repeat;
+}
 button {
   width: 100%; padding: 12px; background: var(--accent); color: white;
   border: none; border-radius: 8px; cursor: pointer; margin-top: 10px;
