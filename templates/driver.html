@@ -1,13 +1,14 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-CN">
 <head>
+  <meta name="google" content="notranslate"/>
   <meta charset="utf-8"/>
   <link rel="icon" type="image/svg+xml" href="/static/logo.svg?v={{ asset_v }}"/>
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
   <meta name="theme-color" content="#0f1115"/>
   <title>Driver - 智送管家</title>
   <link rel="stylesheet" href="/static/css/driver.css?v={{ asset_v }}"/>
-  <link rel="stylesheet" href="/static/vendor/inter/inter.css?v={{ asset_v }}" media="print" onload="this.media='all'"/>
+  <link rel="stylesheet" href="/static/vendor/inter/inter.css?v={{ asset_v }}" media="print"/>
   <link rel="stylesheet" href="/static/pro.css?v={{ asset_v }}"/>
 </head>
 <body>
@@ -34,6 +35,7 @@
   </div>
   <div class="toast" id="toast"></div>
 
+  <script src="/static/font-load.js?v={{ asset_v }}"></script>
   <script>
     function esc(t) {
       return String(t).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
