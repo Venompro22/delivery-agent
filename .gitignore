@@ -18,3 +18,4 @@ intent_model.npz
 __pycache__/
 *.bak*
 proofs/
+certs/
