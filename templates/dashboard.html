@@ -128,7 +128,6 @@
         // maxNativeZoom must reach maxZoom (18), or the last zoom step is an
         // upscaled z17 tile and the imagery goes soft exactly when you zoom in.
         esri('World_Imagery', {maxNativeZoom: 18}),
-        esri('Reference/World_Boundaries_and_Places', {maxNativeZoom: 18}),
         // 🇨🇳 China, close zoom: Gaode imagery (same coordinates as the pins)
         L.tileLayer('https://webst0{s}.is.autonavi.com/appmaptile?style=6&x={x}&y={y}&z={z}',
           Object.assign({bounds: CHINA_VIEW, minZoom: GAODE_MIN_ZOOM}, tileOpts)),
@@ -137,6 +136,9 @@
         // whole map — Esri's World_Boundaries_and_Places already covers names.
         L.tileLayer('https://webst0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
           {subdomains: ['1', '2', '3', '4'], maxZoom: 18, noWrap: true, bounds: CHINA_VIEW, minZoom: GAODE_MIN_ZOOM}),
+        // Last, so the English place names stay readable on top of the opaque
+        // Gaode imagery. This overlay is already transparent and needs no blending.
+        esri('Reference/World_Boundaries_and_Places', {maxNativeZoom: 18}),
       ]),
     };
     let mapStyle = 'Light';
