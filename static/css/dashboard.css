@@ -264,9 +264,6 @@ button:hover { background: var(--accent-hover); }
   #sidebar { width: 100%; box-shadow: none; }
   input, button { font-size: 16px; }
 }
-  /* 🛰️ English labels on satellite: invert the Light map (white text on black),
-   then 'screen' blend makes black transparent → only the text stays */
-.tiles-labels-en { filter: invert(1) grayscale(1) contrast(3); mix-blend-mode: screen; }
 /* ➕ manual order form, folded by default (the AI inbox is the main way) */
 .manual-order { border: 1px solid var(--border); border-radius: 10px; padding: 0 12px; margin: 8px 0; }
 .manual-order > summary { cursor: pointer; padding: 10px 0; color: var(--muted); font-size: 13px; list-style: none; }
