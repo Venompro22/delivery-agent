@@ -124,15 +124,17 @@
       'Light': L.layerGroup([esri('Canvas/World_Light_Gray_Base'), esri('Canvas/World_Light_Gray_Reference'),
                       chinaLayer('tiles-soft')]),
       'Satellite': L.layerGroup([
-        // 🌍 the world: Esri imagery + place names
-        esri('World_Imagery', {maxNativeZoom: 17}),
-        esri('Reference/World_Boundaries_and_Places', {maxNativeZoom: 17}),
+        // 🌍 the world: Esri imagery + place names.
+        // maxNativeZoom must reach maxZoom (18), or the last zoom step is an
+        // upscaled z17 tile and the imagery goes soft exactly when you zoom in.
+        esri('World_Imagery', {maxNativeZoom: 18}),
+        esri('Reference/World_Boundaries_and_Places', {maxNativeZoom: 18}),
         // 🇨🇳 China, close zoom: Gaode imagery (same coordinates as the pins)
         L.tileLayer('https://webst0{s}.is.autonavi.com/appmaptile?style=6&x={x}&y={y}&z={z}',
           Object.assign({bounds: CHINA_VIEW, minZoom: GAODE_MIN_ZOOM}, tileOpts)),
         // Gaode satellite labels exist only in Chinese (lang=en is ignored)
         ...(MAP_LANG === 'zh_cn' ? [L.tileLayer('https://webst0{s}.is.autonavi.com/appmaptile?lang=' + MAP_LANG + '&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
-          {subdomains: ['1', '2', '3', '4'], maxZoom: 18, bounds: CHINA_VIEW, minZoom: GAODE_MIN_ZOOM})] : [L.tileLayer(gaodeUrl, Object.assign({className: 'tiles-labels-en', bounds: CHINA_VIEW, minZoom: GAODE_MIN_ZOOM}, tileOpts))]),
+          {subdomains: ['1', '2', '3', '4'], maxZoom: 18, noWrap: true, bounds: CHINA_VIEW, minZoom: GAODE_MIN_ZOOM})] : [L.tileLayer(gaodeUrl, Object.assign({className: 'tiles-labels-en', bounds: CHINA_VIEW, minZoom: GAODE_MIN_ZOOM}, tileOpts))]),
       ]),
     };
     let mapStyle = 'Light';
