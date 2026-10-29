@@ -99,6 +99,34 @@ if not DASHBOARD_PASSWORD:
 
 SESSION_VERSION_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".session_version")
 
+# 🔴 Emergency kill switch. One signed link from your phone changes this file,
+# and every request checks it. Modes: normal | readonly | lockdown | off
+PANIC_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".panic_mode")
+PANIC_MODES = ("normal", "readonly", "lockdown", "off")
+
+
+def panic_mode() -> str:
+    """Current emergency mode (defaults to normal if the file is missing)."""
+    try:
+        with open(PANIC_PATH) as f:
+            mode = f.read().strip()
+        return mode if mode in PANIC_MODES else "normal"
+    except OSError:
+        return "normal"
+
+
+def set_panic_mode(mode: str) -> None:
+    """Write the new mode. Called only by the signed /panic link."""
+    with open(PANIC_PATH, "w") as f:
+        f.write(mode)
+
+
+def panic_key(mode: str) -> str:
+    """Signature for one mode, so only links you generated can switch it."""
+    secret = app.secret_key if isinstance(app.secret_key, bytes) else str(app.secret_key).encode()
+    mac = hmac.new(secret, b"panic:" + mode.encode(), hashlib.sha256).digest()
+    return base64.urlsafe_b64encode(mac)[:22].decode()
+
 
 def session_version() -> int:
     """🚪 Bump this number to log everyone out."""
@@ -332,6 +360,44 @@ def set_driver_status(user_id):
     u = users.get(user_id)
     audit.add(status, client_ip(), "owner", f"{u['name']} ({u['phone']})" if u else user_id)
     return jsonify({"ok": True})
+
+
+@app.before_request
+def check_panic_mode():
+    """🔴 Emergency modes, checked before anything else on every request."""
+    mode = panic_mode()
+    if mode == "normal":
+        return None
+    # The panic link itself must always work, or you could lock yourself out.
+    if request.path.startswith("/panic/"):
+        return None
+    # Static files stay available so the pages that do load still render.
+    if request.path.startswith("/static/"):
+        return None
+
+    if mode == "off":
+        if request.path.startswith("/api/"):
+            return jsonify({"ok": False, "error": "service unavailable"}), 503
+        return "<h1>Service temporarily unavailable</h1>", 503
+
+    if mode == "lockdown":
+        # Customers can still track their delivery; nobody can log in or stay in.
+        if request.path.startswith("/track/") or request.path.startswith("/api/track/"):
+            return None
+        session.clear()
+        if request.path.startswith("/api/"):
+            return jsonify({"ok": False, "error": "locked down"}), 503
+        return "<h1>Locked down</h1>", 503
+
+    if mode == "readonly" and request.method in ("POST", "PUT", "PATCH", "DELETE"):
+        # Logging out must keep working even when writes are frozen.
+        if request.path == "/logout":
+            return None
+        if request.path.startswith("/api/"):
+            return jsonify({"ok": False, "error": "read-only mode"}), 503
+        return "<h1>Read-only mode</h1>", 503
+
+    return None
 
 
 @app.before_request
@@ -969,6 +1035,30 @@ def track_proof(order_id):
         return jsonify({"ok": False, "error": "no photo"}), 404
     # send_from_directory is safe: it refuses paths that escape PROOF_DIR.
     return send_from_directory(PROOF_DIR, order.proof, max_age=0)
+
+
+@app.route("/panic/<mode>")
+def panic_switch(mode):
+    """🔴 Emergency switch, opened from a signed bookmark on your phone.
+
+    No login: a stolen session must never be able to undo a lockdown, and you
+    must be able to trigger it from any device. The HMAC key is the only proof.
+    """
+    if mode not in PANIC_MODES:
+        return jsonify({"ok": False, "error": "unknown mode"}), 404
+    given = request.args.get("k", "").encode()
+    if not hmac.compare_digest(given, panic_key(mode).encode()):
+        return jsonify({"ok": False, "error": "not found"}), 404   # same answer: no hints
+
+    set_panic_mode(mode)
+    audit.add("panic_" + mode, client_ip(), "owner")
+    if mode != "normal":
+        # Kick every existing session out as well.
+        new = session_version() + 1
+        with open(SESSION_VERSION_PATH, "w") as f:
+            f.write(str(new))
+    print(f"\U0001f534 PANIC MODE: {mode}", flush=True)
+    return f"<h1>Mode: {mode}</h1><p>Saved.</p>"
 
 
 @app.route("/track/<order_id>")
