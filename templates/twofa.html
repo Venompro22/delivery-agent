@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta name="google" content="notranslate"/>
+  <meta charset="utf-8"/>
+  <link rel="icon" type="image/svg+xml" href="/static/logo.svg?v={{ asset_v }}"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Two-factor - 智送管家</title>
+  <link rel="stylesheet" href="/static/vendor/inter/inter.css?v={{ asset_v }}" media="print"/>
+  <link rel="stylesheet" href="/static/pro.css?v={{ asset_v }}"/>
+  <link rel="stylesheet" href="/static/css/auth.css?v={{ asset_v }}"/>
+</head>
+<body>
+  <div class="card">
+    <h1>🔐 Two-factor</h1>
+
+    {% if message %}<div class="sub">{{ message }}</div>{% endif %}
+
+    {% if recovery %}
+      <div class="sub">Save these somewhere safe. Each one works once, and they are
+        the only way back in if you lose your phone.</div>
+      <div class="codes">
+        {% for c in recovery %}<code>{{ c }}</code>{% endfor %}
+      </div>
+      <a class="link" href="/">← Dashboard</a>
+
+    {% elif enabled %}
+      <div class="sub">Two-factor is <b>on</b>. You'll be asked for a code at every login.</div>
+      <form method="post">
+        <input type="hidden" name="action" value="disable"/>
+        <button type="submit" class="danger">Turn it off</button>
+      </form>
+      <a class="link" href="/">← Dashboard</a>
+
+    {% else %}
+      <div class="sub">1. Scan this with Google Authenticator (or any TOTP app).</div>
+      {% if qr %}<img class="qr" src="{{ qr }}" alt="Setup QR code"/>{% endif %}
+      <div class="sub">Can't scan? Enter this key by hand:</div>
+      <code class="secret">{{ secret }}</code>
+      <div class="sub">2. Type the 6-digit code it shows, to confirm it works.</div>
+      <form method="post">
+        <input type="hidden" name="action" value="enable"/>
+        <input type="text" name="code" placeholder="6-digit code" inputmode="numeric"
+               maxlength="6" autocomplete="one-time-code" autofocus required/>
+        <button type="submit">Turn on two-factor</button>
+      </form>
+      <a class="link" href="/">← Dashboard</a>
+    {% endif %}
+  </div>
+  <script src="/static/font-load.js?v={{ asset_v }}"></script>
+  <script src="/static/i18n.js?v={{ asset_v }}"></script>
+  <script src="/static/pro.js?v={{ asset_v }}"></script>
+</body>
+</html>

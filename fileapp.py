@@ -6,6 +6,8 @@ import base64
 import hashlib
 import hmac
 import json
+import pyotp
+from werkzeug.security import check_password_hash, generate_password_hash
 import os
 import re
 import secrets
@@ -98,6 +100,51 @@ if not DASHBOARD_PASSWORD:
     print(f"Temporary password for this run: {DASHBOARD_PASSWORD}", flush=True)
 
 SESSION_VERSION_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".session_version")
+
+# 🔐 Two-factor for the owner account. Optional: if the file is missing,
+# login works exactly as before, so you can never lock yourself out by accident.
+TWOFA_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".owner_2fa")
+
+
+def twofa_load() -> dict:
+    """Stored 2FA state: {"secret": str, "recovery": [hashed codes]} or {} if off."""
+    try:
+        with open(TWOFA_PATH) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
+
+
+def twofa_save(data: dict) -> None:
+    """Write 2FA state, readable only by this user."""
+    with open(TWOFA_PATH, "w") as f:
+        json.dump(data, f)
+    os.chmod(TWOFA_PATH, 0o600)
+
+
+def twofa_enabled() -> bool:
+    return bool(twofa_load().get("secret"))
+
+
+def twofa_check(code: str) -> bool:
+    """True if the code is a valid TOTP, or an unused recovery code (burned on use)."""
+    data = twofa_load()
+    secret = data.get("secret")
+    if not secret:
+        return True                      # 2FA is off: nothing to check
+    code = code.strip().replace(" ", "")
+    # valid_window=1 tolerates a clock that is one 30s step out of sync
+    if pyotp.TOTP(secret).verify(code, valid_window=1):
+        return True
+    # Recovery codes are stored hashed and each one works only once.
+    for stored in list(data.get("recovery", [])):
+        if check_password_hash(stored, code):
+            data["recovery"].remove(stored)
+            twofa_save(data)
+            audit.add("2fa_recovery_used", client_ip(), "owner")
+            return True
+    return False
+
 
 # 🔴 Emergency kill switch. One signed link from your phone changes this file,
 # and every request checks it. Modes: normal | readonly | lockdown | off
@@ -276,6 +323,13 @@ def login():
                 elif user:
                     error = "This account is blocked."
             elif hmac.compare_digest(given.encode(), DASHBOARD_PASSWORD.encode()):
+                # 🔐 Right password, but the owner may still need a 2FA code.
+                if twofa_enabled() and not twofa_check(request.form.get("code", "")):
+                    limiter.fail(ip, phone)
+                    audit.add("2fa_failed", ip, "owner")
+                    return render_template("login.html",
+                                           error="Enter the 6-digit code from your authenticator.",
+                                           need_code=True)
                 role = "owner"
             if role:
                 limiter.success(phone)
@@ -1035,6 +1089,52 @@ def track_proof(order_id):
         return jsonify({"ok": False, "error": "no photo"}), 404
     # send_from_directory is safe: it refuses paths that escape PROOF_DIR.
     return send_from_directory(PROOF_DIR, order.proof, max_age=0)
+
+
+@app.route("/security/2fa", methods=["GET", "POST"])
+@owner_required
+def setup_2fa():
+    """🔐 Turn two-factor on or off for the owner account."""
+    if request.method == "POST" and request.form.get("action") == "disable":
+        if os.path.exists(TWOFA_PATH):
+            os.remove(TWOFA_PATH)
+        audit.add("2fa_disabled", client_ip(), "owner")
+        return render_template("twofa.html", enabled=False, message="Two-factor is now off.")
+
+    if request.method == "POST" and request.form.get("action") == "enable":
+        secret = session.get("pending_2fa_secret")
+        if not secret:
+            return redirect(url_for("setup_2fa"))
+        if not pyotp.TOTP(secret).verify(request.form.get("code", "").strip(), valid_window=1):
+            return render_template("twofa.html", enabled=False, secret=secret,
+                                   qr=_twofa_qr(secret),
+                                   message="That code didn't match — try the current one.")
+        # Eight one-time recovery codes, shown once and stored only as hashes.
+        plain = [secrets.token_hex(4) for _ in range(8)]
+        twofa_save({"secret": secret,
+                    "recovery": [generate_password_hash(c) for c in plain]})
+        session.pop("pending_2fa_secret", None)
+        audit.add("2fa_enabled", client_ip(), "owner")
+        return render_template("twofa.html", enabled=True, recovery=plain,
+                               message="Two-factor is on. Save these recovery codes now.")
+
+    if twofa_enabled():
+        return render_template("twofa.html", enabled=True)
+
+    # Fresh secret, held in the session until the first code proves it works.
+    secret = pyotp.random_base32()
+    session["pending_2fa_secret"] = secret
+    return render_template("twofa.html", enabled=False, secret=secret, qr=_twofa_qr(secret))
+
+
+def _twofa_qr(secret: str) -> str:
+    """The setup QR as an inline data URI, so no image file is ever written."""
+    import io
+    import qrcode
+    uri = pyotp.TOTP(secret).provisioning_uri(name="owner", issuer_name="智送管家")
+    buf = io.BytesIO()
+    qrcode.make(uri).save(buf, format="PNG")
+    return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
 
 
 @app.route("/panic/<mode>")

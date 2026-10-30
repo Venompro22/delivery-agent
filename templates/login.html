@@ -18,6 +18,10 @@
     {% if error %}<div class="error">{{ error }}</div>{% endif %}
     <input type="tel" name="phone" placeholder="Phone (drivers)" inputmode="numeric" maxlength="11" autocomplete="username"/>
     <input type="password" name="password" placeholder="Password" autocomplete="current-password" required/>
+    {% if need_code %}
+    <input type="text" name="code" placeholder="6-digit code" inputmode="numeric"
+           maxlength="8" autocomplete="one-time-code" autofocus required/>
+    {% endif %}
     <button type="submit">Log in</button>
     <a class="link" href="/signup">New driver? Create an account</a>
   </form>
