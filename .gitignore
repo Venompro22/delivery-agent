@@ -20,3 +20,4 @@ __pycache__/
 proofs/
 certs/
 .panic_mode
+.owner_2fa
