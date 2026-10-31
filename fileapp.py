@@ -342,7 +342,9 @@ def login():
                     session["pv"] = users.get(uid)["pw_version"]
                 session.permanent = True
                 print(f"Login from {ip} as {role}", flush=True)
-                audit.add("login", ip, phone or "owner", role)
+                # Owner logins are alert-worthy; driver logins are everyday noise.
+                audit.add("login_owner" if role == "owner" else "login",
+                          ip, phone or "owner", role)
                 return redirect(url_for("home") if role == "owner" else url_for("driver_page"))
             if error is None:                  # pending/blocked = right password, not a guess
                 limiter.fail(ip, phone)

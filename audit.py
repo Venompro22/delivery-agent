@@ -5,6 +5,8 @@ import os
 import sqlite3
 import time
 
+import alerts
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 KEEP_DAYS = 90
 

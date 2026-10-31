@@ -26,6 +26,12 @@ def client(tmp_path, monkeypatch):
     fileapp.users = UserStore(str(tmp_path / "test.db"))
     fileapp.limiter = LoginLimiter(str(tmp_path / "test.db"))
     fileapp.audit = AuditLog(str(tmp_path / "test.db"))
+    # 2FA and alerts point at temp paths too, so a real setup on this machine
+    # never changes what the tests see.
+    monkeypatch.setattr(fileapp, "TWOFA_PATH", str(tmp_path / ".owner_2fa"))
+    monkeypatch.setattr(fileapp, "PANIC_PATH", str(tmp_path / ".panic_mode"))
+    import alerts
+    monkeypatch.setattr(alerts, "ALERT_LOG", str(tmp_path / "alerts.log"))
     return fileapp.app.test_client()
 
 
