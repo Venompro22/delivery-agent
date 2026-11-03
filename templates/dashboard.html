@@ -144,6 +144,24 @@
     let mapStyle = 'Light';
     try { const saved = localStorage.getItem('mapStyle'); if (mapStyles[saved]) mapStyle = saved; } catch (e) {}
     mapStyles[mapStyle].addTo(map);
+
+    // 🇨🇳 Inside China, Gaode alone: Esri underneath only doubled the tiles and
+    // printed a second set of place names on top. Outside China, Esri comes back.
+    const isEsri = l => l._url && l._url.indexOf('arcgisonline') !== -1;
+    function syncEsri() {
+      const inChina = map.getZoom() >= GAODE_MIN_ZOOM && CHINA_VIEW.contains(map.getCenter());
+      Object.values(mapStyles).forEach(group => {
+        if (!map.hasLayer(group)) return;
+        group.eachLayer(l => {
+          if (!isEsri(l)) return;
+          if (inChina && map.hasLayer(l)) map.removeLayer(l);
+          if (!inChina && !map.hasLayer(l)) map.addLayer(l);
+        });
+      });
+    }
+    map.on('moveend zoomend', syncEsri);
+    map.on('layeradd', () => setTimeout(syncEsri, 0));   // also after a style switch
+    syncEsri();
     L.control.layers(mapStyles, null, {position: 'topleft'}).addTo(map);
     map.on('baselayerchange', e => { try { localStorage.setItem('mapStyle', e.name); } catch (err) {} });
     L.control.scale({imperial: false}).addTo(map);
