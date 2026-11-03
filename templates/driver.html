@@ -16,7 +16,7 @@
     <div class="top">
       <h1>🚚 Driver</h1>
       <span class="lang-slot" data-lang-slot></span>
-      {% if role == "owner" %}
+      {% if role in ("owner", "viewer") %}
       <a class="back" href="/">← Dashboard</a>
       {% else %}
       <a class="back" href="/account">Password</a>

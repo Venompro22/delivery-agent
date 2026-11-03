@@ -73,6 +73,63 @@ MAX_PROOF_BYTES = 5 * 1024 * 1024          # 5 MB per photo
 ALLOWED_PROOF_TYPES = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}
 
 
+# 👀 In demo (viewer) sessions, every page gets a banner, inputs are locked, and
+# any write the page tries is stopped in the browser with a clear message,
+# instead of buttons that silently do nothing.
+VIEWER_SNIPPET = """
+<style>
+  #demo-banner { position: fixed; top: 0; left: 0; right: 0; z-index: 99999;
+    background: #f0a020; color: #111; text-align: center; padding: 6px 10px;
+    font: 600 13px/1.4 system-ui, sans-serif; }
+  body { padding-top: 30px !important; }
+  #demo-toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+    z-index: 99999; background: #222; color: #fff; padding: 10px 16px; border-radius: 10px;
+    font: 14px system-ui, sans-serif; display: none; }
+</style>
+<div id="demo-banner">👀 Demo — view only</div>
+<div id="demo-toast">This is a view-only demo 🙂</div>
+<script>
+(function () {
+  function toast() {
+    var t = document.getElementById('demo-toast');
+    t.style.display = 'block';
+    clearTimeout(t._h); t._h = setTimeout(function () { t.style.display = 'none'; }, 2200);
+  }
+  // Stop every write before it reaches the server.
+  var realFetch = window.fetch;
+  window.fetch = function (url, opts) {
+    var method = ((opts && opts.method) || 'GET').toUpperCase();
+    if (method !== 'GET' && String(url).indexOf('/logout') === -1) {
+      toast();
+      return Promise.resolve(new Response(JSON.stringify({ok: false, error: 'demo'}),
+        {status: 403, headers: {'Content-Type': 'application/json'}}));
+    }
+    return realFetch.apply(this, arguments);
+  };
+  // Lock text fields so nobody types into a form that can't be sent.
+  function lock() {
+    document.querySelectorAll('textarea, input:not([type=hidden])').forEach(function (el) {
+      el.readOnly = true;
+    });
+  }
+  document.addEventListener('DOMContentLoaded', lock);
+  lock();
+  window.alert = function () { toast(); };
+})();
+</script>
+"""
+
+
+@app.after_request
+def viewer_overlay(resp):
+    if (session.get("role") == "viewer" and resp.mimetype == "text/html"
+            and not resp.direct_passthrough):
+        html = resp.get_data(as_text=True)
+        if "</body>" in html and "demo-banner" not in html:
+            resp.set_data(html.replace("</body>", VIEWER_SNIPPET + "</body>", 1))
+    return resp
+
+
 @app.after_request
 def security_headers(resp):
     """🛡️ Extra browser protection on every response."""
@@ -81,7 +138,8 @@ def security_headers(resp):
     resp.headers["Referrer-Policy"] = "same-origin"
     resp.headers["Content-Security-Policy"] = (
         "default-src 'self'; "
-        "script-src 'self' 'unsafe-inline'; "       # TODO: drop 'unsafe-inline' once inline JS is moved to files
+        # TODO: drop 'unsafe-inline' once the inline JS is moved into files
+        "script-src 'self' 'unsafe-inline'; "
         "style-src 'self' 'unsafe-inline'; "
         "img-src 'self' data: https://server.arcgisonline.com https://*.is.autonavi.com; "
         "connect-src 'self'; "
@@ -190,7 +248,7 @@ def current_role():
 
 def is_logged_in() -> bool:
     if not (session.get("auth") is True
-            and current_role() in ("owner", "driver")
+            and current_role() in ("owner", "driver", "viewer")
             and session.get("v") == session_version()):
         return False
     uid = session.get("uid")
@@ -198,7 +256,7 @@ def is_logged_in() -> bool:
         user = users.get(uid)
         return bool(user and user["status"] == "approved"
                     and user["pw_version"] == session.get("pv", 0))   # password changed → out
-    return current_role() == "owner"          # a driver session must belong to an account
+    return current_role() in ("owner", "viewer")          # a driver session must belong to an account
 
 
 def login_required(view):
@@ -218,7 +276,7 @@ def owner_required(view):
     @wraps(view)
     @login_required
     def wrapper(*args, **kwargs):
-        if current_role() == "owner":
+        if current_role() in ("owner", "viewer"):
             return view(*args, **kwargs)
         if request.path.startswith("/api/"):
             return jsonify({"ok": False, "error": "owner only"}), 403
@@ -282,11 +340,11 @@ def driver_for(uid):
 
 def visible_to_me(order) -> bool:
     """👤 The owner sees everything; a driver sees their own orders + the unassigned pool."""
-    return current_role() == "owner" or order.driver_id in (None, session.get("uid"))
+    return current_role() in ("owner", "viewer") or order.driver_id in (None, session.get("uid"))
 
 
 def my_orders() -> list:
-    return [o for o in store.all() if visible_to_me(o)]
+    return [o for o in orders_for_request() if visible_to_me(o)]
 
 
 def client_ip() -> str:
@@ -389,13 +447,15 @@ def list_drivers():
     """👤 Every driver account (never the password hash), pending ones first."""
     # Collect every rating per driver in one pass.
     ratings: dict[str, list[int]] = {}
-    for o in store.all():
+    for o in orders_for_request():
         if o.driver_id and o.rating:
             ratings.setdefault(o.driver_id, []).append(o.rating)
 
     result = []
     for u in users.all():
         row = public(u)
+        if session.get("role") == "viewer" and row.get("phone"):
+            row["phone"] = row["phone"][:3] + "****" + row["phone"][-4:]
         rs = ratings.get(u["id"], [])
         row["rated_count"] = len(rs)
         row["avg_rating"] = round(sum(rs) / len(rs), 1) if rs else None
@@ -418,9 +478,34 @@ def set_driver_status(user_id):
     return jsonify({"ok": True})
 
 
+# 👀 Read-only "viewer" sessions for demos: anyone with the signed link sees the
+# dashboard but can change nothing and never reaches the security pages.
+VIEWER_BLOCKED = ("/security", "/api/security-log", "/account")
+
+
+def demo_key() -> str:
+    secret = app.secret_key if isinstance(app.secret_key, bytes) else str(app.secret_key).encode()
+    mac = hmac.new(secret, b"demo-viewer", hashlib.sha256).digest()
+    return base64.urlsafe_b64encode(mac)[:22].decode()
+
+
+def orders_for_request() -> list:
+    """All orders — except for a demo viewer, who only sees the demo ones."""
+    orders = store.all()
+    if session.get("role") == "viewer":
+        return [o for o in orders if (o.note or "").startswith(DEMO_TAG)]
+    return orders
+
+
 @app.before_request
 def check_panic_mode():
     """🔴 Emergency modes, checked before anything else on every request."""
+    # 👀 viewers can look, never touch
+    if session.get("role") == "viewer":
+        if request.method != "GET" and request.path != "/logout":
+            return jsonify({"ok": False, "error": "demo is read-only"}), 403
+        if request.path.startswith(VIEWER_BLOCKED):
+            return jsonify({"ok": False, "error": "not available in demo"}), 403
     mode = panic_mode()
     if mode == "normal":
         return None
@@ -779,7 +864,7 @@ def agent_message():
         return bad_request("text is too long")
 
     orders = [{"id": o.id, "name": o.customer_name, "phone": o.phone,
-               "status": o.status.value} for o in store.all()]
+               "status": o.status.value} for o in orders_for_request()]
     result = handle_message(text, orders)
     result["intent"], result["confidence"] = predict_intent(text)
 
@@ -787,7 +872,7 @@ def agent_message():
         order = store.get(result["order_id"])
         result["name"] = order.customer_name
         if result["action"] == "reply":
-            route = optimize_route(driver, store.all(), geo)
+            route = optimize_route(driver, orders_for_request(), geo)
             me = next((r for r in route if r.id == order.id), None)
             if me:
                 result["reply"] = f"您好{order.customer_name}，您的订单预计 {fmt(me.eta_epoch)} 送达 🚚"
@@ -896,7 +981,7 @@ def api_stats():
     on_time = late = 0
     per_driver = {}                               # driver id → their numbers (same rules as above)
 
-    for o in store.all():
+    for o in orders_for_request():
         if o.status != OrderStatus.DELIVERED or not o.delivered_at:
             continue
         done = datetime.fromtimestamp(o.delivered_at)
@@ -999,7 +1084,7 @@ def list_orders():
     """Every order, newest first — delivered ones included."""
     today = datetime.now().date()
     items = []
-    for o in sorted(store.all(), key=lambda x: x.created_at or 0, reverse=True):
+    for o in sorted(orders_for_request(), key=lambda x: x.created_at or 0, reverse=True):
         created = datetime.fromtimestamp(o.created_at) if o.created_at else None
         items.append({
             "id": o.id,
@@ -1038,7 +1123,7 @@ def api_track(order_id):
         return jsonify({"ok": True, "status": "cancelled", "name": order.customer_name})
 
     # Where is this order in the current route?
-    same_driver = [o for o in store.all() if o.driver_id == order.driver_id]
+    same_driver = [o for o in orders_for_request() if o.driver_id == order.driver_id]
     route = optimize_route(driver_for(order.driver_id), same_driver, geo)
     me = next((o for o in route if o.id == order_id), None)
     return jsonify({
@@ -1137,6 +1222,20 @@ def _twofa_qr(secret: str) -> str:
     buf = io.BytesIO()
     qrcode.make(uri).save(buf, format="PNG")
     return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
+
+
+@app.route("/demo")
+def demo_login():
+    """👀 Signed demo link: opens the dashboard read-only, no password needed."""
+    given = request.args.get("k", "").encode()
+    if not hmac.compare_digest(given, demo_key().encode()):
+        return jsonify({"ok": False, "error": "not found"}), 404
+    session.clear()
+    session["auth"] = True
+    session["role"] = "viewer"
+    session["v"] = session_version()          # "Logout everyone" ends demos too
+    audit.add("demo_open", client_ip(), "viewer")
+    return redirect(url_for("home"))
 
 
 @app.route("/panic/<mode>")
