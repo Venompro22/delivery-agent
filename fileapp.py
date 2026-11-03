@@ -85,6 +85,11 @@ VIEWER_SNIPPET = """
   #demo-toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
     z-index: 99999; background: #222; color: #fff; padding: 10px 16px; border-radius: 10px;
     font: 14px system-ui, sans-serif; display: none; }
+  /* Hide every control a demo visitor can't use */
+  .gps-row, #gps-status, #gps-btn, #manual-order, #paste, .chip, .chips-label,
+  #fb, #ai-learn, #ai-history, #log,
+  button[onclick*="handle" i], button[onclick*="retrain" i],
+  button[onclick*="logoutAll"], body:has(#log) #list button { display: none !important; }
 </style>
 <div id="demo-banner">👀 Demo — view only</div>
 <div id="demo-toast">This is a view-only demo 🙂</div>
@@ -115,6 +120,18 @@ VIEWER_SNIPPET = """
   document.addEventListener('DOMContentLoaded', lock);
   lock();
   window.alert = function () { toast(); };
+  // The "Log out everyone" card and the security-log heading go too.
+  function tidy() {
+    var b = document.querySelector('[onclick="logoutAll()"]');
+    var card = b && b.closest('div');
+    while (card && !card.querySelector('.name')) card = card.parentElement && card.parentElement.closest('div');
+    if (card) card.style.display = 'none';
+    var log = document.getElementById('log');
+    var head = log && log.previousElementSibling;
+    if (head && /security/i.test(head.textContent)) head.style.display = 'none';
+  }
+  document.addEventListener('DOMContentLoaded', tidy);
+  tidy();
 })();
 </script>
 """
@@ -289,8 +306,8 @@ def owner_required(view):
 
 driver = Driver(
     name="Driver 1",
-    lat=float(os.environ.get("DRIVER_LAT", "31.2304")),
-    lng=float(os.environ.get("DRIVER_LNG", "121.4737")),
+    lat=float(os.environ.get("DRIVER_LAT", "30.257")),
+    lng=float(os.environ.get("DRIVER_LNG", "119.727")),
 )
 geo = GeoService(avg_speed_kmh=driver.avg_speed_kmh)
 store = OrderStore()

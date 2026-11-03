@@ -32,3 +32,9 @@ button.block { color: var(--danger-text); border-color: var(--danger); }
   .log-row { grid-template-columns: 1fr auto; }
   .log-who { grid-column: 1 / -1; }
 }
+
+
+/* Rows wrap on small screens: full names, and the phone never sits under the badge */
+#list .row { flex-wrap: wrap; gap: 8px; }
+#list .who { flex: 1 1 100%; min-width: 0; }
+#list .who .name, #list .who .meta { white-space: normal; overflow: visible; text-overflow: clip; }
