@@ -21,3 +21,5 @@ proofs/
 certs/
 .panic_mode
 .owner_2fa
+.env
+.env.*
