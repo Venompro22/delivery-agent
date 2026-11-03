@@ -136,6 +136,9 @@ def security_headers(resp):
     resp.headers["X-Content-Type-Options"] = "nosniff"
     resp.headers["X-Frame-Options"] = "DENY"
     resp.headers["Referrer-Policy"] = "same-origin"
+    # HTML is always revalidated, so nobody is stuck on an old copy of a page.
+    if resp.mimetype == "text/html":
+        resp.headers["Cache-Control"] = "no-cache"
     resp.headers["Content-Security-Policy"] = (
         "default-src 'self'; "
         # TODO: drop 'unsafe-inline' once the inline JS is moved into files
