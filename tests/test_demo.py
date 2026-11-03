@@ -38,3 +38,20 @@ def test_viewer_gets_the_banner_and_others_dont(client):
     assert "demo-banner" in _viewer(client).get("/").get_data(as_text=True)
     other = fileapp.app.test_client()
     assert "demo-banner" not in other.get("/login").get_data(as_text=True)
+
+
+def test_public_try_link_opens_read_only_demo(client):
+    assert client.get("/try").status_code == 302
+    assert client.post("/api/orders", json={}).status_code == 403
+
+
+def test_visitor_who_opens_login_leaves_the_demo(client):
+    _viewer(client)
+    assert client.get("/login").status_code == 200        # login form, not a redirect home
+    with client.session_transaction() as s:
+        assert s.get("role") is None
+
+
+def test_public_demo_can_be_turned_off(client, monkeypatch):
+    monkeypatch.setenv("PUBLIC_DEMO", "0")
+    assert client.get("/try").headers["Location"].endswith("/login")

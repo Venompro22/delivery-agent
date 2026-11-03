@@ -522,6 +522,9 @@ def check_panic_mode():
     """🔴 Emergency modes, checked before anything else on every request."""
     # 👀 viewers can look, never touch
     if session.get("role") == "viewer":
+        if request.path in ("/login", "/signup"):
+            session.clear()                     # leaving the demo to sign in for real
+            return None
         if request.method != "GET" and request.path != "/logout":
             return jsonify({"ok": False, "error": "demo is read-only"}), 403
         if request.path.startswith(VIEWER_BLOCKED):
@@ -1242,6 +1245,19 @@ def _twofa_qr(secret: str) -> str:
     buf = io.BytesIO()
     qrcode.make(uri).save(buf, format="PNG")
     return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
+
+
+@app.route("/try")
+def try_demo():
+    """👀 Public demo entrance from the login page. Read-only, demo data only."""
+    if os.environ.get("PUBLIC_DEMO", "1") != "1":
+        return redirect(url_for("login"))
+    session.clear()
+    session["auth"] = True
+    session["role"] = "viewer"
+    session["v"] = session_version()
+    audit.add("demo_open", client_ip(), "viewer", "public")
+    return redirect(url_for("home"))
 
 
 @app.route("/demo")
