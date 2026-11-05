@@ -14,7 +14,7 @@
   <form class="card" method="post" action="/login">
     <img class="brand-logo" src="/static/logo.svg?v={{ asset_v }}" alt=""/>
     <h1>智送管家</h1>
-    <div class="sub">Drivers: phone + password · Owner: password only</div>
+    <div class="sub">Drivers: log in with your phone number</div>
     {% if error %}<div class="error">{{ error }}</div>{% endif %}
     <input type="tel" name="phone" placeholder="Phone (drivers)" inputmode="numeric" maxlength="11" autocomplete="username"/>
     <input type="password" name="password" placeholder="Password" autocomplete="current-password" required/>
