@@ -23,3 +23,4 @@ certs/
 .owner_2fa
 .env
 .env.*
+.ipv6_last
