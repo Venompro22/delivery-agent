@@ -17,7 +17,7 @@ from datetime import datetime, timedelta
 from functools import wraps
 
 from flask import (Flask, request, jsonify, render_template,
-                   session, redirect, url_for, abort, send_from_directory)
+                   session, redirect, url_for, abort, send_from_directory, has_request_context)
 
 from models import Order, Driver, OrderStatus
 from geo import GeoService
@@ -86,9 +86,8 @@ VIEWER_SNIPPET = """
     z-index: 99999; background: #222; color: #fff; padding: 10px 16px; border-radius: 10px;
     font: 14px system-ui, sans-serif; display: none; }
   /* Hide every control a demo visitor can't use */
-  .gps-row, #gps-status, #gps-btn, #manual-order, #paste, .chip, .chips-label,
-  #fb, #ai-learn, #ai-history, #log,
-  button[onclick*="handle" i], button[onclick*="retrain" i],
+  button[onclick="locateOnce()"], #live-btn, #sim-btn, #gps-status, #gps-btn, #log,
+  button[onclick*="retrain" i],
   button[onclick*="logoutAll"], body:has(#log) #list button { display: none !important; }
 </style>
 <div id="demo-banner">👀 Demo — view only</div>
@@ -104,7 +103,10 @@ VIEWER_SNIPPET = """
   var realFetch = window.fetch;
   window.fetch = function (url, opts) {
     var method = ((opts && opts.method) || 'GET').toUpperCase();
-    if (method !== 'GET' && String(url).indexOf('/logout') === -1) {
+    var path = String(url).split('?')[0];
+    var ok = ['/api/agent', '/api/parse', '/api/orders', '/api/demo', '/api/demo/clear'].indexOf(path) !== -1
+             || path.indexOf('/api/orders/') === 0;
+    if (method !== 'GET' && !ok && path.indexOf('/logout') === -1) {
       toast();
       return Promise.resolve(new Response(JSON.stringify({ok: false, error: 'demo'}),
         {status: 403, headers: {'Content-Type': 'application/json'}}));
@@ -117,8 +119,6 @@ VIEWER_SNIPPET = """
       el.readOnly = true;
     });
   }
-  document.addEventListener('DOMContentLoaded', lock);
-  lock();
   window.alert = function () { toast(); };
   // The "Log out everyone" card and the security-log heading go too.
   function tidy() {
@@ -360,7 +360,9 @@ def driver_for(uid):
 
 def visible_to_me(order) -> bool:
     """👤 The owner sees everything; a driver sees their own orders + the unassigned pool."""
-    return current_role() in ("owner", "viewer") or order.driver_id in (None, session.get("uid"))
+    if current_role() == "viewer":
+        return (order.note or "").startswith(DEMO_TAG)
+    return current_role() == "owner" or order.driver_id in (None, session.get("uid"))
 
 
 def my_orders() -> list:
@@ -509,6 +511,30 @@ def demo_key() -> str:
     return base64.urlsafe_b64encode(mac)[:22].decode()
 
 
+VIEWER_WRITES = ("/api/agent", "/api/parse", "/api/orders", "/api/demo", "/api/demo/clear")
+
+
+def _store_add(order):
+    """Every new order goes through here. A demo visitor's order is always a demo
+    order and is never assigned to a real driver."""
+    if has_request_context() and session.get("role") == "viewer":
+        if not (order.note or "").startswith(DEMO_TAG):
+            order.note = DEMO_TAG + (order.note or "")
+        order.driver_id = None
+    return store.add(order)
+
+
+def _viewer_may_write() -> bool:
+    """Demo visitors may try the AI and play with orders, but only demo orders."""
+    if request.path in VIEWER_WRITES:
+        return True
+    parts = request.path.strip("/").split("/")      # api / orders / <id> [/ deliver|cancel]
+    if parts[:2] == ["api", "orders"] and (len(parts) == 3 or (len(parts) == 4 and parts[3] in ("deliver", "cancel"))):
+        order = store.get(parts[2])
+        return bool(order and (order.note or "").startswith(DEMO_TAG))
+    return False
+
+
 def orders_for_request() -> list:
     """All orders — except for a demo viewer, who only sees the demo ones."""
     orders = store.all()
@@ -525,8 +551,8 @@ def check_panic_mode():
         if request.path in ("/login", "/signup"):
             session.clear()                     # leaving the demo to sign in for real
             return None
-        if request.method != "GET" and request.path != "/logout":
-            return jsonify({"ok": False, "error": "demo is read-only"}), 403
+        if request.method != "GET" and request.path != "/logout" and not _viewer_may_write():
+            return jsonify({"ok": False, "error": "not available in the demo"}), 403
         if request.path.startswith(VIEWER_BLOCKED):
             return jsonify({"ok": False, "error": "not available in demo"}), 403
     mode = panic_mode()
@@ -746,7 +772,7 @@ def add_order():
     nearest = find_nearest_driver(users, order.lat, order.lng)
     if nearest:
         order.driver_id = nearest["id"]
-    store.add(order)
+    _store_add(order)
     print(f"📦 New order: {order.customer_name} ({order.lat}, {order.lng})", flush=True)
     return jsonify({"ok": True, "id": order.id})
 
@@ -974,7 +1000,7 @@ def demo_orders():
         kw = {"promised_by": time.time() + promise * 60} if promise else {}
         order = Order(customer_name=name, lat=round(lat, 5), lng=round(lng, 5),
                       phone=phone, note=DEMO_TAG + note, **kw)
-        store.add(order)
+        _store_add(order)
         ids.append(order.id)
     print(f"✨ Demo: added {len(ids)} orders", flush=True)
     return jsonify({"ok": True, "ids": ids})

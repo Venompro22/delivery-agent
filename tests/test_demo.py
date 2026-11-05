@@ -17,7 +17,7 @@ def test_viewer_can_open_the_dashboard(client):
 
 
 def test_viewer_cannot_write(client):
-    assert _viewer(client).post("/api/orders", json={}).status_code == 403
+    assert _viewer(client).post("/api/drivers/x/status", json={}).status_code == 403
 
 
 def test_viewer_cannot_open_security_pages(client):
@@ -42,7 +42,7 @@ def test_viewer_gets_the_banner_and_others_dont(client):
 
 def test_public_try_link_opens_read_only_demo(client):
     assert client.get("/try").status_code == 302
-    assert client.post("/api/orders", json={}).status_code == 403
+    assert client.post("/api/drivers/x/status", json={}).status_code == 403
 
 
 def test_visitor_who_opens_login_leaves_the_demo(client):
@@ -55,3 +55,31 @@ def test_visitor_who_opens_login_leaves_the_demo(client):
 def test_public_demo_can_be_turned_off(client, monkeypatch):
     monkeypatch.setenv("PUBLIC_DEMO", "0")
     assert client.get("/try").headers["Location"].endswith("/login")
+
+
+def test_visitor_order_is_always_demo_and_unassigned(client):
+    _viewer(client)
+    r = client.post("/api/orders", json={"name": "V", "lat": 30.25, "lng": 119.72})
+    o = fileapp.store.get(r.get_json()["id"])
+    assert o.note.startswith(fileapp.DEMO_TAG) and o.driver_id is None
+
+
+def test_visitor_cannot_touch_real_orders(client):
+    real = Order(customer_name="Real", lat=30.2, lng=120.2)
+    fileapp.store.add(real)
+    _viewer(client)
+    assert client.post(f"/api/orders/{real.id}/deliver").status_code == 403
+    assert client.post(f"/api/orders/{real.id}/cancel").status_code == 403
+
+
+def test_visitor_can_deliver_a_demo_order(client):
+    demo = Order(customer_name="D", lat=30.2, lng=120.2, note=fileapp.DEMO_TAG + " x")
+    fileapp.store.add(demo)
+    _viewer(client)
+    assert client.post(f"/api/orders/{demo.id}/deliver").status_code == 200
+
+
+def test_visitor_cannot_train_the_ai(client):
+    _viewer(client)
+    assert client.post("/api/retrain").status_code == 403
+    assert client.post("/api/feedback", json={}).status_code == 403
