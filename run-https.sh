@@ -10,4 +10,4 @@ set +a
 DEV_MODE=1 COOKIE_SECURE=1 \
   flask --app fileapp run \
   --host :: --port 5051 \
-  --cert=certs/le/live/zhisong.duckdns.org/fullchain.pem --key=certs/le/live/zhisong.duckdns.org/privkey.pem
+  --cert=certs/le/live/zhisong.home64.de/fullchain.pem --key=certs/le/live/zhisong.home64.de/privkey.pem
