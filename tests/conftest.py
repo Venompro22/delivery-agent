@@ -45,3 +45,11 @@ def login_driver(c, phone="13900139000", password="driver-pass-42"):
         u = fileapp.users.create(phone, "Test Driver", password)
         fileapp.users.set_status(u["id"], "approved")
     return c.post("/login", data={"phone": phone, "password": password})
+
+
+@pytest.fixture(autouse=True)
+def _isolate_logs(tmp_path, monkeypatch):
+    """Every test writes its security log and alerts to temp files, never to the real ones."""
+    import alerts
+    monkeypatch.setattr(fileapp, "audit", AuditLog(str(tmp_path / "audit.db")))
+    monkeypatch.setattr(alerts, "ALERT_LOG", str(tmp_path / "alerts.log"))
