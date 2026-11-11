@@ -91,7 +91,7 @@ VIEWER_SNIPPET = """
   button[onclick*="logoutAll"], body:has(#log) #list button { display: none !important; }
 </style>
 <div id="demo-banner">Demo · sample data · 演示数据</div>
-<div id="demo-toast">This is a view-only demo 🙂</div>
+<div id="demo-toast">Not available in the demo</div>
 <script>
 (function () {
   function toast() {
@@ -924,7 +924,7 @@ def agent_message():
             route = optimize_route(driver, orders_for_request(), geo)
             me = next((r for r in route if r.id == order.id), None)
             if me:
-                result["reply"] = f"您好{order.customer_name}，您的订单预计 {fmt(me.eta_epoch)} 送达 🚚"
+                result["reply"] = f"您好{order.customer_name}，您的订单预计 {fmt(me.eta_epoch)}  送达"
     return jsonify(result)
 FEEDBACK_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "feedback.jsonl")
 
