@@ -14,7 +14,7 @@
 <body>
   <div class="wrap">
     <div class="top">
-      <h1>🚚 Driver</h1>
+      <h1>Driver</h1>
       <span class="lang-slot" data-lang-slot></span>
       {% if role in ("owner", "viewer") %}
       <a class="back" href="/">← Dashboard</a>
@@ -26,10 +26,10 @@
     <div class="meta" id="stats">Loading…</div>
     <div id="new-banner" onclick="seenOrders()" style="display:none;cursor:pointer;
          background:#ff6b35;color:#fff;padding:10px 14px;border-radius:10px;
-         margin:8px 0;font-weight:600;text-align:center">🔔 <span id="new-count"></span></div>
+         margin:8px 0;font-weight:600;text-align:center"><span id="new-count"></span></div>
     <div class="progress"><div id="bar" style="width:0%"></div></div>
     <div id="main"></div>
-    <button class="btn gps" id="gps-btn" onclick="toggleGps()">🛰️ Start GPS</button>
+    <button class="btn gps" id="gps-btn" onclick="toggleGps()">Start GPS</button>
     <div class="gps-status" id="gps-status"></div>
     <div class="next" id="next"></div>
   </div>
@@ -59,7 +59,7 @@
       const data = await (await api('/api/route')).json();
       const done = data.summary.delivered, left = data.stops.length, total = done + left;
       document.getElementById('stats').textContent =
-        `✅ ${done} delivered · 📦 ${left} left · ${data.summary.total_km} km · finish ${data.summary.finish}`;
+        `${done} delivered · ${left} left · ${data.summary.total_km} km · finish ${data.summary.finish}`;
       document.getElementById('bar').style.width = total ? `${Math.round(done / total * 100)}%` : '0%';
 
       const banner = document.getElementById('new-banner');
@@ -75,7 +75,7 @@
       const main = document.getElementById('main');
       if (!left) {
         current = null;
-        main.innerHTML = '<div class="card empty">🏁 No more stops<br><span class="meta">Great job! 🎉</span></div>';
+        main.innerHTML = '<div class="card empty">No more stops<br><span class="meta">Great job!</span></div>';
         document.getElementById('next').innerHTML = '';
         return;
       }
@@ -84,15 +84,15 @@
       main.innerHTML = `<div class="card ${s.late ? 'late' : ''}">
         <div class="label">Next stop <span class="seq">${s.sequence}</span></div>
         <div class="name">${esc(s.name)}${s.late ? '<span class="badge">LATE</span>' : ''}</div>
-        ${s.note ? `<div class="note">📝 ${esc(s.note)}</div>` : ''}
-        <div class="info">⏰ ETA ${s.eta} · 📏 ${s.leg_km} km${s.promise ? ` · promised ${s.promise}` : ''}</div>
-        <a class="btn nav" href="${navUrl(s)}" target="_blank" rel="noopener">🧭 Navigate</a>
+        ${s.note ? `<div class="note">${esc(s.note)}</div>` : ''}
+        <div class="info">ETA ${s.eta} · ${s.leg_km} km${s.promise ? ` · promised ${s.promise}` : ''}</div>
+        <a class="btn nav" href="${navUrl(s)}" target="_blank" rel="noopener">${ICON.nav}Navigate</a>
         <div class="row">
-          ${s.phone ? `<a class="btn call" href="tel:${esc(s.phone)}">📞 Call</a>` : ''}
-          <button class="btn done" onclick="deliver()">✅ Delivered</button>
+          ${s.phone ? `<a class="btn call" href="tel:${esc(s.phone)}">${ICON.phone}Call</a>` : ''}
+          <button class="btn done" onclick="deliver()">${ICON.check}Delivered</button>
           <input type="file" id="proof-input" accept="image/*" capture="environment"
                  style="display:none" onchange="deliverWithPhoto(this)">
-          <button class="btn photo" onclick="document.getElementById('proof-input').click()">📷 + Photo</button>
+          <button class="btn photo" onclick="document.getElementById('proof-input').click()">${ICON.camera}Photo</button>
         </div>
       </div>`;
       document.getElementById('next').innerHTML = data.stops.length > 1 ? '<h3>Up next</h3>' +
@@ -117,7 +117,7 @@
       const res = await fetch(`/api/orders/${s.id}/proof`, { method: 'POST', body: form });
       const d = await res.json();
       if (navigator.vibrate) navigator.vibrate(80);
-      toast(d.ok ? `✅ ${s.name} delivered 📷` : `✅ delivered, but photo failed`);
+      toast(d.ok ? `${s.name} delivered with photo` : `Delivered, but the photo failed to upload`);
       load();
     }
 
@@ -126,9 +126,18 @@
       const s = current;
       await api(`/api/orders/${s.id}/deliver`, {method: 'POST'});
       if (navigator.vibrate) navigator.vibrate(80);
-      toast(`✅ ${s.name} delivered`);
+      toast(`${s.name} delivered`);
       load();
     }
+
+    // Clean line icons for the action buttons (same look on every phone)
+    const SVG = p => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
+    const ICON = {
+      nav: SVG('<polygon points="3 11 22 2 13 21 11 13 3 11"/>'),
+      phone: SVG('<path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2z"/>'),
+      check: SVG('<path d="M20 6 9 17l-5-5"/>'),
+      camera: SVG('<path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/>'),
+    };
 
     // 📍 GPS (WGS-84) → Chinese map coordinates (GCJ-02)
     function wgs2gcj(lat, lng) {
@@ -157,22 +166,22 @@
       const btn = document.getElementById('gps-btn');
       if (watchId !== null) {
         navigator.geolocation.clearWatch(watchId); watchId = null;
-        btn.classList.remove('on'); btn.textContent = '🛰️ Start GPS'; gpsStatus('GPS stopped');
+        btn.classList.remove('on'); btn.textContent = 'Start GPS'; gpsStatus('GPS stopped');
         return;
       }
       if (!navigator.geolocation || !window.isSecureContext) {
-        gpsStatus('⚠️ GPS needs HTTPS — open this page with the ngrok link'); return;
+        gpsStatus('GPS needs a secure (HTTPS) connection'); return;
       }
-      btn.classList.add('on'); btn.textContent = '🛰️ GPS on — tap to stop';
+      btn.classList.add('on'); btn.textContent = 'GPS on — tap to stop';
       watchId = navigator.geolocation.watchPosition(async pos => {
         if (Date.now() - lastSent < 15000) return;
         lastSent = Date.now();
         const [lat, lng] = wgs2gcj(pos.coords.latitude, pos.coords.longitude);
         await api('/api/driver/location', {method: 'POST', headers: {'Content-Type': 'application/json'},
                                           body: JSON.stringify({lat, lng})});
-        gpsStatus(`📍 Sent ±${Math.round(pos.coords.accuracy)} m · ${new Date().toLocaleTimeString()}`);
+        gpsStatus(`Location sent ±${Math.round(pos.coords.accuracy)} m · ${new Date().toLocaleTimeString()}`);
         load();
-      }, () => gpsStatus('⚠️ Could not get your location'), {enableHighAccuracy: true, maximumAge: 10000});
+      }, () => gpsStatus('Could not get your location'), {enableHighAccuracy: true, maximumAge: 10000});
     }
 
     load();

@@ -49,6 +49,7 @@
     "Simulate": "模拟配送", "All orders delivered!": "所有订单已送达！", "Try:": "试试：",
     "Next stop": "下一站", "Up next": "接下来", "No more stops": "没有更多站点了",
     "Great job!": "干得好！", "Start GPS": "开启定位", "GPS on — tap to stop": "定位中 — 点击停止",
+    "Photo": "拍照", "Location sent": "已发送位置", "Could not get your location": "无法获取您的位置", "GPS needs a secure (HTTPS) connection": "定位需要安全连接（HTTPS）", "delivered with photo": "已送达（附照片）", "Delivered, but the photo failed to upload": "已送达，但照片上传失败",
     "GPS stopped": "定位已停止", "left": "剩余", "finish": "完成", "Sent": "已发送",
     "Enter the dashboard password": "请输入调度台密码", "Password": "密码", "Log in": "登录",
     "Wrong password.": "密码错误。", "Too many attempts. Wait 10 minutes.": "尝试次数过多，请等待10分钟。",

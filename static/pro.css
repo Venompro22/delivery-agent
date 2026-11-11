@@ -138,3 +138,6 @@ a.back { display: inline-flex; align-items: center; height: 36px; padding: 0 12p
          border: 1px solid var(--border); border-radius: 10px; font-size: 13px; font-weight: 500;
          color: var(--text-2); text-decoration: none; }
 a.back:hover { color: var(--text); border-color: var(--muted); background: var(--surface); }
+
+/* SVG icons inside buttons */
+.btn svg { width: 16px; height: 16px; vertical-align: -3px; margin-right: 6px; }
