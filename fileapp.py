@@ -1273,6 +1273,36 @@ def _twofa_qr(secret: str) -> str:
     return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
 
 
+DEMO_MAX_AGE = 24 * 3600          # demo orders are rebuilt once a day
+
+
+def seed_demo_orders() -> list:
+    """Add the demo scenario around the start point (ZAFU). Returns the new ids."""
+    import math
+    ids = []
+    for name, phone, note, promise, north_km, east_km in DEMO_ORDERS:
+        lat = driver.lat + north_km / 111.0
+        lng = driver.lng + east_km / (111.0 * math.cos(math.radians(driver.lat)))
+        kw = {"promised_by": time.time() + promise * 60} if promise else {}
+        order = Order(customer_name=name, lat=round(lat, 5), lng=round(lng, 5),
+                      phone=phone, note=DEMO_TAG + note, **kw)
+        store.add(order)
+        ids.append(order.id)
+    return ids
+
+
+def ensure_demo_data() -> None:
+    """Visitors always land on a full, fresh demo: refill when empty, reset daily.
+    Real orders are never touched."""
+    demo = [o for o in store.all() if (o.note or "").startswith(DEMO_TAG)]
+    if demo and min(o.created_at or 0 for o in demo) < time.time() - DEMO_MAX_AGE:
+        store.orders = [o for o in store.orders if not (o.note or "").startswith(DEMO_TAG)]
+        store.save()
+        demo = []
+    if not any(o.status == OrderStatus.PENDING for o in demo):
+        seed_demo_orders()
+
+
 @app.route("/try")
 def try_demo():
     """👀 Public demo entrance from the login page. Read-only, demo data only."""
@@ -1283,6 +1313,7 @@ def try_demo():
     session["role"] = "viewer"
     session["v"] = session_version()
     audit.add("demo_open", client_ip(), "viewer", "public")
+    ensure_demo_data()
     return redirect(url_for("home"))
 
 
@@ -1297,6 +1328,7 @@ def demo_login():
     session["role"] = "viewer"
     session["v"] = session_version()          # "Logout everyone" ends demos too
     audit.add("demo_open", client_ip(), "viewer")
+    ensure_demo_data()
     return redirect(url_for("home"))
 
 

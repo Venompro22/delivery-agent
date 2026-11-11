@@ -83,3 +83,20 @@ def test_visitor_cannot_train_the_ai(client):
     _viewer(client)
     assert client.post("/api/retrain").status_code == 403
     assert client.post("/api/feedback", json={}).status_code == 403
+
+
+def test_demo_fills_itself_for_a_visitor(client):
+    client.get("/try")
+    assert any(o.note.startswith(fileapp.DEMO_TAG) for o in fileapp.store.all())
+
+
+def test_old_demo_is_reset_but_real_orders_stay(client):
+    import time
+    real = Order(customer_name="Real", lat=30.2, lng=120.2)
+    old = Order(customer_name="Old", lat=30.2, lng=120.2,
+                note=fileapp.DEMO_TAG + " x", created_at=time.time() - 2 * 86400)
+    fileapp.store.add(real)
+    fileapp.store.add(old)
+    client.get("/try")
+    assert fileapp.store.get(old.id) is None          # stale demo gone
+    assert fileapp.store.get(real.id) is not None     # real order untouched
