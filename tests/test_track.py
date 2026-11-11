@@ -23,3 +23,14 @@ def test_track_gives_times_for_timeline_and_countdown(client):
     d = client.get(f"/api/track/{o.id}?k={fileapp.track_key(o.id)}").get_json()
     assert d["created_at"] and "eta_epoch" in d
     assert d["note"] == "2桶水 8号楼"            # internal demo tag never shown to customers
+
+
+def test_track_shows_shop_phone_only_when_set(client, monkeypatch):
+    import fileapp
+    from models import Order
+    o = Order(customer_name="P", lat=30.25, lng=119.72)
+    fileapp.store.add(o)
+    url = f"/api/track/{o.id}?k={fileapp.track_key(o.id)}"
+    assert client.get(url).get_json()["shop_phone"] == ""
+    monkeypatch.setenv("SHOP_PHONE", "13800000000")
+    assert client.get(url).get_json()["shop_phone"] == "13800000000"

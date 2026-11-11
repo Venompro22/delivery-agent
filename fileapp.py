@@ -1172,18 +1172,25 @@ def api_track(order_id):
     order = store.get(order_id)
     if not order:
         return jsonify({"ok": False, "error": "order not found"}), 404
+    resp = track_payload(order_id, order)
+    resp["shop_phone"] = os.environ.get("SHOP_PHONE", "")
+    return jsonify(resp)
+
+
+def track_payload(order_id, order) -> dict:
+    """What the tracking page shows for one order (without the shop contact)."""
     if order.status == OrderStatus.DELIVERED:
-        return jsonify({"ok": True, "status": "delivered", "name": order.customer_name, "rating": order.rating,
+        return ({"ok": True, "status": "delivered", "name": order.customer_name, "rating": order.rating,
                         "has_proof": bool(order.proof), "note": public_note(order),
                         "created_at": order.created_at, "delivered_at": getattr(order, "delivered_at", None)})
     if order.status == OrderStatus.CANCELLED:
-        return jsonify({"ok": True, "status": "cancelled", "name": order.customer_name})
+        return ({"ok": True, "status": "cancelled", "name": order.customer_name})
 
     # Where is this order in the current route?
     same_driver = [o for o in orders_for_request() if o.driver_id == order.driver_id]
     route = optimize_route(driver_for(order.driver_id), same_driver, geo)
     me = next((o for o in route if o.id == order_id), None)
-    return jsonify({
+    return ({
         "ok": True,
         "status": "on_the_way",
         "name": order.customer_name,
