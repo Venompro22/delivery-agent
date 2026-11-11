@@ -73,9 +73,9 @@ MAX_PROOF_BYTES = 5 * 1024 * 1024          # 5 MB per photo
 ALLOWED_PROOF_TYPES = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}
 
 
-# 👀 In demo (viewer) sessions, every page gets a banner, inputs are locked, and
-# any write the page tries is stopped in the browser with a clear message,
-# instead of buttons that silently do nothing.
+# 👀 In demo (viewer) sessions, every page gets a banner, controls a visitor can't
+# use are hidden, and writes outside the demo sandbox are stopped in the browser
+# with a clear message, instead of buttons that silently do nothing.
 VIEWER_SNIPPET = """
 <style>
   #demo-banner { position: fixed; top: 0; left: 0; right: 0; z-index: 99999;
@@ -90,7 +90,7 @@ VIEWER_SNIPPET = """
   button[onclick*="retrain" i],
   button[onclick*="logoutAll"], body:has(#log) #list button { display: none !important; }
 </style>
-<div id="demo-banner">👀 Demo — view only</div>
+<div id="demo-banner">Demo · sample data · 演示数据</div>
 <div id="demo-toast">This is a view-only demo 🙂</div>
 <script>
 (function () {
@@ -500,8 +500,8 @@ def set_driver_status(user_id):
     return jsonify({"ok": True})
 
 
-# 👀 Read-only "viewer" sessions for demos: anyone with the signed link sees the
-# dashboard but can change nothing and never reaches the security pages.
+# 👀 "Viewer" sessions for demos: a sandbox where visitors can try the AI and play
+# with demo orders, but never see real data, real accounts or the security pages.
 VIEWER_BLOCKED = ("/security", "/api/security-log", "/account")
 
 
@@ -546,7 +546,7 @@ def orders_for_request() -> list:
 @app.before_request
 def check_panic_mode():
     """🔴 Emergency modes, checked before anything else on every request."""
-    # 👀 viewers can look, never touch
+    # 👀 viewers play in the sandbox: demo orders only, never real data or accounts
     if session.get("role") == "viewer":
         if request.path in ("/login", "/signup"):
             session.clear()                     # leaving the demo to sign in for real
@@ -1319,7 +1319,7 @@ def ensure_demo_data() -> None:
 
 @app.route("/try")
 def try_demo():
-    """👀 Public demo entrance from the login page. Read-only, demo data only."""
+    """👀 Public demo entrance from the login page. A sandbox: visitors only ever touch demo data."""
     if os.environ.get("PUBLIC_DEMO", "1") != "1":
         return redirect(url_for("login"))
     session.clear()
@@ -1333,7 +1333,7 @@ def try_demo():
 
 @app.route("/demo")
 def demo_login():
-    """👀 Signed demo link: opens the dashboard read-only, no password needed."""
+    """👀 Signed demo link: opens the dashboard in the demo sandbox, no password needed."""
     given = request.args.get("k", "").encode()
     if not hmac.compare_digest(given, demo_key().encode()):
         return jsonify({"ok": False, "error": "not found"}), 404
