@@ -1,7 +1,7 @@
 #!/bin/bash
-# 🔐 Renew the Let's Encrypt certificate (every ~80 days). Same manual DNS steps as the first time.
-cd "$(dirname "$0")"
-certbot certonly --manual --preferred-challenges dns -d zhisong.home64.de \
-  --config-dir certs/le --work-dir certs/le/work --logs-dir certs/le/logs \
-  --register-unsafely-without-email --agree-tos
-launchctl kickstart -k gui/$(id -u)/com.youssef.zhisong-server
+# 🔐 Renews the certificate only when it's close to expiry (safe to run every day).
+cd "$(dirname "$0")" && export PATH="$PWD/.venv/bin:$PATH"
+certbot renew --config-dir certs/le --work-dir certs/le/work --logs-dir certs/le/logs \
+  --manual-auth-hook "$PWD/certbot-hooks/ipv64-auth.sh" \
+  --manual-cleanup-hook "$PWD/certbot-hooks/ipv64-cleanup.sh" \
+  --deploy-hook "launchctl kickstart -k gui/$(id -u)/com.youssef.zhisong-server" "$@"
