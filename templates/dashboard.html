@@ -33,20 +33,20 @@
     </nav>
 
     <div class="gps-row">
-      <button class="gps-btn" onclick="locateOnce()">📍 Use my location</button>
-      <button class="gps-btn" id="live-btn" onclick="toggleLive()">🛰️ Live GPS: off</button>
+      <button class="gps-btn" onclick="locateOnce()">Use my location</button>
+      <button class="gps-btn" id="live-btn" onclick="toggleLive()">Live GPS: off</button>
     </div>
     <div class="gps-status" id="gps-status"></div>
     {% if dev_mode %}
     <div class="gps-row">
       <button class="gps-btn demo-btn" onclick="loadDemo()">✨ Demo</button>
-      <button class="gps-btn demo-clear" onclick="clearDemo()">🧹 Clear demo</button>
+      <button class="gps-btn demo-clear" onclick="clearDemo()">Clear demo</button>
       <button class="gps-btn sim-btn" id="sim-btn" onclick="simulate()">▶️ Simulate</button>
     </div>
     {% endif %}
-        <textarea id="paste" rows="2" placeholder="📋 Paste a WeChat message here…" autocomplete="off"></textarea>
+        <textarea id="paste" rows="2" placeholder="Paste a WeChat message here…" autocomplete="off"></textarea>
     {% if dev_mode %}
-    <div class="chips"><span class="chips-label">💬 Try:</span>
+    <div class="chips"><span class="chips-label">Try:</span>
       <button class="chip" onclick="tryMsg(this)">我的水在哪里 13800138001</button>
       <button class="chip" onclick="tryMsg(this)">已送达 13900139002</button>
       <button class="chip" onclick="tryMsg(this)">堵车了 晚一点到</button>
@@ -54,7 +54,7 @@
       <button class="chip" onclick="tryMsg(this)">我要两桶水 文三路200号 下午5点前</button>
     </div>
     {% endif %}
-       <button onclick="handleMessage()">🤖 Handle message</button>
+       <button onclick="handleMessage()">Handle message</button>
     <div id="fb"></div>
     <div id="ai-history"></div>
     <details class="manual-order" id="manual-order">
@@ -62,7 +62,7 @@
     <input id="name" placeholder="Customer name" autocomplete="off"/>
     <input id="phone" placeholder="Phone (optional)" inputmode="tel" autocomplete="off"/>
     <input id="note" placeholder="Address / notes (optional) — e.g. Bldg 5, floor 3" maxlength="200" autocomplete="off"/>
-    <div class="hint">📍 Tap the map to set the location</div>
+    <div class="hint">Tap the map to set the location</div>
     <div class="coords">
       <input id="lat" placeholder="Latitude" inputmode="decimal" autocomplete="off"/>
       <input id="lng" placeholder="Longitude" inputmode="decimal" autocomplete="off"/>
@@ -256,52 +256,60 @@
         if (mins > 0) document.getElementById('promise').value = mins;
       }
       clearError();
-      showToast('✨ Filled! Now tap the map to set the location 📍');
+      showToast('✨ Filled! Now tap the map to set the location');
     }
     // ---------- 🤖 AI Inbox ----------
-    const INTENT_NAMES = {new_order: '📦 New order', cancel: '❌ Cancel', question: '🤔 Question',
-                          delivered: '✅ Delivered', delay: '⏰ Delay', not_home: '🏠 Not home'};
+    // Clean line icons for the route-card buttons
+const SVG = p => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
+const ICON = {
+  nav: SVG('<polygon points="3 11 22 2 13 21 11 13 3 11"/>'),
+  phone: SVG('<path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2z"/>'),
+  share: SVG('<path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/>'),
+};
+
+const INTENT_NAMES = {new_order: 'New order', cancel: 'Cancel', question: 'Question',
+                          delivered: 'Delivered', delay: 'Delay', not_home: 'Not home'};
     const aiHistory = [];
     let current = null;     // the message on the card right now
 
     function confColor(c) { return c >= 0.8 ? '#1f9d55' : c >= 0.6 ? '#f0a020' : '#e5484d'; }
 
     async function copyText(t) {
-      try { await navigator.clipboard.writeText(t); showToast('📋 Copied — paste it in WeChat'); }
+      try { await navigator.clipboard.writeText(t); showToast('Copied — paste it in WeChat'); }
       catch (e) { prompt('Copy this:', t); }
     }
 
     function actionHtml(r) {
       const name = esc(r.name || '');
       const reply = r.reply ? `<textarea class="ai-reply" rows="2" readonly>${esc(r.reply)}</textarea>` : '';
-      const copy = r.reply ? `<button onclick="copyText(current.r.reply)">📋 Copy reply</button>` : '';
+      const copy = r.reply ? `<button onclick="copyText(current.r.reply)">Copy reply</button>` : '';
       switch (r.action) {
         case 'fill_form':
-          return `<div class="ai-what">📦 Order form filled — <b>tap the map</b> to set the location 📍</div>`;
+          return `<div class="ai-what">Order form filled — <b>tap the map</b> to set the location</div>`;
         case 'cancel':
-          return `<div class="ai-what">❌ Wants to cancel <b>${name}</b>'s order</div>
+          return `<div class="ai-what">Wants to cancel <b>${name}</b>'s order</div>
             <div class="ai-actions"><button style="background:var(--danger)" onclick="doAction('cancel')">✕ Cancel the order</button></div>`;
         case 'reply':
-          return `<div class="ai-what">🤔 <b>${name}</b> is asking about the order</div>${reply}
+          return `<div class="ai-what"><b>${name}</b> is asking about the order</div>${reply}
             <div class="ai-actions">${copy}</div>`;
         case 'deliver':
-          return `<div class="ai-what">✅ Driver delivered <b>${name}</b>'s order</div>
+          return `<div class="ai-what">Driver delivered <b>${name}</b>'s order</div>
             <div class="ai-actions"><button style="background:var(--ok)" onclick="doAction('deliver')">✓ Mark as delivered</button></div>`;
         case 'notify_delay':
-          return `<div class="ai-what">⏰ The driver is running late</div>${reply}
+          return `<div class="ai-what">The driver is running late</div>${reply}
             <div class="ai-actions">${copy}</div>`;
         case 'call_customer':
-          return `<div class="ai-what">🏠 <b>${name}</b> is not home</div>
-            <div class="ai-actions"><a href="tel:${esc(r.phone)}">📞 Call ${esc(r.phone)}</a></div>`;
+          return `<div class="ai-what"><b>${name}</b> is not home</div>
+            <div class="ai-actions"><a href="tel:${esc(r.phone)}">Call ${esc(r.phone)}</a></div>`;
         default:
-          return `<div class="ai-what ai-human">🙋 Not sure (${esc(r.reason || '')}) — please check it yourself.</div>`;
+          return `<div class="ai-what ai-human">Not sure (${esc(r.reason || '')}) — please check it yourself.</div>`;
       }
     }
 
     function renderCard() {
       const {text, r} = current;
       const pct = Math.round((r.confidence || 0) * 100);
-      const who = r.sender === 'driver' ? '🚚 Driver' : '👤 Customer';
+      const who = r.sender === 'driver' ? 'Driver' : 'Customer';
       document.getElementById('fb').innerHTML = `<div class="ai-card">
         <div class="ai-head">
           <span class="ai-who">${who}</span>
@@ -309,10 +317,10 @@
           <span class="ai-conf">${pct}% sure</span>
         </div>
         <div class="ai-bar"><div style="width:${pct}%;background:${confColor(r.confidence || 0)}"></div></div>
-        <div class="ai-msg">💬 ${esc(text)}</div>
+        <div class="ai-msg">${esc(text)}</div>
         ${actionHtml(r)}
         <div class="ai-learn" id="ai-learn">Was I right?
-          <button class="ok" onclick="teach(current.r.intent)">✅ Right</button>
+          <button class="ok" onclick="teach(current.r.intent)">Right</button>
           <button class="fix" onclick="showFix()">✏️ Fix</button>
         </div>
       </div>`;
@@ -332,9 +340,9 @@
       });
       const d = await res.json();
       if (!res.ok) { showError(d.error || 'Could not save'); return; }
-      current.status = intent === current.r.intent ? '✅' : '✏️';
+      current.status = intent === current.r.intent ? '✓' : '✎';
       document.getElementById('ai-learn').innerHTML =
-        `📝 Learned! ${d.count} examples collected 🎡 — press <b>🧠 Retrain AI</b> below to use them`;
+        `Learned! ${d.count} examples collected — press <b>Retrain AI</b> below to use them`;
       renderHistory();
     }
 
@@ -343,13 +351,13 @@
       const res = await api(`/api/orders/${r.order_id}/${kind}`, {method: 'POST'});
       if (!res.ok) { showError((await res.json()).error || 'Action failed'); return; }
       await refresh();
-      showToast(kind === 'cancel' ? `✕ ${r.name}'s order cancelled` : `✅ ${r.name}'s order delivered`);
+      showToast(kind === 'cancel' ? `✕ ${r.name}'s order cancelled` : `${r.name}'s order delivered`);
       current.status = kind === 'cancel' ? '✕' : '✓';
       renderHistory();
       if (kind === 'cancel' && r.reply) {
         document.querySelector('#fb .ai-actions').innerHTML =
           `<textarea class="ai-reply" rows="2" readonly>${esc(r.reply)}</textarea>
-           <button onclick="copyText(current.r.reply)">📋 Copy reply</button>`;
+           <button onclick="copyText(current.r.reply)">Copy reply</button>`;
       } else {
         document.querySelector('#fb .ai-actions').innerHTML = '<span>✔ Done</span>';
       }
@@ -357,21 +365,21 @@
 
     function renderHistory() {
       const rows = aiHistory.slice(0, 8).map(h => {
-        const who = h.r.sender === 'driver' ? '🚚' : '👤';
+        const who = h.r.sender === 'driver' ? 'Driver' : 'Customer';
         return `<div class="hist-row"><span class="t">${h.time}</span><span>${who}</span>
           <span>${INTENT_NAMES[h.r.intent] || h.r.intent}</span><span>${h.status || ''}</span>
           <span class="m">${esc(h.text)}</span></div>`;
       }).join('');
-      document.getElementById('ai-history').innerHTML = `<div class="hist-head">🤖 AI inbox
-        <button onclick="retrainAI()">🧠 Retrain AI</button></div>${rows ||
-        '<div class="hist-row"><span class="t">Paste a WeChat message above 👆</span></div>'}`;
+      document.getElementById('ai-history').innerHTML = `<div class="hist-head">AI inbox
+        <button onclick="retrainAI()">Retrain AI</button></div>${rows ||
+        '<div class="hist-row"><span class="t">Paste a WeChat message above</span></div>'}`;
     }
 
     async function retrainAI() {
-      showToast('🧠 Training…');
+      showToast('Training…');
       const res = await api('/api/retrain', {method: 'POST'});
       const d = await res.json();
-      showToast(res.ok ? `🧠 AI retrained on ${d.examples} examples (${d.from_feedback} taught by you) 🎉`
+      showToast(res.ok ? `AI retrained on ${d.examples} examples (${d.from_feedback} taught by you)`
                        : (d.error || 'Retrain failed'));
     }
 
@@ -401,7 +409,7 @@
       if (typeof knownIds !== 'undefined') d.ids.forEach(id => knownIds.add(id));   // no "new order" beeps
       lastStopCount = -1;          // zoom the map to fit the new route
       await refresh();
-      showToast(`✨ ${d.ids.length} demo orders added — watch the route 🗺️`);
+      showToast(`✨ ${d.ids.length} demo orders added — watch the route`);
     }
 
     async function clearDemo() {
@@ -409,7 +417,7 @@
       const d = await res.json();
       lastStopCount = -1;
       await refresh();
-      showToast(`🧹 ${d.removed} demo orders removed`);
+      showToast(`${d.removed} demo orders removed`);
     }
 
     // ---------- ▶️ Simulation: the driver drives the route by himself ----------
@@ -421,13 +429,13 @@
       if (simRunning) { simRunning = false; return; }          // second click = stop
       simRunning = true;
       btn.classList.add('on');
-      btn.textContent = '⏹ Stop';
+      btn.textContent = 'Stop';
       try {
         while (simRunning) {
           const data = await (await api('/api/route')).json();
-          if (!data.stops.length) { showToast('🏁 All orders delivered!'); break; }
+          if (!data.stops.length) { showToast('All orders delivered!'); break; }
           const stop = data.stops[0], from = data.driver, STEPS = 10;
-          for (let i = 1; i <= STEPS && simRunning; i++) {          // 🚚 glide toward the next stop
+          for (let i = 1; i <= STEPS && simRunning; i++) {          // glide toward the next stop
             const lat = from.lat + (stop.lat - from.lat) * i / STEPS;
             const lng = from.lng + (stop.lng - from.lng) * i / STEPS;
             await api('/api/driver/location', {
@@ -438,8 +446,8 @@
             await sleep(600);
           }
           if (!simRunning) break;
-          await api(`/api/orders/${stop.id}/deliver`, {method: 'POST'});   // ✅ arrived
-          showToast(`✅ ${stop.name} delivered`);
+          await api(`/api/orders/${stop.id}/deliver`, {method: 'POST'});   // arrived
+          showToast(`${stop.name} delivered`);
           await refresh();
           await sleep(1000);
         }
@@ -471,9 +479,9 @@
     // Tell the user where the new order went, and bring it into view
     function highlightNew(id) {
       const card = document.querySelector(`.stop[data-id="${id}"]`);
-      if (!card) { showToast('✅ Order added'); return; }
+      if (!card) { showToast('Order added'); return; }
       const pos = [...document.querySelectorAll('.stop')].indexOf(card) + 1;
-      showToast(`✅ Order added — stop #${pos} in the route`);
+      showToast(`Order added — stop #${pos} in the route`);
       card.scrollIntoView({behavior: 'smooth', block: 'center'});
       card.classList.add('flash');
       setTimeout(() => card.classList.remove('flash'), 1700);
@@ -487,11 +495,11 @@
 
     function gpsError(err) {
       if (!window.isSecureContext) {
-        gpsStatus('⚠️ GPS needs HTTPS — open the dashboard with the ngrok link.');
+        gpsStatus('GPS needs a secure (HTTPS) connection.');
       } else if (err && err.code === 1) {
-        gpsStatus('⚠️ Location permission denied — allow it in your browser settings.');
+        gpsStatus('Location permission denied — allow it in your browser settings.');
       } else {
-        gpsStatus('⚠️ Could not get your location. Try again outside / with GPS on.');
+        gpsStatus('Could not get your location. Try again outside / with GPS on.');
       }
     }
 
@@ -523,9 +531,9 @@
         method: 'POST', headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({lat, lng}),
       });
-      if (!res.ok) { gpsStatus('⚠️ Server rejected the location.'); return; }
+      if (!res.ok) { gpsStatus('Server rejected the location.'); return; }
       lastSent = Date.now();
-      gpsStatus(`📍 You are here (±${acc} m) · ${new Date().toLocaleTimeString()}`);
+      gpsStatus(`You are here (±${acc} m) · ${new Date().toLocaleTimeString()}`);
       lastStopCount = -1;
       refresh();
     }
@@ -543,13 +551,13 @@
         navigator.geolocation.clearWatch(watchId);
         watchId = null;
         btn.classList.remove('on');
-        btn.textContent = '🛰️ Live GPS: off';
+        btn.textContent = 'Live GPS: off';
         gpsStatus('Live GPS stopped.');
         return;
       }
       if (!navigator.geolocation || !window.isSecureContext) { gpsError(); return; }
       btn.classList.add('on');
-      btn.textContent = '🛰️ Live GPS: on';
+      btn.textContent = 'Live GPS: on';
       gpsStatus('Starting live GPS…');
       watchId = navigator.geolocation.watchPosition(pos => {
         if (Date.now() - lastSent > 20000) sendLocation(pos);
@@ -588,7 +596,7 @@
       const url = `${location.origin}/track/${id}?k=${key}`;
       try {
         await navigator.clipboard.writeText(url);
-        alert('Tracking link copied ✅ ' + url);
+        alert('Tracking link copied ' + url);
       } catch (e) {
         prompt('Copy this tracking link for the customer:', url);
       }
@@ -628,7 +636,7 @@
     function notify(msg) {
       showToast(msg);
       if (window.Notification && Notification.permission === 'granted') {
-        new Notification('🚚 智送管家', {body: msg});
+        new Notification('智送管家', {body: msg});
       }
     }
 
@@ -640,10 +648,10 @@
       if (!alertsReady) { alertsReady = true; return; }   // first load: stay quiet
       if (lateNow.length) {
         beep(440, 400);
-        notify(`⏰ LATE: ${lateNow.map(s => s.name).join(', ')}`);
+        notify(`LATE: ${lateNow.map(s => s.name).join(', ')}`);
       } else if (newOnes.length) {
         beep(880, 150);
-        notify(`📦 New order: ${newOnes.map(s => s.name).join(', ')}`);
+        notify(`New order: ${newOnes.map(s => s.name).join(', ')}`);
       }
     }
 
@@ -748,11 +756,11 @@
         html += `<div class="${cls}" data-id="${s.id}">
           <b>${s.sequence}. ${esc(s.name)}</b>${badge}
           <div class="meta">ETA ${s.eta} &middot; +${s.leg_km} km${promise}</div>
-          ${s.note ? `<div class="note">📝 ${esc(s.note)}</div>` : ''}
+          ${s.note ? `<div class="note">${esc(s.note)}</div>` : ''}
           <div class="actions">
-            <a class="nav" href="${navUrl(s)}" target="_blank" rel="noopener">🧭 Navigate</a>
-            ${s.phone ? `<a class="nav call" href="tel:${s.phone}">📞 Call</a>` : ''}
-            <button class="share" onclick="share('${s.id}', '${s.track_key}')">🔗 Share</button>${driverSelect(s)}
+            <a class="nav" href="${navUrl(s)}" target="_blank" rel="noopener">${ICON.nav}Navigate</a>
+            ${s.phone ? `<a class="nav call" href="tel:${s.phone}">${ICON.phone}Call</a>` : ''}
+            <button class="share" onclick="share('${s.id}', '${s.track_key}')">${ICON.share}Share</button>${driverSelect(s)}
             <button onclick="deliver('${s.id}')">✓ Delivered</button>
           </div>
         </div>`;
@@ -763,7 +771,7 @@
       document.getElementById('stat-finish').textContent = data.summary.finish;
       document.getElementById('stat-done').textContent = data.summary.delivered;
       document.getElementById('stops').innerHTML = html ||
-        '<div class="empty">No orders yet.<br>Tap the map to add one 👆</div>';
+        '<div class="empty">No orders yet.<br>Tap the map to add one</div>';
 
       if (pts.length > 1) {
         L.polyline(pts, {color: '#ffffff', weight: 8, opacity: 0.85}).addTo(layer);

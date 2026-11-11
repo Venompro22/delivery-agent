@@ -141,3 +141,4 @@ a.back:hover { color: var(--text); border-color: var(--muted); background: var(-
 
 /* SVG icons inside buttons */
 .btn svg { width: 16px; height: 16px; vertical-align: -3px; margin-right: 6px; }
+.nav svg, .share svg { width: 16px; height: 16px; vertical-align: -3px; margin-right: 6px; }

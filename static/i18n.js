@@ -82,7 +82,7 @@
     "Signup refused": "注册被拒", "Logged out everyone": "已全部退出",
     "Change password": "修改密码", "Current password": "当前密码", "Password": "密码",
     "New password (8+ characters)": "新密码（至少8位）", "Save": "保存", "Back": "返回",
-    "Password changed ✅": "密码已修改 ✅", "Current password is wrong.": "当前密码错误。",
+    "Password changed ": "密码已修改 ", "Current password is wrong.": "当前密码错误。",
     "Your password was reset. Choose a new one to continue.": "你的密码已被重置，请设置新密码后继续。",
     "Reset password": "重置密码", "Password changed": "密码已修改", "Password reset": "密码已重置",
     "password is too long": "密码太长",
