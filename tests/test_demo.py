@@ -100,3 +100,12 @@ def test_old_demo_is_reset_but_real_orders_stay(client):
     client.get("/try")
     assert fileapp.store.get(old.id) is None          # stale demo gone
     assert fileapp.store.get(real.id) is not None     # real order untouched
+
+
+def test_demo_rebuilt_when_a_promise_is_long_past(client):
+    import time
+    late = Order(customer_name="Late", lat=30.2, lng=120.2, note=fileapp.DEMO_TAG + " x",
+                 promised_by=time.time() - 3600)
+    fileapp.store.add(late)
+    client.get("/try")
+    assert fileapp.store.get(late.id) is None

@@ -5,7 +5,11 @@
   <meta charset="utf-8"/>
   <link rel="icon" type="image/svg+xml" href="/static/logo.svg?v={{ asset_v }}"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>智送管家</title>
+  <title>订单追踪 · 智送管家</title>
+  <meta name="description" content="实时查看您的订单配送进度和预计送达时间"/>
+  <meta property="og:title" content="订单追踪 · 智送管家"/>
+  <meta property="og:description" content="实时查看您的订单配送进度和预计送达时间"/>
+  <meta name="format-detection" content="telephone=no"/>
   <link rel="stylesheet" href="/static/css/track.css?v={{ asset_v }}"/>
   <link rel="stylesheet" href="/static/vendor/inter/inter.css?v={{ asset_v }}" media="print"/>
   <link rel="stylesheet" href="/static/pro.css?v={{ asset_v }}"/>
@@ -16,7 +20,7 @@
     <span>智送管家</span>
   </header>
   <main class="card" id="card" data-order="{{ order_id }}">
-    <div class="icon">🚚</div>
+    <div class="icon"></div>
   </main>
   <script src="/static/font-load.js?v={{ asset_v }}"></script>
   <script>
@@ -33,8 +37,8 @@
         before: n => `${n} stop${n === 1 ? '' : 's'} before you`, promised: 'Promised by',
         updates: 'Updates automatically', conn: 'Connection problem', retry: 'Retrying…',
         s1: 'Order received', s2: 'On the way', s3: 'Delivered', you: 'You',
-        rateMe: 'How did it go? Tap to rate', thanks: 'Thanks for the feedback! \ud83d\ude4c',
-        proofAlt: 'Delivery photo'},
+        rateMe: 'How did it go? Tap to rate', thanks: 'Thanks for the feedback!',
+        proofAlt: 'Delivery photo', about: m => `About ${m} min`, soon: 'Arriving any moment', expected: 'expected', late: 'Running a little late, the driver is hurrying', shop: 'Shop'},
       zh: {
         title: '订单追踪', notFound: '未找到订单', checkLink: '请检查您的追踪链接。',
         delivered: '已送达！', enjoy: '祝您愉快', cancelled: '订单已取消', hi: '您好',
@@ -42,8 +46,8 @@
         before: n => `前面还有 ${n} 站`, promised: '承诺送达',
         updates: '自动更新', conn: '网络连接问题', retry: '正在重试…',
         s1: '已接单', s2: '配送中', s3: '已送达', you: '您',
-        rateMe: '给骑手打个分吧', thanks: '谢啦~ \ud83d\ude4c',
-        proofAlt: '送达照片'},
+        rateMe: '给骑手打个分吧', thanks: '谢啦~',
+        proofAlt: '送达照片', about: m => `约 ${m} 分钟`, soon: '马上就到', expected: '预计', late: '稍有延迟，骑手正在加速赶来', shop: '商家'},
     }[lang === 'en' ? 'en' : 'zh'];
     document.title = T.title + ' · 智送管家';
 
@@ -53,17 +57,66 @@
       }[c]));
     }
 
+    // Clean line icons (same look on every phone, unlike emojis)
+    const SVG = p => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
+    const ICON = {
+      check: SVG('<circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>'),
+      x: SVG('<circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/>'),
+      help: SVG('<circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><path d="M12 17h.01"/>'),
+      offline: SVG('<path d="M12 20h.01"/><path d="M8.5 16.4a5 5 0 0 1 7 0"/><path d="M5 12.9a10 10 0 0 1 5.2-2.7"/><path d="M2 8.8a15 15 0 0 1 4.2-2.6"/><path d="m2 2 20 20"/>'),
+      box: SVG('<path d="M21 8a2 2 0 0 0-1-1.7l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.7l7 4a2 2 0 0 0 2 0l7-4a2 2 0 0 0 1-1.7Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/>'),
+      truck: SVG('<path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.6a1 1 0 0 0-.2-.6l-3.5-4.4A1 1 0 0 0 17.5 8H14"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/>'),
+    };
+
     // Order received → On the way → Delivered
-    function steps(current) {
+    function steps(current, times) {
+      times = times || [];
       return '<ol class="steps">' + [T.s1, T.s2, T.s3].map((s, i) =>
-        `<li class="${i < current ? 'done' : i === current ? 'now' : ''}">${s}</li>`).join('') + '</ol>';
+        `<li class="${i < current ? 'done' : i === current ? 'now' : ''}">${s}${times[i] ? `<span class="t">${esc(times[i])}</span>` : ''}</li>`).join('') + '</ol>';
     }
 
     // 🚚 ● ● ● You  (one dot per stop before the customer, at most 5)
     function queue(n) {
       const dots = '<span class="stop"></span>'.repeat(Math.min(n, 5));
       const more = n > 5 ? `<span class="more">+${n - 5}</span>` : '';
-      return `<div class="queue"><span class="truck">🚚</span>${dots}${more}<span class="you">${T.you}</span></div>`;
+      return `<div class="queue"><span class="truck">${ICON.truck}</span>${dots}${more}<span class="you">${T.you}</span></div>`;
+    }
+
+    // Seconds since 1970 -> "10:31" on the customer's phone
+    function hm(sec) {
+      return sec ? new Date(sec * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+    }
+
+    // Live countdown: "约 8 分钟", refreshed every 30 s between server updates
+    let etaEpoch = null;
+    function minsLeft() {
+      if (!etaEpoch) return '';
+      const m = Math.round((etaEpoch - Date.now() / 1000) / 60);
+      return m <= 1 ? T.soon : T.about(m);
+    }
+    function tick() {
+      const el = document.getElementById('countdown');
+      if (el) el.textContent = minsLeft() || el.textContent;
+      const p = tripPct(), fill = document.getElementById('trip-fill'), truck = document.getElementById('trip-truck');
+      if (p != null && fill && truck) { fill.style.width = p + '%'; truck.style.left = p + '%'; }
+    }
+
+    // How far along the trip is, by time: 5% right after ordering, 95% at the expected arrival
+    let createdAt = null;
+    function tripPct() {
+      if (!createdAt || !etaEpoch || etaEpoch <= createdAt) return null;
+      const p = (Date.now() / 1000 - createdAt) / (etaEpoch - createdAt);
+      return Math.round(Math.min(0.95, Math.max(0.05, p)) * 100);
+    }
+
+    // Shop ━━━━━🚚───── You
+    function progressBar() {
+      const p = tripPct();
+      if (p == null) return '';
+      return `<div class="trip">
+        <div class="trip-bar"><div class="trip-fill" id="trip-fill" style="width:${p}%"></div>
+          <span class="trip-truck" id="trip-truck" style="left:${p}%">${ICON.truck}</span></div>
+        <div class="trip-ends"><span>${T.shop}</span><span>${T.you}</span></div></div>`;
     }
 
     let timer = null;
@@ -72,7 +125,7 @@
     function stars(current) {
       // If already rated, show it locked. Otherwise show clickable empty stars.
       if (current) {
-        const filled = '\u2b50'.repeat(current) + '\u2606'.repeat(5 - current);
+        const filled = '\u2605'.repeat(current) + '\u2606'.repeat(5 - current);
         return `<div class="rated">${filled}<div class="sub">${T.thanks}</div></div>`;
       }
       let html = `<div class="sub">${T.rateMe}</div><div class="stars">`;
@@ -102,7 +155,7 @@
         const res = await fetch('/api/track/' + encodeURIComponent(orderId) + '?k=' + encodeURIComponent(k));
         const d = await res.json();
         if (!d.ok) {
-          card.innerHTML = `<div class="icon">❓</div><h1>${T.notFound}</h1><div class="sub">${T.checkLink}</div>`;
+          card.innerHTML = `<div class="icon muted">${ICON.help}</div><h1>${T.notFound}</h1><div class="sub">${T.checkLink}</div>`;
           return stop();
         }
         if (d.status === 'delivered') {
@@ -110,32 +163,38 @@
           const photo = d.has_proof
             ? `<img class="proof" src="/api/track/${encodeURIComponent(orderId)}/proof?k=${encodeURIComponent(k)}" alt="${T.proofAlt}"/>`
             : '';
-          card.innerHTML = `<div class="icon">✅</div><h1 class="done">${T.delivered}</h1>
-            <div class="sub">${T.enjoy}, ${esc(d.name)} 🎉</div>${steps(3)}
+          card.innerHTML = `<div class="icon ok">${ICON.check}</div><h1 class="done">${T.delivered}</h1>
+            <div class="sub">${T.enjoy}, ${esc(d.name)}</div>${d.note ? `<div class="item">${ICON.box}${esc(d.note)}</div>` : ''}${steps(3, [hm(d.created_at), '', hm(d.delivered_at)])}
             ${photo}
             <div id="rate-box">${stars(d.rating)}</div>`;
           return stop();
         }
         if (d.status === 'cancelled') {
-          card.innerHTML = `<div class="icon">⛔</div><h1>${T.cancelled}</h1>`;
+          card.innerHTML = `<div class="icon bad">${ICON.x}</div><h1>${T.cancelled}</h1>`;
           return stop();
         }
+        etaEpoch = d.eta_epoch;
+        createdAt = d.created_at;
         const n = d.stops_before;
         card.innerHTML = `
-          <h1>${T.hi}, ${esc(d.name)} 👋</h1>
+          <h1>${T.hi}, ${esc(d.name)}</h1>
           <div class="sub">${T.onWay}</div>
-          ${steps(1)}
-          <div class="label">${T.eta}</div>
-          <div class="big">${esc(d.eta)}</div>
-          ${d.promise ? `<div class="sub">${T.promised} ${esc(d.promise)}</div>` : ''}
-          ${n == null ? '' : queue(n) + `<div class="queue-text">${n === 0 ? T.next + ' 🎯' : T.before(n)}</div>`}
+          ${d.note ? `<div class="item">${ICON.box}${esc(d.note)}</div>` : ''}
+          ${steps(1, [hm(d.created_at), '', d.eta_epoch ? T.expected + ' ' + hm(d.eta_epoch) : ''])}
+          <div class="label">${T.eta} ${esc(d.eta)}</div>
+          <div class="big" id="countdown">${minsLeft() || esc(d.eta)}</div>
+          ${d.promise ? (d.promised_epoch && d.promised_epoch < Date.now() / 1000
+            ? `<div class="late">${T.late}</div>`
+            : `<div class="sub">${T.promised} ${esc(d.promise)}</div>`) : ''}
+          ${progressBar()}${n == null ? '' : `<div class="queue-text">${n === 0 ? T.next : T.before(n)}</div>`}
           <div class="foot">${T.updates} · ${new Date().toLocaleTimeString()}</div>`;
       } catch (e) {
-        card.innerHTML = `<div class="icon">📡</div><h1>${T.conn}</h1><div class="sub">${T.retry}</div>`;
+        card.innerHTML = `<div class="icon muted">${ICON.offline}</div><h1>${T.conn}</h1><div class="sub">${T.retry}</div>`;
       }
     }
     load();
     timer = setInterval(load, 15000);
+    setInterval(tick, 30000);
   </script>
   <script src="/static/i18n.js?v={{ asset_v }}"></script>
   <script src="/static/pro.js?v={{ asset_v }}"></script>

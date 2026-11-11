@@ -72,3 +72,35 @@ h1.done { color: var(--ok); }
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
   object-fit: cover;
 }
+
+/* Time under each step of the timeline */
+.steps li .t { display: block; font-size: 11px; font-weight: 400; opacity: .65; margin-top: 2px; }
+/* What the customer ordered */
+.item { display: inline-block; margin: 10px auto 4px; padding: 8px 12px; border-radius: 10px;
+  background: rgba(127, 127, 127, .12); font-size: 14px; }
+
+/* 1) The time always sits on its own line under the step name */
+.steps li { flex-wrap: wrap; }
+.steps li .t { width: 100%; }
+/* 2) Honest, calm message when the promised time has passed */
+.late { margin: 8px auto; padding: 8px 12px; border-radius: 10px; display: inline-block;
+  background: rgba(245, 158, 11, .15); color: #d97706; font-size: 14px; font-weight: 500; }
+
+/* SVG icons instead of emojis */
+.icon svg { width: 52px; height: 52px; }
+.icon.ok { color: #16a34a; }
+.icon.bad { color: #dc2626; }
+.icon.muted { opacity: .55; }
+.item svg { width: 16px; height: 16px; vertical-align: -3px; margin-right: 6px; }
+.truck svg { width: 20px; height: 20px; vertical-align: middle; }
+.rated, .star { color: #f59e0b; }
+
+/* Shop ━━━🚚─── You : trip progress */
+.trip { margin: 18px 4px 6px; }
+.trip-bar { position: relative; height: 6px; border-radius: 3px; background: rgba(127, 127, 127, .2); }
+.trip-fill { height: 100%; border-radius: 3px; background: #3b82f6; transition: width 1s ease; }
+.trip-truck { position: absolute; top: 50%; transform: translate(-50%, -50%); display: flex;
+  padding: 5px; border-radius: 50%; background: #3b82f6; color: #fff; transition: left 1s ease;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, .45); }
+.trip-truck svg { width: 16px; height: 16px; }
+.trip-ends { display: flex; justify-content: space-between; margin-top: 10px; font-size: 12px; opacity: .6; }

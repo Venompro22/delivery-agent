@@ -1157,6 +1157,12 @@ def list_orders():
     return jsonify(items)
 
 
+def public_note(order) -> str:
+    """The order note as the customer should see it (internal demo tag removed)."""
+    note = order.note or ""
+    return note[len(DEMO_TAG):].strip() if note.startswith(DEMO_TAG) else note.strip()
+
+
 @app.route("/api/track/<order_id>")
 def api_track(order_id):
     """Public info for ONE order — safe to share with the customer."""
@@ -1167,7 +1173,9 @@ def api_track(order_id):
     if not order:
         return jsonify({"ok": False, "error": "order not found"}), 404
     if order.status == OrderStatus.DELIVERED:
-        return jsonify({"ok": True, "status": "delivered", "name": order.customer_name, "rating": order.rating, "has_proof": bool(order.proof)})
+        return jsonify({"ok": True, "status": "delivered", "name": order.customer_name, "rating": order.rating,
+                        "has_proof": bool(order.proof), "note": public_note(order),
+                        "created_at": order.created_at, "delivered_at": getattr(order, "delivered_at", None)})
     if order.status == OrderStatus.CANCELLED:
         return jsonify({"ok": True, "status": "cancelled", "name": order.customer_name})
 
@@ -1183,6 +1191,10 @@ def api_track(order_id):
         "stops_before": (me.sequence - 1) if me else None,
         "eta": fmt(me.eta_epoch) if me else "--",
         "promise": fmt(order.promised_by) if order.promised_by else None,
+        "eta_epoch": me.eta_epoch if me else None,     # raw seconds, for the live countdown
+        "promised_epoch": order.promised_by,
+        "created_at": order.created_at,
+        "note": public_note(order),
         "lat": order.lat,
         "lng": order.lng,
     })
@@ -1295,7 +1307,9 @@ def ensure_demo_data() -> None:
     """Visitors always land on a full, fresh demo: refill when empty, reset daily.
     Real orders are never touched."""
     demo = [o for o in store.all() if (o.note or "").startswith(DEMO_TAG)]
-    if demo and min(o.created_at or 0 for o in demo) < time.time() - DEMO_MAX_AGE:
+    now = time.time()
+    late = any(o.status == OrderStatus.PENDING and o.promised_by and o.promised_by < now - 1800 for o in demo)
+    if demo and (late or min(o.created_at or 0 for o in demo) < now - DEMO_MAX_AGE):
         store.orders = [o for o in store.orders if not (o.note or "").startswith(DEMO_TAG)]
         store.save()
         demo = []
