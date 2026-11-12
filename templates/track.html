@@ -17,11 +17,12 @@
 <body>
   <header class="brand">
     <img src="/static/logo.svg?v={{ asset_v }}" alt=""/>
-    <span>智送管家</span>
+    <span>{{ shop_name }}</span>
   </header>
   <main class="card" id="card" data-order="{{ order_id }}">
     <div class="icon"></div>
   </main>
+  <div class="powered">Powered by 智送管家</div>
   <script src="/static/font-load.js?v={{ asset_v }}"></script>
   <script>
     const orderId = document.getElementById('card').dataset.order;

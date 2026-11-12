@@ -1380,7 +1380,7 @@ def panic_switch(mode):
 
 @app.route("/track/<order_id>")
 def track_page(order_id):
-    return render_template("track.html", order_id=order_id)
+    return render_template("track.html", order_id=order_id, shop_name=os.environ.get("SHOP_NAME", "智送管家"))
 
 
 @app.route("/driver")
