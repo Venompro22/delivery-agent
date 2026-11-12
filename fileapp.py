@@ -773,8 +773,9 @@ def add_order():
     if nearest:
         order.driver_id = nearest["id"]
     _store_add(order)
-    print(f"📦 New order: {order.customer_name} ({order.lat}, {order.lng})", flush=True)
-    return jsonify({"ok": True, "id": order.id})
+    url = f"{request.host_url.rstrip('/')}/track/{order.id}?k={track_key(order.id)}"
+    reply = f"好的，订单收到啦！点这里实时查看配送进度：{url}"
+    return jsonify({"ok": True, "id": order.id, "track_url": url, "reply": reply})
 
 
 @app.route("/api/orders/<order_id>/deliver", methods=["POST"])

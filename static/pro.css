@@ -142,3 +142,24 @@ a.back:hover { color: var(--text); border-color: var(--muted); background: var(-
 /* SVG icons inside buttons */
 .btn svg { width: 16px; height: 16px; vertical-align: -3px; margin-right: 6px; }
 .nav svg, .share svg { width: 16px; height: 16px; vertical-align: -3px; margin-right: 6px; }
+
+/* Ready-to-send WeChat reply after adding an order */
+#reply-card { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 9999;
+  width: min(92vw, 420px); padding: 14px 16px; border-radius: 14px; background: #1f2937; color: #f9fafb;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .35); font-size: 14px; }
+.rc-title { font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; opacity: .7; margin-bottom: 6px; }
+.rc-text { line-height: 1.5; word-break: break-all; }
+.rc-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+.rc-actions button { border: 0; border-radius: 8px; padding: 8px 16px; font-weight: 600; cursor: pointer; }
+.rc-copy { background: #3b82f6; color: #fff; }
+.rc-close { background: transparent; color: #d1d5db; }
+/* Ready-to-send WeChat reply after adding an order */
+#reply-card { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 9999;
+  width: min(92vw, 420px); padding: 14px 16px; border-radius: 14px; background: #1f2937; color: #f9fafb;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .35); font-size: 14px; }
+.rc-title { font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; opacity: .7; margin-bottom: 6px; }
+.rc-text { line-height: 1.5; word-break: break-all; }
+.rc-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+.rc-actions button { border: 0; border-radius: 8px; padding: 8px 16px; font-weight: 600; cursor: pointer; }
+.rc-copy { background: #3b82f6; color: #fff; }
+.rc-close { background: transparent; color: #d1d5db; }

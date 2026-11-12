@@ -34,3 +34,21 @@ def test_track_shows_shop_phone_only_when_set(client, monkeypatch):
     assert client.get(url).get_json()["shop_phone"] == ""
     monkeypatch.setenv("SHOP_PHONE", "13800000000")
     assert client.get(url).get_json()["shop_phone"] == "13800000000"
+
+
+def test_new_order_comes_with_a_ready_wechat_reply(client):
+    import fileapp
+    with client.session_transaction() as s:
+        s["auth"] = True; s["role"] = "owner"; s["v"] = fileapp.session_version()
+    d = client.post("/api/orders", json={"name": "N", "lat": 30.25, "lng": 119.72}).get_json()
+    assert d["ok"] and "/track/" + d["id"] in d["track_url"] and "k=" in d["track_url"]
+    assert d["track_url"] in d["reply"]
+
+
+def test_new_order_comes_with_a_ready_wechat_reply(client):
+    import fileapp
+    with client.session_transaction() as s:
+        s["auth"] = True; s["role"] = "owner"; s["v"] = fileapp.session_version()
+    d = client.post("/api/orders", json={"name": "N", "lat": 30.25, "lng": 119.72}).get_json()
+    assert d["ok"] and "/track/" + d["id"] in d["track_url"] and "k=" in d["track_url"]
+    assert d["track_url"] in d["reply"]
