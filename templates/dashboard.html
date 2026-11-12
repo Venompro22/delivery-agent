@@ -234,7 +234,6 @@
       await refresh();
       highlightNew(data.id);
       if (data.reply) showReply(data.reply);
-      if (data.reply) showReply(data.reply);
     }
         async function parseMessage() {
       const text = document.getElementById('paste').value.trim();
@@ -493,20 +492,6 @@ const INTENT_NAMES = {new_order: 'New order', cancel: 'Cancel', question: 'Quest
       box.querySelector('.rc-close').onclick = () => box.remove();
     }
    
-        // After adding an order: a ready WeChat reply with the tracking link, one tap to copy
-    function showReply(text) {
-      let box = document.getElementById('reply-card');
-      if (!box) {
-        box = document.createElement('div');
-        box.id = 'reply-card';
-        document.body.appendChild(box);
-      }
-      box.innerHTML = `<div class="rc-title">Reply to the customer</div>
-        <div class="rc-text">${esc(text)}</div>
-        <div class="rc-actions"><button class="rc-close">Close</button><button class="rc-copy">Copy</button></div>`;
-      box.querySelector('.rc-copy').onclick = () => { copyText(text); box.remove(); };
-      box.querySelector('.rc-close').onclick = () => box.remove();
-    }
     // Tell the user where the new order went, and bring it into view
     function highlightNew(id) {
       const card = document.querySelector(`.stop[data-id="${id}"]`);
