@@ -1,0 +1,22 @@
+/* Landing page: what a first-time visitor sees */
+body.landing { display: flex; flex-direction: column; align-items: center;
+  min-height: 100vh; padding: 32px 16px 48px; box-sizing: border-box; }
+
+.lp-top { display: flex; align-items: center; gap: 10px; font-size: 18px; font-weight: 700; margin-bottom: 32px; }
+.lp-top img { width: 32px; height: 32px; }
+
+.hero { max-width: 520px; text-align: center; margin-bottom: 32px; }
+.hero h1 { font-size: 30px; line-height: 1.2; letter-spacing: -.02em; margin: 0 0 12px; }
+.hero p { font-size: 16px; line-height: 1.5; color: var(--faint); margin: 0 0 24px; }
+.cta { display: inline-block; padding: 14px 28px; border-radius: 12px; background: var(--accent);
+  color: #fff; font-size: 16px; font-weight: 600; text-decoration: none; }
+.cta-note { margin-top: 8px; font-size: 12px; color: var(--faint); }
+
+.features { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px;
+  width: 100%; max-width: 640px; margin-bottom: 36px; }
+.feature { padding: 16px; border: 1px solid var(--border); border-radius: 14px; }
+.feature svg { width: 22px; height: 22px; color: var(--accent); }
+.feature h3 { font-size: 14px; margin: 10px 0 4px; }
+.feature p { font-size: 13px; line-height: 1.4; color: var(--faint); margin: 0; }
+
+.staff { font-size: 16px; text-align: center; margin: 0 0 12px; }

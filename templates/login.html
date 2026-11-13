@@ -5,15 +5,54 @@
   <meta charset="utf-8"/>
   <link rel="icon" type="image/svg+xml" href="/static/logo.svg?v={{ asset_v }}"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Login - 智送管家</title>
+  <title>智送管家 · Smart delivery for local shops</title>
+  <meta name="description" content="微信订单、智能路线、实时追踪，一站搞定"/>
   <link rel="stylesheet" href="/static/css/auth.css?v={{ asset_v }}"/>
+  <link rel="stylesheet" href="/static/css/landing.css?v={{ asset_v }}"/>
   <link rel="stylesheet" href="/static/vendor/inter/inter.css?v={{ asset_v }}" media="print"/>
   <link rel="stylesheet" href="/static/pro.css?v={{ asset_v }}"/>
 </head>
-<body>
+<body class="landing">
+  {# First visit: explain the app in 5 seconds. Failed login / 2FA step: only the form. #}
+  {% if not error and not need_code %}
+  <header class="lp-top">
+    <img src="/static/logo.svg?v={{ asset_v }}" alt=""/>
+    <span>智送管家</span>
+  </header>
+
+  <section class="hero">
+    <h1>Deliveries made simple for local shops</h1>
+    <p>WeChat orders, smart routes and live tracking — in one place</p>
+    <a class="cta" href="/try">Try the demo</a>
+    <div class="cta-note">No account needed</div>
+  </section>
+
+  <section class="features">
+    <div class="feature">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      <h3>AI reads WeChat orders</h3>
+      <p>Paste a message, the order fills itself</p>
+    </div>
+    <div class="feature">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="19" r="3"/><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"/><circle cx="18" cy="5" r="3"/></svg>
+      <h3>Smart routes</h3>
+      <p>The best order of stops, automatically</p>
+    </div>
+    <div class="feature">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+      <h3>Live tracking</h3>
+      <p>Customers follow their order in real time</p>
+    </div>
+  </section>
+  {% endif %}
+
   <form class="card" method="post" action="/login">
+    {% if error or need_code %}
     <img class="brand-logo" src="/static/logo.svg?v={{ asset_v }}" alt=""/>
     <h1>智送管家</h1>
+    {% else %}
+    <h2 class="staff">Staff login</h2>
+    {% endif %}
     <div class="sub">Drivers: log in with your phone number</div>
     {% if error %}<div class="error">{{ error }}</div>{% endif %}
     <input type="tel" name="phone" placeholder="Phone (drivers)" inputmode="numeric" maxlength="11" autocomplete="username"/>
@@ -24,8 +63,6 @@
     {% endif %}
     <button type="submit">Log in</button>
     <a class="link" href="/signup">New driver? Create an account</a>
-    <div class="or">or</div>
-    <a class="demo-entry" href="/try">Just looking? <b>Try the demo</b> — no account needed</a>
   </form>
   <script src="/static/font-load.js?v={{ asset_v }}"></script>
   <script src="/static/i18n.js?v={{ asset_v }}"></script>
