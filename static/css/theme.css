@@ -1,0 +1,35 @@
+/* Shared look for every inside page: aurora background, glass cards, depth */
+body.app::before { content: ""; position: fixed; inset: -20%; z-index: -2; pointer-events: none;
+  background: radial-gradient(40% 35% at 15% 15%, rgba(59, 130, 246, .20), transparent 70%),
+              radial-gradient(35% 30% at 85% 10%, rgba(16, 185, 129, .14), transparent 70%),
+              radial-gradient(40% 35% at 60% 90%, rgba(139, 92, 246, .14), transparent 70%);
+  animation: app-aurora 20s ease-in-out infinite alternate; }
+body.app::after { content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background-image: radial-gradient(rgba(255, 255, 255, .05) 1px, transparent 1px); background-size: 22px 22px;
+  -webkit-mask-image: linear-gradient(180deg, #000, transparent 70%); mask-image: linear-gradient(180deg, #000, transparent 70%); }
+@keyframes app-aurora { from { transform: translate(0, 0) rotate(0deg); } to { transform: translate(-4%, 3%) rotate(6deg); } }
+
+/* Glass cards */
+body.app :is(.stat, .kpi, .chart-box, .count, .card, .me-card),
+body.app:has(#log) .row {
+  border: 1px solid rgba(255, 255, 255, .08); border-radius: 16px;
+  background: rgba(15, 23, 42, .55); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .35); transition: transform .15s ease, box-shadow .2s ease; }
+body.app :is(.stat, .kpi, .count, .me-card, .me-order):hover {
+  box-shadow: 0 16px 40px rgba(0, 0, 0, .45), 0 0 0 1px rgba(96, 165, 250, .35); }
+
+/* Big numbers glow a little */
+body.app :is(.stat .num, .kpi .n) {
+  background: linear-gradient(180deg, #ffffff 30%, #93c5fd); -webkit-background-clip: text; background-clip: text; color: transparent; }
+
+/* Glass top bar that stays visible while scrolling */
+body.app :is(.top, .me-top) { position: sticky; top: 0; z-index: 50;
+  background: rgba(10, 12, 18, .55); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); }
+
+/* Soft page entrance */
+body.app :is(.wrap, .me-wrap) { animation: app-in .45s ease both; }
+@keyframes app-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+@media (prefers-reduced-motion: reduce) {
+  body.app::before, body.app :is(.wrap, .me-wrap) { animation: none; }
+}

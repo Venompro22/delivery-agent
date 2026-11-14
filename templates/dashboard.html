@@ -12,8 +12,9 @@
   <link rel="stylesheet" href="/static/css/dashboard.css?v={{ asset_v }}"/>
   <link rel="stylesheet" href="/static/vendor/inter/inter.css?v={{ asset_v }}" media="print"/>
   <link rel="stylesheet" href="/static/pro.css?v={{ asset_v }}"/>
+  <link rel="stylesheet" href="/static/css/theme.css?v={{ asset_v }}"/>
 </head>
-<body>
+<body class="app">
   <div id="sidebar">
     <div class="brand">
       <div class="logo"><svg width="22" height="22" viewBox="17 3 30 52" fill="none" stroke="#fff" stroke-width="4.5" stroke-linejoin="round"><path d="M32 54s-15-13.5-15-25a15 15 0 1 1 30 0c0 11.5-15 25-15 25z"/><path d="M32 20l2.4 5.1 5.1 2.4-5.1 2.4L32 35l-2.4-5.1-5.1-2.4 5.1-2.4z" fill="#fff" stroke="none"/></svg></div>
@@ -811,5 +812,6 @@ const INTENT_NAMES = {new_order: 'New order', cancel: 'Cancel', question: 'Quest
   </script>
   <script src="/static/i18n.js?v={{ asset_v }}"></script>
   <script src="/static/pro.js?v={{ asset_v }}"></script>
+  <script src="/static/app.js?v={{ asset_v }}"></script>
 </body>
 </html>

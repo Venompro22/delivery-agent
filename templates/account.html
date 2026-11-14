@@ -9,8 +9,9 @@
   <link rel="stylesheet" href="/static/vendor/inter/inter.css?v={{ asset_v }}" media="print"/>
   <link rel="stylesheet" href="/static/pro.css?v={{ asset_v }}"/>
   <link rel="stylesheet" href="/static/css/auth.css?v={{ asset_v }}"/>
+  <link rel="stylesheet" href="/static/css/theme.css?v={{ asset_v }}"/>
 </head>
-<body>
+<body class="app">
   <form class="card" method="post" action="/account">
     <h1>Change password</h1>
     {% if must_change %}
@@ -28,5 +29,6 @@
   <script src="/static/font-load.js?v={{ asset_v }}"></script>
   <script src="/static/i18n.js?v={{ asset_v }}"></script>
   <script src="/static/pro.js?v={{ asset_v }}"></script>
+  <script src="/static/app.js?v={{ asset_v }}"></script>
 </body>
 </html>
