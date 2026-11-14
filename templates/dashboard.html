@@ -164,8 +164,35 @@
     map.on('moveend zoomend', syncEsri);
     map.on('layeradd', () => setTimeout(syncEsri, 0));   // also after a style switch
     syncEsri();
-    L.control.layers(mapStyles, null, {position: 'topleft'}).addTo(map);
-    map.on('baselayerchange', e => { try { localStorage.setItem('mapStyle', e.name); } catch (err) {} });
+    // 🗺️ Map style switcher: glass buttons with a real preview of each style (tile of Lin'an, z13)
+    const PREVIEW = {
+      Light: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x=6820&y=3373&z=13',
+      Dim: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x=6820&y=3373&z=13',
+      Satellite: 'https://webst01.is.autonavi.com/appmaptile?style=6&x=6820&y=3373&z=13',
+    };
+    const StyleSwitch = L.Control.extend({
+      options: {position: 'topleft'},
+      onAdd() {
+        const box = L.DomUtil.create('div', 'style-switch');
+        Object.keys(mapStyles).forEach(name => {
+          const b = L.DomUtil.create('button', `style-opt s-${name.toLowerCase()}${name === mapStyle ? ' on' : ''}`, box);
+          b.type = 'button';
+          b.innerHTML = `<img src="${PREVIEW[name]}" alt=""/><span>${name}</span>`;
+          L.DomEvent.on(b, 'click', ev => {
+            L.DomEvent.stop(ev);
+            if (name === mapStyle) return;
+            map.removeLayer(mapStyles[mapStyle]);
+            mapStyle = name;
+            mapStyles[name].addTo(map);
+            try { localStorage.setItem('mapStyle', name); } catch (e) {}
+            box.querySelectorAll('.style-opt').forEach(x => x.classList.toggle('on', x === b));
+          });
+        });
+        L.DomEvent.disableClickPropagation(box);
+        return box;
+      },
+    });
+    new StyleSwitch().addTo(map);
     L.control.scale({imperial: false}).addTo(map);
     let layer = L.layerGroup().addTo(map);
     let pickMarker = null;
@@ -179,17 +206,47 @@
     let lastSignature = '';
     const seenIds = new Set();
 
+    // 📍 Click the map → a quick form right there: name, phone, note, promise → Add
     map.on('click', e => {
-      const lat = e.latlng.lat.toFixed(5);
-      const lng = e.latlng.lng.toFixed(5);
+      const lat = e.latlng.lat.toFixed(5), lng = e.latlng.lng.toFixed(5);
       document.getElementById('lat').value = lat;
-      document.getElementById('manual-order').open = true;
       document.getElementById('lng').value = lng;
       if (pickMarker) map.removeLayer(pickMarker);
+      const form = L.DomUtil.create('div', 'quick-add');
+      form.innerHTML = `
+        <div class="qa-title">New order here</div>
+        <input class="qa-name" placeholder="Customer name" autocomplete="off"/>
+        <input class="qa-phone" placeholder="Phone (optional)" inputmode="tel" autocomplete="off"/>
+        <input class="qa-note" placeholder="Address / notes (optional)" maxlength="200" autocomplete="off"/>
+        <div class="qa-promise"><button type="button" data-m="">No promise</button><button type="button" data-m="30">30 min</button><button type="button" data-m="60">1 h</button></div>
+        <div class="qa-error"></div>
+        <button type="button" class="qa-add">Add order</button>`;
+      let promise = '';
+      const chips = form.querySelectorAll('.qa-promise button');
+      chips[0].classList.add('on');
+      chips.forEach(b => b.onclick = () => {
+        promise = b.dataset.m;
+        chips.forEach(x => x.classList.toggle('on', x === b));
+      });
+      // Reuse the existing addOrder(): fill its fields, then call it
+      form.querySelector('.qa-add').onclick = async () => {
+        document.getElementById('name').value = form.querySelector('.qa-name').value;
+        document.getElementById('phone').value = form.querySelector('.qa-phone').value;
+        document.getElementById('note').value = form.querySelector('.qa-note').value;
+        document.getElementById('promise').value = promise;
+        await addOrder();
+        const err = document.getElementById('error');
+        if (err.style.display === 'block') {
+          form.querySelector('.qa-error').textContent = err.textContent;
+        } else if (pickMarker) {
+          map.removeLayer(pickMarker); pickMarker = null;
+        }
+      };
+      L.DomEvent.disableClickPropagation(form);
       pickMarker = L.marker([lat, lng]).addTo(map)
-        .bindPopup('New order here').openPopup();
+        .bindPopup(form, {className: 'glass-popup', minWidth: 240}).openPopup();
       clearError();
-      document.getElementById('name').focus();
+      setTimeout(() => form.querySelector('.qa-name').focus(), 50);
     });
 
     function showError(msg) {
