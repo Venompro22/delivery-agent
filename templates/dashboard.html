@@ -202,6 +202,55 @@
       if (res.status === 401) { location.href = '/login'; throw new Error('login required'); }
       return res;
     }
+    // Route line: white casing, glowing blue line, light dashes flowing toward the next stop
+    function routeLines(path) {
+      return [
+        L.polyline(path, {color: '#ffffff', weight: 8, opacity: 0.85}),
+        L.polyline(path, {color: '#2d6cdf', weight: 4, opacity: 0.95, className: 'route-glow'}),
+        L.polyline(path, {color: '#bfdbfe', weight: 3, opacity: 0.9, dashArray: '2 16', lineCap: 'round',
+                          className: 'route-flow', interactive: false}),
+      ];
+    }
+    // 🛣️ Real roads: ask our server (OSRM + cache). null = keep the straight line.
+    const roadKey = pts => pts.map(p => (+p[0]).toFixed(5) + ',' + (+p[1]).toFixed(5)).join(';');
+    async function roadPath(pts) {
+      try {
+        const d = await (await api('/api/road?pts=' + encodeURIComponent(roadKey(pts)))).json();
+        return d.ok && d.road ? d.path : null;
+      } catch (e) { return null; }
+    }
+    // Draw straight at once, then morph onto the roads as soon as they're known (instant next time)
+    const roadCache = new Map();
+    function drawRoute(pts) {
+      const key = roadKey(pts);
+      const lines = routeLines(roadCache.get(key) || pts);
+      lines.forEach(l => l.addTo(layer));
+      if (roadCache.has(key) || pts.length < 2) return;
+      roadPath(pts).then(path => {
+        if (!path) return;
+        if (roadCache.size > 200) roadCache.clear();
+        roadCache.set(key, path);
+        if (lines.every(l => layer.hasLayer(l))) lines.forEach(l => l.setLatLngs(path));
+      });
+    }
+    // n points spread evenly (by distance) along a path, the last one exactly at its end
+    function pointsAlong(path, n) {
+      const dist = (a, b) => Math.hypot(a[0] - b[0], (a[1] - b[1]) * Math.cos(a[0] * Math.PI / 180));
+      const seg = [];
+      let total = 0;
+      for (let i = 1; i < path.length; i++) { const len = dist(path[i - 1], path[i]); seg.push(len); total += len; }
+      if (!total) return [path[path.length - 1]];
+      const out = [];
+      for (let k = 1; k <= n; k++) {
+        let want = total * k / n, i = 0;
+        while (i < seg.length - 1 && want > seg[i]) { want -= seg[i]; i++; }
+        const t = seg[i] ? Math.min(1, want / seg[i]) : 1;
+        const a = path[i], b = path[i + 1];
+        out.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]);
+      }
+      return out;
+    }
+
     let lastStopCount = -1;
     let lastSignature = '';
     const seenIds = new Set();
@@ -494,10 +543,12 @@ const INTENT_NAMES = {new_order: 'New order', cancel: 'Cancel', question: 'Quest
         while (simRunning) {
           const data = await (await api('/api/route')).json();
           if (!data.stops.length) { showToast('All orders delivered!'); break; }
-          const stop = data.stops[0], from = data.driver, STEPS = 10;
-          for (let i = 1; i <= STEPS && simRunning; i++) {          // glide toward the next stop
-            const lat = from.lat + (stop.lat - from.lat) * i / STEPS;
-            const lng = from.lng + (stop.lng - from.lng) * i / STEPS;
+          const stop = data.stops[0], from = data.driver;
+          // 🛣️ Drive along the real road (straight line if routing is unavailable)
+          const straight = [[from.lat, from.lng], [stop.lat, stop.lng]];
+          const steps = pointsAlong((await roadPath(straight)) || straight, 12);
+          for (let i = 0; i < steps.length && simRunning; i++) {
+            const [lat, lng] = steps[i];
             await api('/api/driver/location', {
               method: 'POST', headers: {'Content-Type': 'application/json'},
               body: JSON.stringify({lat, lng}),
@@ -849,11 +900,7 @@ const INTENT_NAMES = {new_order: 'New order', cancel: 'Cancel', question: 'Quest
         '<div class="empty">No orders yet.<br>Tap the map to add one</div>';
 
       if (pts.length > 1) {
-        L.polyline(pts, {color: '#ffffff', weight: 8, opacity: 0.85}).addTo(layer);
-        L.polyline(pts, {color: '#2d6cdf', weight: 4, opacity: 0.95, className: 'route-glow'}).addTo(layer);
-        // Light dashes flowing along the route: shows the direction and makes the map feel alive
-        L.polyline(pts, {color: '#bfdbfe', weight: 3, opacity: 0.9, dashArray: '2 16', lineCap: 'round',
-                         className: 'route-flow', interactive: false}).addTo(layer);
+        drawRoute(pts);
         if (data.stops.length !== lastStopCount) {
           map.fitBounds(pts, {padding: [40, 40]});
         }

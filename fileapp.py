@@ -506,6 +506,43 @@ def claim_order():
     return jsonify({"ok": True})
 
 
+import requests  # noqa: E402
+from collections import OrderedDict  # noqa: E402
+from geo import wgs84_to_gcj02, gcj02_to_wgs84  # noqa: E402
+
+_ROAD_CACHE: "OrderedDict[str, list]" = OrderedDict()
+
+
+@app.route("/api/road")
+@login_required
+def road_path():
+    """🛣️ The road between points, so routes follow streets instead of straight lines.
+    Points come and go in GCJ-02 (Gaode); OSRM works in WGS-84. Cached. If OSRM is slow
+    or down we answer the straight line, so the map never breaks."""
+    try:
+        pts = [tuple(float(v) for v in p.split(",")) for p in request.args.get("pts", "").split(";") if p]
+    except ValueError:
+        return bad_request("pts must look like lat,lng;lat,lng")
+    if not 2 <= len(pts) <= 25 or any(len(p) != 2 or not (-90 <= p[0] <= 90 and -180 <= p[1] <= 180) for p in pts):
+        return bad_request("send 2 to 25 valid points")
+    key = ";".join(f"{a:.5f},{b:.5f}" for a, b in pts)
+    if key in _ROAD_CACHE:
+        _ROAD_CACHE.move_to_end(key)
+        return jsonify({"ok": True, "path": _ROAD_CACHE[key], "road": True})
+    coords = ";".join("{1:.6f},{0:.6f}".format(*gcj02_to_wgs84(a, b)) for a, b in pts)
+    try:
+        r = requests.get(f"https://router.project-osrm.org/route/v1/driving/{coords}",
+                         params={"overview": "full", "geometries": "geojson"}, timeout=4)
+        line = r.json()["routes"][0]["geometry"]["coordinates"]       # [[lng, lat], ...] in WGS-84
+        path = [[round(v, 6) for v in wgs84_to_gcj02(lat, lng)] for lng, lat in line]
+    except Exception:
+        return jsonify({"ok": True, "path": [list(p) for p in pts], "road": False})
+    _ROAD_CACHE[key] = path
+    if len(_ROAD_CACHE) > 500:
+        _ROAD_CACHE.popitem(last=False)
+    return jsonify({"ok": True, "path": path, "road": True})
+
+
 @app.route("/drivers")
 @owner_required
 def drivers_page():

@@ -110,3 +110,40 @@ class GeoService:
 if __name__ == "__main__":
     # People's Square -> Lujiazui (Shanghai)
     print(f"Distance: {haversine_km(31.2290, 121.4750, 31.2397, 121.4998):.2f} km")
+
+# 🇨🇳 China map coordinates. Gaode tiles (and our pins) use GCJ-02, a deliberately shifted
+# system; OSRM and GPS use WGS-84. Without converting, roads appear ~500 m off the streets.
+_A, _EE = 6378245.0, 0.00669342162296594323
+
+
+def _tlat(x: float, y: float) -> float:
+    r = -100.0 + 2.0 * x + 3.0 * y + 0.2 * y * y + 0.1 * x * y + 0.2 * math.sqrt(abs(x))
+    r += (20.0 * math.sin(6.0 * x * math.pi) + 20.0 * math.sin(2.0 * x * math.pi)) * 2.0 / 3.0
+    r += (20.0 * math.sin(y * math.pi) + 40.0 * math.sin(y / 3.0 * math.pi)) * 2.0 / 3.0
+    r += (160.0 * math.sin(y / 12.0 * math.pi) + 320.0 * math.sin(y * math.pi / 30.0)) * 2.0 / 3.0
+    return r
+
+
+def _tlng(x: float, y: float) -> float:
+    r = 300.0 + x + 2.0 * y + 0.1 * x * x + 0.1 * x * y + 0.1 * math.sqrt(abs(x))
+    r += (20.0 * math.sin(6.0 * x * math.pi) + 20.0 * math.sin(2.0 * x * math.pi)) * 2.0 / 3.0
+    r += (20.0 * math.sin(x * math.pi) + 40.0 * math.sin(x / 3.0 * math.pi)) * 2.0 / 3.0
+    r += (150.0 * math.sin(x / 12.0 * math.pi) + 300.0 * math.sin(x / 30.0 * math.pi)) * 2.0 / 3.0
+    return r
+
+
+def wgs84_to_gcj02(lat: float, lng: float) -> tuple:
+    """GPS / OSRM coordinates → Gaode map coordinates."""
+    dlat, dlng = _tlat(lng - 105.0, lat - 35.0), _tlng(lng - 105.0, lat - 35.0)
+    radlat = lat / 180.0 * math.pi
+    magic = 1 - _EE * math.sin(radlat) ** 2
+    sqrtmagic = math.sqrt(magic)
+    dlat = (dlat * 180.0) / ((_A * (1 - _EE)) / (magic * sqrtmagic) * math.pi)
+    dlng = (dlng * 180.0) / (_A / sqrtmagic * math.cos(radlat) * math.pi)
+    return lat + dlat, lng + dlng
+
+
+def gcj02_to_wgs84(lat: float, lng: float) -> tuple:
+    """Gaode map coordinates → GPS / OSRM coordinates (accurate to well under a metre)."""
+    glat, glng = wgs84_to_gcj02(lat, lng)
+    return lat - (glat - lat), lng - (glng - lng)
