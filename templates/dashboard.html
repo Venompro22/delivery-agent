@@ -180,12 +180,13 @@
           b.innerHTML = `<img src="${PREVIEW[name]}" alt=""/><span>${name}</span>`;
           L.DomEvent.on(b, 'click', ev => {
             L.DomEvent.stop(ev);
-            if (name === mapStyle) return;
+            if (name === mapStyle) { box.classList.toggle('open'); return; }
             map.removeLayer(mapStyles[mapStyle]);
             mapStyle = name;
             mapStyles[name].addTo(map);
             try { localStorage.setItem('mapStyle', name); } catch (e) {}
             box.querySelectorAll('.style-opt').forEach(x => x.classList.toggle('on', x === b));
+            box.classList.remove('open');
           });
         });
         L.DomEvent.disableClickPropagation(box);
@@ -219,18 +220,47 @@
         return d.ok && d.road ? d.path : null;
       } catch (e) { return null; }
     }
-    // Draw straight at once, then morph onto the roads as soon as they're known (instant next time)
+    // The route lives in its own layer (not cleared every refresh), so it never flickers
+    const routeLayer = L.layerGroup().addTo(map);
+    let route = null;        // {stops: "key of the stops", path: [...], lines: [...], want: "key we wait for"}
     const roadCache = new Map();
+    function setRoute(path) {
+      if (!route.lines) { route.lines = routeLines(path); route.lines.forEach(l => l.addTo(routeLayer)); }
+      else route.lines.forEach(l => l.setLatLngs(path));
+      route.path = path;
+    }
+    // Cut the road we already know at the truck's position (null if the truck is ~60 m off it)
+    function trimPath(path, p) {
+      if (!path || path.length < 2) return null;
+      let best = -1, bestD = Infinity;
+      path.forEach((q, i) => {
+        const dd = Math.hypot(q[0] - p[0], (q[1] - p[1]) * Math.cos(p[0] * Math.PI / 180));
+        if (dd < bestD) { bestD = dd; best = i; }
+      });
+      return bestD > 0.0006 ? null : [p, ...path.slice(best + 1)];
+    }
     function drawRoute(pts) {
-      const key = roadKey(pts);
-      const lines = routeLines(roadCache.get(key) || pts);
-      lines.forEach(l => l.addTo(layer));
-      if (roadCache.has(key) || pts.length < 2) return;
+      if (pts.length < 2) { routeLayer.clearLayers(); route = null; return; }
+      const key = roadKey(pts), stops = roadKey(pts.slice(1));
+      // Same stops (or the first one just got delivered): keep the road we have, trimmed
+      const sameRoad = route && (route.stops === stops || route.stops.endsWith(';' + stops) || route.stops === stops);
+      if (sameRoad) {
+        const cut = trimPath(route.path, pts[0]);
+        if (cut) { route.stops = stops; setRoute(cut); return; }
+      } else {
+        routeLayer.clearLayers();
+        route = {stops, path: null, lines: null, want: key};
+        setRoute(roadCache.get(key) || pts);
+        if (roadCache.has(key)) return;
+      }
+      route.stops = stops;
+      route.want = key;
+      if (roadCache.has(key)) { setRoute(roadCache.get(key)); return; }
       roadPath(pts).then(path => {
         if (!path) return;
         if (roadCache.size > 200) roadCache.clear();
         roadCache.set(key, path);
-        if (lines.every(l => layer.hasLayer(l))) lines.forEach(l => l.setLatLngs(path));
+        if (route && route.want === key) setRoute(path);
       });
     }
     // n points spread evenly (by distance) along a path, the last one exactly at its end

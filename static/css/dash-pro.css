@@ -76,3 +76,10 @@ body.app .leaflet-bar, body.app .leaflet-control-layers { border: 1px solid rgba
 .qa-error:empty { display: none; }
 .qa-add { width: 100%; margin: 0; padding: 10px; border: 0; border-radius: 10px; color: #fff; font-weight: 600; cursor: pointer;
   background: linear-gradient(135deg, #3b82f6, #10b981); box-shadow: 0 8px 22px rgba(59, 130, 246, .35); }
+
+/* Style switcher folds into one small button; hover (or tap) to see the others */
+.style-switch .style-opt:not(.on) { display: none; }
+.style-switch:hover .style-opt, .style-switch.open .style-opt { display: flex; }
+.style-switch .style-opt.on span { display: none; }
+.style-switch:hover .style-opt.on span, .style-switch.open .style-opt.on span { display: inline; }
+.style-switch .style-opt img { width: 40px; height: 40px; }
