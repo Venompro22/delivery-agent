@@ -83,3 +83,21 @@ body.app .leaflet-bar, body.app .leaflet-control-layers { border: 1px solid rgba
 .style-switch .style-opt.on span { display: none; }
 .style-switch:hover .style-opt.on span, .style-switch.open .style-opt.on span { display: inline; }
 .style-switch .style-opt img { width: 40px; height: 40px; }
+
+/* Regular customer card */
+.reg-badge { display: inline-block; margin-right: 6px; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700;
+  color: #052e16; background: linear-gradient(135deg, #4ade80, #22d3ee); vertical-align: 1px; }
+.reg-place { margin-top: 6px; font-size: 13px; opacity: .85; }
+.reg-add { color: #fff !important; border: 0 !important; background: linear-gradient(135deg, #3b82f6, #10b981) !important;
+  box-shadow: 0 8px 22px rgba(59, 130, 246, .35); }
+
+/* What the AI understood, coloured by kind */
+mark.ent { padding: 1px 5px; border-radius: 6px; color: inherit; font-weight: 600; }
+.ent-qty, .ent-product { background: rgba(74, 222, 128, .22); box-shadow: inset 0 -2px 0 #4ade80; }
+.ent-address { background: rgba(167, 139, 250, .22); box-shadow: inset 0 -2px 0 #a78bfa; }
+.ent-time { background: rgba(251, 146, 60, .22); box-shadow: inset 0 -2px 0 #fb923c; }
+.ent-phone { background: rgba(96, 165, 250, .22); box-shadow: inset 0 -2px 0 #60a5fa; }
+.ent-name { background: rgba(244, 114, 182, .22); box-shadow: inset 0 -2px 0 #f472b6; }
+.ent-usual { background: rgba(34, 211, 238, .22); box-shadow: inset 0 -2px 0 #22d3ee; }
+.ai-many { display: inline-block; margin-top: 6px; padding: 3px 9px; border-radius: 999px; font-size: 12px; font-weight: 600;
+  color: #fde68a; background: rgba(250, 204, 21, .15); }

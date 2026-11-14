@@ -1027,6 +1027,25 @@ def agent_message():
             me = next((r for r in route if r.id == order.id), None)
             if me:
                 result["reply"] = f"您好{order.customer_name}，您的订单预计 {fmt(me.eta_epoch)}  送达"
+
+    # 🎨 What the AI understood (for highlighting) and how many orders the message holds
+    from order_parser import parse_message as _parse, parse_many as _many
+    result["entities"] = _parse(text)["entities"]
+    result["many"] = len(_many(text))
+
+    # 🧠 A regular customer? Remember who they are, where "老地方" is, and how much they usually take.
+    from order_parser import find_phone, find_address
+    import customers
+    phone = find_phone(text)
+    known = customers.profile(phone, orders_for_request())
+    if known and (result.get("intent") == "new_order" or customers.wants_usual_place(text)):
+        last = known["last_order"]
+        result["regular"] = {
+            "name": known["name"], "count": known["count"], "phone": phone,
+            "note": public_note(last), "lat": last.lat, "lng": last.lng,
+            "usual_place": customers.wants_usual_place(text) or not find_address(text),
+            "qty": customers.quantity(text) or known["usual_qty"],
+        }
     return jsonify(result)
 FEEDBACK_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "feedback.jsonl")
 

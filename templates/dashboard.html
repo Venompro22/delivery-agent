@@ -281,6 +281,47 @@
       return out;
     }
 
+
+    // 🧠 A regular customer: show what the AI remembers, and add the order in one click
+    const QTY_RE = /([一二两三四五六七八九十]|\d{1,2})\s*[桶箱瓶件]/;
+    function regularNote(g) {
+      const place = (g.note || '').replace(QTY_RE, '').trim();
+      return `${g.qty ? g.qty + '桶 ' : ''}${place}`.trim();
+    }
+    function regularCard(g) {
+      return `<div class="ai-what ai-regular">
+          <span class="reg-badge">常客</span><b>${esc(g.name)}</b> · order #${g.count + 1}
+          ${g.usual_place ? `<div class="reg-place">${esc(regularNote(g))}</div>` : ''}
+        </div>
+        <div class="ai-actions">
+          ${g.usual_place ? '<button class="reg-add" onclick="addRegular()">Add order — 1 click</button>' : ''}
+          <button onclick="showToast('Tap the map to set the location')">Other place</button>
+        </div>`;
+    }
+    async function addRegular() {
+      const g = current.r.regular;
+      document.getElementById('name').value = g.name;
+      document.getElementById('phone').value = g.phone;
+      document.getElementById('note').value = regularNote(g);
+      document.getElementById('lat').value = g.lat;
+      document.getElementById('lng').value = g.lng;
+      document.getElementById('promise').value = '';
+      await addOrder();
+    }
+
+    // 🎨 Show what the AI understood: each piece of the message gets a coloured highlight
+    function highlight(text, ents) {
+      let out = '', at = 0;
+      (ents || []).forEach(e => {
+        if (e.start < at) return;
+        out += esc(text.slice(at, e.start)) +
+               `<mark class="ent ent-${esc(e.type)}" title="${esc(e.type)}">${esc(text.slice(e.start, e.end))}</mark>`;
+        at = e.end;
+      });
+      return out + esc(text.slice(at));
+    }
+    const understood = () => (typeof current !== 'undefined' && current && current.r) ? current.r : {};
+
     let lastStopCount = -1;
     let lastSignature = '';
     const seenIds = new Set();
@@ -424,6 +465,7 @@ const INTENT_NAMES = {new_order: 'New order', cancel: 'Cancel', question: 'Quest
       const copy = r.reply ? `<button onclick="copyText(current.r.reply)">Copy reply</button>` : '';
       switch (r.action) {
         case 'fill_form':
+          if (r.regular) return regularCard(r.regular);
           return `<div class="ai-what">Order form filled — <b>tap the map</b> to set the location</div>`;
         case 'cancel':
           return `<div class="ai-what">Wants to cancel <b>${name}</b>'s order</div>
@@ -456,7 +498,7 @@ const INTENT_NAMES = {new_order: 'New order', cancel: 'Cancel', question: 'Quest
           <span class="ai-conf">${pct}% sure</span>
         </div>
         <div class="ai-bar"><div style="width:${pct}%;background:${confColor(r.confidence || 0)}"></div></div>
-        <div class="ai-msg">${esc(text)}</div>
+        <div class="ai-msg">${highlight(text, understood().entities)}</div>${understood().many > 1 ? `<div class="ai-many">${understood().many} orders in this message</div>` : ""}
         ${actionHtml(r)}
         <div class="ai-learn" id="ai-learn">Was I right?
           <button class="ok" onclick="teach(current.r.intent)">Right</button>
