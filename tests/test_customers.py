@@ -35,3 +35,14 @@ def test_customer_claims_an_order_with_its_tracking_link(client):
 def test_drivers_list_never_shows_customers(client):
     _customer(client)
     assert all(u["role"] == "driver" for u in fileapp.users.all())
+
+
+def test_customer_dashboard_has_the_map(client):
+    _customer(client)
+    html = client.get("/me").get_data(as_text=True)
+    assert 'id="map"' in html and "Kehu" in html
+
+
+def test_signup_lets_people_choose_customer_or_driver(client):
+    html = client.get("/signup").get_data(as_text=True)
+    assert 'value="customer"' in html and 'value="driver"' in html

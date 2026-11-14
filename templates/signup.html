@@ -12,12 +12,22 @@
 </head>
 <body>
   <form class="card" method="post" action="/signup">
-    <h1>Create a driver account</h1>
+    <h1>Create an account</h1>
+    {% set r = role if (error or done) else 'customer' %}
     {% if done %}
-      <div class="ok"><b>Account created!</b><br/>Wait for the owner to approve it, then log in.</div>
-      <a class="link" href="/login">Back to login</a>
+      {% if role == 'customer' %}
+        <div class="ok"><b>Welcome!</b><br/>Your account is ready.</div>
+        <a class="link" href="/login">Log in</a>
+      {% else %}
+        <div class="ok"><b>Account created!</b><br/>Wait for the owner to approve it, then log in.</div>
+        <a class="link" href="/login">Back to login</a>
+      {% endif %}
     {% else %}
-      <div class="sub">Your account will be active after the owner approves it.</div>
+      <div class="seg">
+        <label><input type="radio" name="role" value="customer" {% if r == 'customer' %}checked{% endif %}/><span>Customer</span></label>
+        <label><input type="radio" name="role" value="driver" {% if r == 'driver' %}checked{% endif %}/><span>Driver</span></label>
+      </div>
+      <div class="sub">Customers can use it right away. Drivers wait for the owner's approval.</div>
       {% if error %}<div class="error">{{ error }}</div>{% endif %}
       <input type="text" name="name" placeholder="Full name" maxlength="40" autocomplete="name" required/>
       <input type="tel" name="phone" placeholder="Phone number" inputmode="numeric" maxlength="11" autocomplete="username" required/>

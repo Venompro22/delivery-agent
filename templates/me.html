@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta name="google" content="notranslate"/>
+  <meta charset="utf-8"/>
+  <link rel="icon" type="image/svg+xml" href="/static/logo.svg?v={{ asset_v }}"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>我的订单 · 智送管家</title>
+  <link rel="stylesheet" href="/static/vendor/leaflet/leaflet.css?v={{ asset_v }}"/>
+  <link rel="stylesheet" href="/static/vendor/inter/inter.css?v={{ asset_v }}" media="print"/>
+  <link rel="stylesheet" href="/static/pro.css?v={{ asset_v }}"/>
+  <link rel="stylesheet" href="/static/css/me.css?v={{ asset_v }}"/>
+</head>
+<body>
+  <header class="me-top">
+    <a class="me-brand" href="/me"><img src="/static/logo.svg?v={{ asset_v }}" alt=""/><span>智送管家</span></a>
+    <div class="me-right">
+      <span data-lang-slot></span>
+      <form method="post" action="/logout"><button class="me-out" type="submit">Log out</button></form>
+    </div>
+  </header>
+
+  <main class="me-wrap">
+    <h1 id="hello"></h1>
+    <div id="map" class="me-map"></div>
+
+    <section class="me-card">
+      <h2 id="t-orders"></h2>
+      <div id="orders" class="me-orders"></div>
+    </section>
+
+    <section class="me-card">
+      <h2 id="t-add"></h2>
+      <p class="me-hint" id="t-add-hint"></p>
+      <div class="me-claim">
+        <input id="link" placeholder="https://…/track/…" autocomplete="off"/>
+        <button id="claim"></button>
+      </div>
+      <div class="me-msg" id="msg"></div>
+    </section>
+  </main>
+
+  <script src="/static/vendor/leaflet/leaflet.js?v={{ asset_v }}"></script>
+  <script src="/static/font-load.js?v={{ asset_v }}"></script>
+  <script>
+    const NAME = {{ name|tojson }};
+    let lang = 'zh';
+    try { lang = localStorage.getItem('lang') || (navigator.language.startsWith('zh') ? 'zh' : 'en'); } catch (e) {}
+    const T = {
+      en: { hello: n => `Hi, ${n}`, orders: 'My orders', add: 'Add an order', btn: 'Add',
+            hint: 'Got a tracking link from the shop? Paste it here to keep the order in your account.',
+            empty: 'No orders yet. Paste a tracking link below to add one.',
+            added: 'Order added', bad: 'This tracking link is not valid',
+            st: { pending: 'On the way', delivered: 'Delivered', cancelled: 'Cancelled' } },
+      zh: { hello: n => `您好，${n}`, orders: '我的订单', add: '添加订单', btn: '添加',
+            hint: '收到商家发来的追踪链接？粘贴到这里，订单就会保存到您的账号。',
+            empty: '还没有订单。在下面粘贴追踪链接即可添加。',
+            added: '订单已添加', bad: '追踪链接无效',
+            st: { pending: '配送中', delivered: '已送达', cancelled: '已取消' } },
+    }[lang === 'en' ? 'en' : 'zh'];
+
+    function esc(t) {
+      return String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+    document.getElementById('hello').textContent = T.hello(NAME);
+    document.getElementById('t-orders').textContent = T.orders;
+    document.getElementById('t-add').textContent = T.add;
+    document.getElementById('t-add-hint').textContent = T.hint;
+    document.getElementById('claim').textContent = T.btn;
+
+    // Map: Gaode tiles (fast in China), centred on ZAFU until we know the orders
+    const map = L.map('map', { zoomControl: false, attributionControl: false }).setView([30.257, 119.727], 14);
+    L.tileLayer('https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
+                { subdomains: '1234', maxZoom: 18 }).addTo(map);
+    const pins = L.layerGroup().addTo(map);
+    const COLOR = { pending: '#3b82f6', delivered: '#16a34a', cancelled: '#94a3b8' };
+
+    async function load() {
+      const d = await (await fetch('/api/me/orders')).json();
+      const list = document.getElementById('orders');
+      pins.clearLayers();
+      if (!d.ok || !d.orders.length) {
+        list.innerHTML = `<div class="me-empty">${T.empty}</div>`;
+        return;
+      }
+      list.innerHTML = d.orders.map(o => `
+        <a class="me-order" href="${esc(o.track_url)}">
+          <div><div class="me-note">${esc(o.note || '—')}</div>
+            <div class="me-time">${new Date(o.created_at * 1000).toLocaleString()}</div></div>
+          <span class="chip ${esc(o.status)}">${T.st[o.status] || esc(o.status)}</span>
+        </a>`).join('');
+      const pts = d.orders.map(o => {
+        L.circleMarker([o.lat, o.lng], { radius: 9, color: '#fff', weight: 2, fillColor: COLOR[o.status] || '#94a3b8', fillOpacity: 1 })
+          .bindPopup(esc(o.note || T.st[o.status] || '')).addTo(pins);
+        return [o.lat, o.lng];
+      });
+      map.fitBounds(pts, { padding: [40, 40], maxZoom: 16 });
+    }
+
+    // Add an order by its tracking link (the signed key proves it belongs to you)
+    document.getElementById('claim').onclick = async () => {
+      const input = document.getElementById('link'), msg = document.getElementById('msg');
+      const res = await fetch('/api/me/claim', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                                 body: JSON.stringify({ link: input.value.trim() }) });
+      const d = await res.json();
+      msg.textContent = d.ok ? T.added : T.bad;
+      msg.className = 'me-msg ' + (d.ok ? 'ok' : 'bad');
+      if (d.ok) { input.value = ''; load(); }
+    };
+    load();
+  </script>
+  <script src="/static/i18n.js?v={{ asset_v }}"></script>
+  <script src="/static/pro.js?v={{ asset_v }}"></script>
+</body>
+</html>
