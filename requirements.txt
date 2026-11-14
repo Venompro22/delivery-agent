@@ -7,3 +7,4 @@ certifi>=2026.10.19
 pyotp
 qrcode
 pillow
+flask-compress

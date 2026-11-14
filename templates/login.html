@@ -37,7 +37,8 @@
       </div>
 
       {# A live-looking preview of the customer tracking page #}
-      <div class="phone" aria-hidden="true">
+      <div class="stage" aria-hidden="true"><div class="tilt"><div class="float">
+      <div class="phone">
         <div class="phone-screen">
           <div class="ph-top">订单追踪</div>
           <div class="ph-card">
@@ -50,6 +51,10 @@
           </div>
         </div>
       </div>
+      <div class="chip-float c1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>已送达 · 王芳</div>
+      <div class="chip-float c2"><span class="dot"></span>新订单 +1</div>
+      <div class="chip-float c3"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>AI 已识别：2桶水</div>
+      </div></div></div>
     </section>
 
     <section class="features">
@@ -91,8 +96,8 @@
       {% endif %}
       <div class="sub">Drivers: log in with your phone number</div>
       {% if error %}<div class="error">{{ error }}</div>{% endif %}
-      <input type="tel" name="phone" placeholder="Phone (drivers)" inputmode="numeric" maxlength="11" autocomplete="username"/>
-      <input type="password" name="password" placeholder="Password" autocomplete="current-password" required/>
+      <label class="field"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 18h.01"/></svg><input type="tel" name="phone" value="{{ request.args.get('phone', '') }}" placeholder="Phone (drivers)" inputmode="numeric" maxlength="11" autocomplete="username"/></label>
+      <label class="field"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg><input type="password" name="password" placeholder="Password" autocomplete="current-password" required/><button type="button" class="eye" aria-label="Show password"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></button></label>
       {% if need_code %}
       <input type="text" name="code" placeholder="6-digit code" inputmode="numeric"
              maxlength="8" autocomplete="one-time-code" autofocus required/>
@@ -108,5 +113,6 @@
   <script src="/static/font-load.js?v={{ asset_v }}"></script>
   <script src="/static/i18n.js?v={{ asset_v }}"></script>
   <script src="/static/pro.js?v={{ asset_v }}"></script>
+  <script src="/static/landing.js?v={{ asset_v }}"></script>
 </body>
 </html>

@@ -46,3 +46,11 @@ def test_customer_dashboard_has_the_map(client):
 def test_signup_lets_people_choose_customer_or_driver(client):
     html = client.get("/signup").get_data(as_text=True)
     assert 'value="customer"' in html and 'value="driver"' in html
+
+
+def test_used_number_offers_to_log_in_instead(client):
+    _customer(client, phone="13900000009")
+    other = fileapp.app.test_client()
+    html = other.post("/signup", data={"role": "customer", "phone": "13900000009",
+                                       "name": "Again", "password": PW}).get_data(as_text=True)
+    assert "already registered" in html and "/login?phone=13900000009" in html

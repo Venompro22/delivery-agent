@@ -32,6 +32,8 @@ import numpy as np
 from intent_nn import INTENTS, DATA, MODEL_PATH, predict_intent, train, load_feedback
 
 app = Flask(__name__)
+from flask_compress import Compress  # noqa: E402
+Compress(app)   # ⚡ gzip/brotli: smaller pages on slow networks
 
 DEV_MODE = os.environ.get("DEV_MODE") == "1"   # demo / simulate tools — only on my Mac
 
@@ -153,6 +155,10 @@ def security_headers(resp):
     resp.headers["X-Content-Type-Options"] = "nosniff"
     resp.headers["X-Frame-Options"] = "DENY"
     resp.headers["Referrer-Policy"] = "same-origin"
+    # ⚡ Static files with ?v=... never change (a new version gets a new ?v=), so browsers keep them a year.
+    if request.path.startswith("/static/"):
+        resp.headers["Cache-Control"] = ("public, max-age=31536000, immutable"
+                                         if request.args.get("v") else "public, max-age=3600")
     # HTML is always revalidated, so nobody is stuck on an old copy of a page.
     if resp.mimetype == "text/html":
         resp.headers["Cache-Control"] = "no-cache"

@@ -7,11 +7,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>Sign up - 智送管家</title>
   <link rel="stylesheet" href="/static/css/auth.css?v={{ asset_v }}"/>
+  <link rel="stylesheet" href="/static/css/landing.css?v={{ asset_v }}"/>
   <link rel="stylesheet" href="/static/vendor/inter/inter.css?v={{ asset_v }}" media="print"/>
   <link rel="stylesheet" href="/static/pro.css?v={{ asset_v }}"/>
 </head>
-<body>
-  <form class="card" method="post" action="/signup">
+<body class="landing only-form">
+  <section class="login-wrap">
+  <form class="card signup" method="post" action="/signup">
     <h1>Create an account</h1>
     {% set r = role if (error or done) else 'customer' %}
     {% if done %}
@@ -28,16 +30,19 @@
         <label><input type="radio" name="role" value="driver" {% if r == 'driver' %}checked{% endif %}/><span>Driver</span></label>
       </div>
       <div class="sub">Customers can use it right away. Drivers wait for the owner's approval.</div>
-      {% if error %}<div class="error">{{ error }}</div>{% endif %}
-      <input type="text" name="name" placeholder="Full name" maxlength="40" autocomplete="name" required/>
-      <input type="tel" name="phone" placeholder="Phone number" inputmode="numeric" maxlength="11" autocomplete="username" required/>
-      <input type="password" name="password" placeholder="Password (8+ characters)" minlength="8" autocomplete="new-password" required/>
+      {% if error %}<div class="error">{{ error }}{% if 'already registered' in error %} <a class="instead" href="/login?phone={{ request.form.get('phone', '')|urlencode }}#login">Log in instead</a>{% endif %}</div>{% endif %}
+      <label class="field"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg><input type="text" name="name" placeholder="Full name" maxlength="40" autocomplete="name" required/></label>
+      <label class="field"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 18h.01"/></svg><input type="tel" name="phone" placeholder="Phone number" inputmode="numeric" maxlength="11" autocomplete="username" required/><span class="phone-tip"></span></label>
+      <label class="field"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg><input type="password" name="password" placeholder="Password (8+ characters)" minlength="8" autocomplete="new-password" required/><button type="button" class="eye" aria-label="Show password"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></button></label>
+      <div class="meter"><span></span><span></span><span></span><span></span><em class="meter-label"></em></div>
       <button type="submit">Sign up</button>
       <a class="link" href="/login">Already have an account? Log in</a>
     {% endif %}
   </form>
+  </section>
   <script src="/static/font-load.js?v={{ asset_v }}"></script>
   <script src="/static/i18n.js?v={{ asset_v }}"></script>
   <script src="/static/pro.js?v={{ asset_v }}"></script>
+  <script src="/static/landing.js?v={{ asset_v }}"></script>
 </body>
 </html>
