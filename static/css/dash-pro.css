@@ -91,13 +91,14 @@ body.app .leaflet-bar, body.app .leaflet-control-layers { border: 1px solid rgba
 .reg-add { color: #fff !important; border: 0 !important; background: linear-gradient(135deg, #3b82f6, #10b981) !important;
   box-shadow: 0 8px 22px rgba(59, 130, 246, .35); }
 
-/* What the AI understood, coloured by kind */
-mark.ent { padding: 1px 5px; border-radius: 6px; color: inherit; font-weight: 600; }
-.ent-qty, .ent-product { background: rgba(74, 222, 128, .22); box-shadow: inset 0 -2px 0 #4ade80; }
-.ent-address { background: rgba(167, 139, 250, .22); box-shadow: inset 0 -2px 0 #a78bfa; }
-.ent-time { background: rgba(251, 146, 60, .22); box-shadow: inset 0 -2px 0 #fb923c; }
-.ent-phone { background: rgba(96, 165, 250, .22); box-shadow: inset 0 -2px 0 #60a5fa; }
-.ent-name { background: rgba(244, 114, 182, .22); box-shadow: inset 0 -2px 0 #f472b6; }
-.ent-usual { background: rgba(34, 211, 238, .22); box-shadow: inset 0 -2px 0 #22d3ee; }
-.ai-many { display: inline-block; margin-top: 6px; padding: 3px 9px; border-radius: 999px; font-size: 12px; font-weight: 600;
-  color: #fde68a; background: rgba(250, 204, 21, .15); }
+/* What the AI understood: a calm underline in the text + a clean list below */
+.ai-msg { font-size: 14px; line-height: 1.75; letter-spacing: .01em; }
+.ai-what { font-size: 14px; line-height: 1.6; }
+mark.ent { padding: 0 1px; border-radius: 0; color: inherit; background: none; box-shadow: none;
+  border-bottom: 1.5px solid rgba(147, 197, 253, .6); font-weight: 500; }
+.ai-facts { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 10px 0 2px; padding: 10px 12px;
+  border-radius: 12px; border: 1px solid rgba(255, 255, 255, .06); background: rgba(255, 255, 255, .04); font-size: 13px; }
+.ai-facts span { color: #94a3b8; }
+.ai-facts b { font-weight: 600; color: #e2e8f0; word-break: break-word; }
+.ai-many { display: inline-block; margin-top: 8px; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600;
+  color: #cbd5e1; background: rgba(255, 255, 255, .06); }

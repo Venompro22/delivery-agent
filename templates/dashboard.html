@@ -320,6 +320,16 @@
       });
       return out + esc(text.slice(at));
     }
+    // A tidy list of what the AI understood, under the message
+    const FACT_LABEL = {name: 'Customer', phone: 'Phone', qty: 'Quantity', product: 'Product',
+                        address: 'Address', time: 'When', usual: 'Place'};
+    function facts(ents) {
+      if (!ents || !ents.length) return '';
+      const rows = {};
+      ents.forEach(e => { (rows[e.type] = rows[e.type] || []).push(e.text); });
+      return '<div class="ai-facts">' + Object.keys(FACT_LABEL).filter(k => rows[k]).map(k =>
+        `<span>${FACT_LABEL[k]}</span><b>${esc(rows[k].join(' '))}</b>`).join('') + '</div>';
+    }
     const understood = () => (typeof current !== 'undefined' && current && current.r) ? current.r : {};
 
     let lastStopCount = -1;
@@ -498,7 +508,7 @@ const INTENT_NAMES = {new_order: 'New order', cancel: 'Cancel', question: 'Quest
           <span class="ai-conf">${pct}% sure</span>
         </div>
         <div class="ai-bar"><div style="width:${pct}%;background:${confColor(r.confidence || 0)}"></div></div>
-        <div class="ai-msg">${highlight(text, understood().entities)}</div>${understood().many > 1 ? `<div class="ai-many">${understood().many} orders in this message</div>` : ""}
+        <div class="ai-msg">${highlight(text, understood().entities)}</div>${facts(understood().entities)}${understood().many > 1 ? `<div class="ai-many">${understood().many} orders in this message</div>` : ""}
         ${actionHtml(r)}
         <div class="ai-learn" id="ai-learn">Was I right?
           <button class="ok" onclick="teach(current.r.intent)">Right</button>
