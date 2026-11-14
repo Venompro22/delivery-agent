@@ -94,20 +94,24 @@ class UserStore:
             con.close()
         return dict(row) if row else None
 
-    def create(self, phone: str, name: str, password: str) -> dict:
+    def create(self, phone: str, name: str, password: str, role: str = "driver") -> dict:
         """New driver account, waiting for approval. Raises ValueError if the input is bad."""
         phone, name = phone.strip(), name.strip()
         if not PHONE_RE.fullmatch(phone):
             raise ValueError("phone must be an 11-digit China mobile number")
         if not 1 <= len(name) <= 40:
             raise ValueError("name must be 1-40 characters")
+        if role not in ("driver", "customer"):
+            raise ValueError("unknown account type")
+        status = "approved" if role == "customer" else "pending"   # customers need no approval
         check_password_rules(password, phone)
         user_id = secrets.token_hex(8)
         con = self._connect()
         try:
             con.execute(
-                "INSERT INTO users (id, phone, name, password_hash, created_at) VALUES (?, ?, ?, ?, ?)",
-                (user_id, phone, name, generate_password_hash(password), time.time()))
+                "INSERT INTO users (id, phone, name, password_hash, role, status, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (user_id, phone, name, generate_password_hash(password), role, status, time.time()))
             con.commit()
         except sqlite3.IntegrityError:
             raise ValueError("this phone number is already registered")
@@ -134,7 +138,7 @@ class UserStore:
         con = self._connect()
         try:
             rows = con.execute(
-                "SELECT * FROM users ORDER BY status != 'pending', created_at DESC").fetchall()
+                "SELECT * FROM users WHERE role = 'driver' ORDER BY status != 'pending', created_at DESC").fetchall()
         finally:
             con.close()
         return [dict(r) for r in rows]
@@ -199,6 +203,35 @@ class UserStore:
         """Owner resets a forgotten password: a temporary one the driver must change."""
         temp = "".join(secrets.choice(TEMP_ALPHABET) for _ in range(12))
         return temp if self.set_password(user_id, temp, must_change=True) else None
+
+
+    # 🧾 Customer accounts: which orders belong to whom. An order is linked when the customer
+    # places it in the app, or proves it's theirs with its signed tracking link.
+    # Never by phone number alone: anyone can type someone else's number.
+    def _customer_orders_table(self, con) -> None:
+        con.execute("CREATE TABLE IF NOT EXISTS customer_orders ("
+                    "user_id TEXT NOT NULL, order_id TEXT NOT NULL, added_at REAL NOT NULL, "
+                    "PRIMARY KEY (user_id, order_id))")
+
+    def link_order(self, user_id: str, order_id: str) -> None:
+        con = self._connect()
+        try:
+            self._customer_orders_table(con)
+            con.execute("INSERT OR IGNORE INTO customer_orders (user_id, order_id, added_at) VALUES (?, ?, ?)",
+                        (user_id, order_id, time.time()))
+            con.commit()
+        finally:
+            con.close()
+
+    def customer_order_ids(self, user_id: str) -> List[str]:
+        con = self._connect()
+        try:
+            self._customer_orders_table(con)
+            rows = con.execute("SELECT order_id FROM customer_orders WHERE user_id = ? ORDER BY added_at DESC",
+                               (user_id,)).fetchall()
+        finally:
+            con.close()
+        return [r[0] for r in rows]
 
 
 def haversine(lat1: float, lng1: float, lat2: float, lng2: float) -> float:

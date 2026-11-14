@@ -268,13 +268,13 @@ def current_role():
 
 def is_logged_in() -> bool:
     if not (session.get("auth") is True
-            and current_role() in ("owner", "driver", "viewer")
+            and current_role() in ("owner", "driver", "customer", "viewer")
             and session.get("v") == session_version()):
         return False
     uid = session.get("uid")
     if uid:                                   # 👤 driver account → blocked = out right now
         user = users.get(uid)
-        return bool(user and user["status"] == "approved"
+        return bool(user and user["status"] == "approved" and user["role"] == current_role()
                     and user["pw_version"] == session.get("pv", 0))   # password changed → out
     return current_role() in ("owner", "viewer")          # a driver session must belong to an account
 
@@ -397,7 +397,7 @@ def login():
             if phone:                                 # 👤 driver account
                 user = users.check_login(phone, given)
                 if user and user["status"] == "approved":
-                    role, uid = "driver", user["id"]
+                    role, uid = user["role"], user["id"]
                 elif user and user["status"] == "pending":
                     error = "Your account is waiting for approval."
                 elif user:
@@ -425,7 +425,7 @@ def login():
                 # Owner logins are alert-worthy; driver logins are everyday noise.
                 audit.add("login_owner" if role == "owner" else "login",
                           ip, phone or "owner", role)
-                return redirect(url_for("home") if role == "owner" else url_for("driver_page"))
+                return redirect(url_for("home") if role == "owner" else url_for("my_page") if role == "customer" else url_for("driver_page"))
             if error is None:                  # pending/blocked = right password, not a guess
                 limiter.fail(ip, phone)
                 audit.add("login_failed", ip, phone or "owner")
@@ -446,7 +446,8 @@ def signup():
         else:
             try:
                 user = users.create(request.form.get("phone", ""), request.form.get("name", ""),
-                                    request.form.get("password", ""))
+                                    request.form.get("password", ""),
+                                    role=request.form.get("role", "driver"))
                 limiter.signup_done(ip)
                 audit.add("signup", ip, user["phone"], user["name"])
                 print(f"👤 New driver signup: {user['name']} ({user['phone']}) from {ip} — pending",
@@ -454,7 +455,49 @@ def signup():
                 done = True
             except ValueError as e:
                 error = str(e)
-    return render_template("signup.html", error=error, done=done)
+    return render_template("signup.html", error=error, done=done, role=request.form.get("role", "driver"))
+
+
+@app.route("/me")
+@login_required
+def my_page():
+    """🧾 The customer's own dashboard: their orders on a map."""
+    if current_role() != "customer":
+        return redirect(url_for("home"))
+    me = users.get(session.get("uid")) or {}
+    return render_template("me.html", name=me.get("name", ""))
+
+
+def customer_order_view(order) -> dict:
+    """What a customer sees about one of their orders."""
+    return {"id": order.id, "name": order.customer_name, "note": public_note(order),
+            "status": order.status.value, "created_at": order.created_at,
+            "lat": order.lat, "lng": order.lng,
+            "track_url": f"/track/{order.id}?k={track_key(order.id)}"}
+
+
+@app.route("/api/me/orders")
+@login_required
+def my_orders_api():
+    if current_role() != "customer":
+        return jsonify({"ok": False, "error": "customers only"}), 403
+    orders = [store.get(i) for i in users.customer_order_ids(session["uid"])]
+    return jsonify({"ok": True, "orders": [customer_order_view(o) for o in orders if o]})
+
+
+@app.route("/api/me/claim", methods=["POST"])
+@login_required
+def claim_order():
+    """Add an order to my account with its tracking link (the signed key proves it's mine)."""
+    if current_role() != "customer":
+        return jsonify({"ok": False, "error": "customers only"}), 403
+    link = (request.get_json(silent=True) or {}).get("link", "")
+    m = re.search(r"/track/([A-Za-z0-9]+)\?k=([A-Za-z0-9_\-]+)", link)
+    if not m or not store.get(m.group(1)) or \
+            not hmac.compare_digest(m.group(2).encode(), track_key(m.group(1)).encode()):
+        return jsonify({"ok": False, "error": "this tracking link is not valid"}), 400
+    users.link_order(session["uid"], m.group(1))
+    return jsonify({"ok": True})
 
 
 @app.route("/drivers")
@@ -533,6 +576,21 @@ def _viewer_may_write() -> bool:
         order = store.get(parts[2])
         return bool(order and (order.note or "").startswith(DEMO_TAG))
     return False
+
+
+CUSTOMER_ALLOWED = ("/me", "/api/me/", "/track/", "/api/track/", "/static/", "/logout")
+
+
+@app.before_request
+def customer_guard():
+    """🛡️ Customers only reach their own pages. Every driver/owner page and API is closed to them."""
+    if session.get("role") != "customer":
+        return None
+    if request.path.startswith(CUSTOMER_ALLOWED):
+        return None
+    if request.path.startswith("/api/"):
+        return jsonify({"ok": False, "error": "not available for customer accounts"}), 403
+    return redirect(url_for("my_page"))
 
 
 def orders_for_request() -> list:
