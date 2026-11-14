@@ -13,6 +13,7 @@
   <link rel="stylesheet" href="/static/vendor/inter/inter.css?v={{ asset_v }}" media="print"/>
   <link rel="stylesheet" href="/static/pro.css?v={{ asset_v }}"/>
   <link rel="stylesheet" href="/static/css/theme.css?v={{ asset_v }}"/>
+  <link rel="stylesheet" href="/static/css/dash-pro.css?v={{ asset_v }}"/>
 </head>
 <body class="app">
   <div id="sidebar">
@@ -759,7 +760,7 @@ const INTENT_NAMES = {new_order: 'New order', cancel: 'Cancel', question: 'Quest
         pts.push([s.lat, s.lng]);
         const color = s.late ? '#e5484d' : '#2d6cdf';
         L.marker([s.lat, s.lng], {icon: L.divIcon({className: '',
-          html: `<div class="pin" style="background:${color}">${s.sequence}</div>`,
+          html: `<div class="pin${s.sequence === 1 ? ' next' : ''}${s.late ? ' late' : ''}" style="background:${color}">${s.sequence}</div>`,
           iconSize: [28, 28], iconAnchor: [14, 14]})})
           .addTo(layer).bindPopup(`${s.sequence}. ${esc(s.name)} — ETA ${s.eta}`);
 
@@ -792,7 +793,10 @@ const INTENT_NAMES = {new_order: 'New order', cancel: 'Cancel', question: 'Quest
 
       if (pts.length > 1) {
         L.polyline(pts, {color: '#ffffff', weight: 8, opacity: 0.85}).addTo(layer);
-        L.polyline(pts, {color: '#2d6cdf', weight: 4, opacity: 0.95}).addTo(layer);
+        L.polyline(pts, {color: '#2d6cdf', weight: 4, opacity: 0.95, className: 'route-glow'}).addTo(layer);
+        // Light dashes flowing along the route: shows the direction and makes the map feel alive
+        L.polyline(pts, {color: '#bfdbfe', weight: 3, opacity: 0.9, dashArray: '2 16', lineCap: 'round',
+                         className: 'route-flow', interactive: false}).addTo(layer);
         if (data.stops.length !== lastStopCount) {
           map.fitBounds(pts, {padding: [40, 40]});
         }
