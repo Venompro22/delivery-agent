@@ -251,17 +251,19 @@
       if (sameRoad) {
         const cut = trimPath(route.path, pts[0]);
         if (cut) { route.stops = stops; setRoute(cut); return; }
-      } else {
-        routeLayer.clearLayers();
+      } else if (!route || !route.lines) {
+        // Nothing drawn yet: straight line until the road is known
         route = {stops, path: null, lines: null, want: key};
         setRoute(roadCache.get(key) || pts);
         if (roadCache.has(key)) return;
       }
+      // Stops changed (re-optimised order): keep the old road visible until the new one arrives,
+      // never flash back to a straight line
       route.stops = stops;
       route.want = key;
       if (roadCache.has(key)) { setRoute(roadCache.get(key)); return; }
       roadPath(pts).then(path => {
-        if (!path) return;
+        if (!path) { if (route && route.want === key) setRoute(pts); return; }   // OSRM down: straight line
         if (roadCache.size > 200) roadCache.clear();
         roadCache.set(key, path);
         if (route && route.want === key) setRoute(path);
