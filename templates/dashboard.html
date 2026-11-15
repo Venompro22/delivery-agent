@@ -103,13 +103,16 @@
       maxBounds: MAP_BOUNDS,
       maxBoundsViscosity: 1.0,
       minZoom: 4,
-    }).setView([31.2304, 121.4737], 13);
+      zoomSnap: 0.25,             // smooth zoom in small steps
+      zoomDelta: 0.5,
+      wheelPxPerZoomLevel: 90,    // softer mouse wheel
+    }).setView([30.257, 119.727], 14);   // ZAFU, Lin'an
     // smallest zoom where the world fills the whole screen (depends on the screen size)
     const fitWorld = () => map.setMinZoom(map.getBoundsZoom(MAP_BOUNDS, true));
     fitWorld();
     window.addEventListener('resize', fitWorld);
     // 🍎 Map styles: 🌙 Dark (Apple-like) · ☀️ Light · 🛰️ Satellite — your choice is remembered
-    const TILE_SCALE = 1;
+    const TILE_SCALE = window.devicePixelRatio > 1 ? 2 : 1;   // retina screens get sharp tiles
     const gaodeUrl = 'https://webrd0{s}.is.autonavi.com/appmaptile?lang=' + MAP_LANG +
       '&size=1&scale=' + TILE_SCALE + '&style=8&x={x}&y={y}&z={z}';
     const tileOpts = {subdomains: ['1', '2', '3', '4'], maxZoom: 18, noWrap: true, attribution: '&copy; AutoNavi'};
@@ -240,6 +243,7 @@
       return bestD > 0.0006 ? null : [p, ...path.slice(best + 1)];
     }
     function drawRoute(pts) {
+      if (followDriver && pts.length) map.panTo(pts[0], {animate: true});
       if (pts.length < 2) { routeLayer.clearLayers(); route = null; return; }
       const key = roadKey(pts), stops = roadKey(pts.slice(1));
       // Same stops (or the first one just got delivered): keep the road we have, trimmed
@@ -360,6 +364,44 @@
             ${margin < 0 ? `<button data-name="${esc(s.name)}" data-min="${-margin}">Copy apology for WeChat</button>` : ''}
           </div>`).join('');
     }
+
+    // 🧭 Map tools: fit every order, follow the truck, live traffic (Gaode, China)
+    let followDriver = false;
+    const traffic = L.tileLayer('https://tm.amap.com/trafficengine/mapabc/traffictile?v=1.0&t={t}&x={x}&y={y}&z={z}',
+      {t: Date.now(), bounds: CHINA_VIEW, minZoom: 10, maxZoom: 18, opacity: 0.85, zIndex: 5});
+    setInterval(() => {                         // traffic changes: fresh tiles every 2 minutes
+      traffic.options.t = Date.now();
+      if (map.hasLayer(traffic)) traffic.redraw();
+    }, 120000);
+    const ToolBox = L.Control.extend({
+      options: {position: 'bottomright'},
+      onAdd() {
+        const box = L.DomUtil.create('div', 'map-tools');
+        const S = p => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
+        const tool = (title, icon, onClick) => {
+          const b = L.DomUtil.create('button', 'tool', box);
+          b.type = 'button'; b.title = title; b.setAttribute('aria-label', title);
+          b.innerHTML = icon;
+          L.DomEvent.on(b, 'click', ev => { L.DomEvent.stop(ev); onClick(b); });
+        };
+        tool('Fit all orders', S('<path d="M3 9V5a2 2 0 0 1 2-2h4M21 9V5a2 2 0 0 0-2-2h-4M3 15v4a2 2 0 0 0 2 2h4M21 15v4a2 2 0 0 1-2 2h-4"/>'), () => {
+          const g = L.featureGroup([...layer.getLayers(), ...routeLayer.getLayers()]);
+          if (g.getLayers().length) map.fitBounds(g.getBounds(), {padding: [60, 60], maxZoom: 16});
+        });
+        tool('Follow the driver', S('<polygon points="3 11 22 2 13 21 11 13 3 11"/>'), b => {
+          followDriver = !followDriver;
+          b.classList.toggle('on', followDriver);
+        });
+        tool('Live traffic', S('<rect x="7" y="2" width="10" height="20" rx="3"/><circle cx="12" cy="7" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="17" r="1.5"/>'), b => {
+          if (map.hasLayer(traffic)) map.removeLayer(traffic);
+          else { traffic.options.t = Date.now(); traffic.addTo(map); }
+          b.classList.toggle('on', map.hasLayer(traffic));
+        });
+        L.DomEvent.disableClickPropagation(box);
+        return box;
+      },
+    });
+    new ToolBox().addTo(map);
 
     let lastStopCount = -1;
     let lastSignature = '';

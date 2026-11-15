@@ -115,3 +115,16 @@ mark.ent { padding: 0 1px; border-radius: 0; color: inherit; background: none; b
 .risk-row button { width: 100%; margin-top: 7px; padding: 7px; border-radius: 9px; border: 1px solid rgba(255, 255, 255, .14);
   background: rgba(255, 255, 255, .06); color: #e2e8f0; font-size: 12px; font-weight: 600; cursor: pointer; }
 @media (max-width: 899px) { #risk-card { top: auto; bottom: 16px; left: 16px; right: 16px; width: auto; } }
+
+/* 4) A real dark map: invert the light tiles, then calm the colours */
+.tiles-dark { filter: invert(1) hue-rotate(180deg) brightness(.95) contrast(.9) saturate(.45) !important; }
+
+/* 5) Map tools */
+.map-tools { display: flex; flex-direction: column; gap: 4px; padding: 6px; border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, .12); background: rgba(15, 23, 42, .78);
+  -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); box-shadow: 0 8px 24px rgba(0, 0, 0, .4); }
+.map-tools .tool { display: flex; align-items: center; justify-content: center; width: 38px; height: 38px; margin: 0; padding: 0;
+  border: 0; border-radius: 10px; background: transparent; color: #cbd5e1; cursor: pointer; transition: background .15s; }
+.map-tools .tool svg { width: 18px; height: 18px; }
+.map-tools .tool:hover { background: rgba(255, 255, 255, .08); }
+.map-tools .tool.on { background: #3b82f6; color: #fff; }

@@ -167,7 +167,7 @@ def security_headers(resp):
         # TODO: drop 'unsafe-inline' once the inline JS is moved into files
         "script-src 'self' 'unsafe-inline'; "
         "style-src 'self' 'unsafe-inline'; "
-        "img-src 'self' data: https://server.arcgisonline.com https://*.is.autonavi.com; "
+        "img-src 'self' data: https://server.arcgisonline.com https://*.is.autonavi.com https://tm.amap.com; "
         "connect-src 'self'; "
         "font-src 'self'; "
         "object-src 'none'; "

@@ -35,3 +35,7 @@ def test_route_gives_raw_times_for_the_risk_card(client):
     fileapp.store.add(Order(customer_name="R", lat=30.25, lng=119.72, promised_by=time.time() + 600))
     stop = client.get("/api/route").get_json()["stops"][0]
     assert stop["eta_epoch"] and stop["promised_epoch"]
+
+
+def test_csp_allows_live_traffic_tiles(client):
+    assert "https://tm.amap.com" in client.get("/login").headers["Content-Security-Policy"]
