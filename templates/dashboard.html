@@ -405,6 +405,44 @@
     });
     new ToolBox().addTo(map);
 
+    // 🚚 During Simulate the simulator alone moves the arrow, along every point of the real road,
+    // at a steady speed. The server only hears about it once a second (for ETAs and the route).
+    let simDriving = false;
+    function setArrow(target) {
+      const el = driverMarker && driverMarker.getElement();
+      const arrow = el && el.querySelector('.puck-arrow');
+      if (!arrow) return;
+      arrowDeg = arrowDeg === null ? target : arrowDeg + ((((target - arrowDeg) % 360) + 540) % 360 - 180);
+      arrow.style.transform = `rotate(${arrowDeg}deg)`;
+    }
+    function driveAlong(path) {
+      return new Promise(resolve => {
+        const cum = [0];                                        // distance from the start to each point
+        for (let i = 1; i < path.length; i++) cum.push(cum[i - 1] + map.distance(path[i - 1], path[i]));
+        const total = cum[cum.length - 1] || 1;
+        const D = Math.min(12, Math.max(4, total / 150)) * 1000; // 4–12 s per trip, whatever its length
+        const t0 = performance.now();
+        let seg = 0, lastPost = 0;
+        (function frame(now) {
+          if (!simRunning) return resolve(false);
+          const k = Math.min(1, (now - t0) / D), want = total * k;
+          while (seg < cum.length - 2 && cum[seg + 1] < want) seg++;
+          const a = path[seg], b = path[seg + 1] || a;
+          const t = Math.min(1, (want - cum[seg]) / ((cum[seg + 1] - cum[seg]) || 1));
+          const p = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+          driverMarker.setLatLng(p);
+          if (b !== a) setArrow(bearing(a, b));                // face along the street we're on
+          driverPos = p;
+          if (now - lastPost > 1000 || k === 1) {              // tell the server about once a second
+            lastPost = now;
+            api('/api/driver/location', {method: 'POST', headers: {'Content-Type': 'application/json'},
+                                         body: JSON.stringify({lat: p[0], lng: p[1]})}).then(() => refresh());
+          }
+          if (k < 1) requestAnimationFrame(frame); else resolve(true);
+        })(t0);
+      });
+    }
+
     let lastStopCount = -1;
     let lastSignature = '';
     const seenIds = new Set();
@@ -701,16 +739,11 @@ const INTENT_NAMES = {new_order: 'New order', cancel: 'Cancel', question: 'Quest
           const stop = data.stops[0], from = data.driver;
           // 🛣️ Drive along the real road (straight line if routing is unavailable)
           const straight = [[from.lat, from.lng], [stop.lat, stop.lng]];
-          const steps = pointsAlong((await roadPath(straight)) || straight, 12);
-          for (let i = 0; i < steps.length && simRunning; i++) {
-            const [lat, lng] = steps[i];
-            await api('/api/driver/location', {
-              method: 'POST', headers: {'Content-Type': 'application/json'},
-              body: JSON.stringify({lat, lng}),
-            });
-            await refresh();
-            await sleep(600);
-          }
+          const path = (await roadPath(straight)) || straight;
+          simDriving = true;
+          const arrived = await driveAlong(path);
+          simDriving = false;
+          if (!arrived) break;
           if (!simRunning) break;
           await api(`/api/orders/${stop.id}/deliver`, {method: 'POST'});   // arrived
           showToast(`${stop.name} delivered`);
@@ -719,6 +752,7 @@ const INTENT_NAMES = {new_order: 'New order', cancel: 'Cancel', question: 'Quest
         }
       } finally {
         simRunning = false;
+        simDriving = false;
         btn.classList.remove('on');
         btn.textContent = '▶️ Simulate';
       }
@@ -962,6 +996,7 @@ const INTENT_NAMES = {new_order: 'New order', cancel: 'Cancel', question: 'Quest
         return;
       }
       if (driverPos[0] === lat && driverPos[1] === lng) return;
+      if (simDriving) return;                                   // the simulator moves the arrow itself
       const cur = driverMarker.getLatLng();
       const from = [cur.lat, cur.lng];                          // start from where the arrow really is now
       if (map.distance(from, to) > 3) {                         // turn the arrow toward where we are going
