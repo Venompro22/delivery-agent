@@ -811,6 +811,8 @@ def api_route():
                 "leg_km": o.leg_distance_km,
                 "promise": fmt(o.promised_by) if o.promised_by else None,
                 "late": o.id in late_ids,
+                "eta_epoch": o.eta_epoch,
+                "promised_epoch": o.promised_by,
             }
             for o in route
         ],

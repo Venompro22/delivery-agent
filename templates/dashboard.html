@@ -332,6 +332,35 @@
     }
     const understood = () => (typeof current !== 'undefined' && current && current.r) ? current.r : {};
 
+    // ⚠ Orders at risk of being late: warn the shop before the customer complains
+    function apology(name, minutes) {
+      return `您好${name}，路上有点堵，预计晚${minutes}分钟左右送到，真的抱歉～`;
+    }
+    function renderRisk(stops) {
+      let box = document.getElementById('risk-card');
+      const risky = stops.filter(s => s.promised_epoch && s.eta_epoch)
+        .map(s => ({s, margin: Math.round((s.promised_epoch - s.eta_epoch) / 60)}))
+        .filter(x => x.margin < 10)
+        .sort((a, b) => a.margin - b.margin);
+      if (!risky.length) { if (box) box.remove(); return; }
+      if (!box) {
+        box = document.createElement('div');
+        box.id = 'risk-card';
+        box.onclick = e => {                                   // one listener for every button
+          const b = e.target.closest('button[data-name]');
+          if (b) copyText(apology(b.dataset.name, b.dataset.min));
+        };
+        document.body.appendChild(box);
+      }
+      box.innerHTML = `<div class="risk-title">${risky.length} order${risky.length > 1 ? 's' : ''} at risk</div>` +
+        risky.slice(0, 4).map(({s, margin}) => `
+          <div class="risk-row ${margin < 0 ? 'late' : 'tight'}">
+            <div><b>${esc(s.name)}</b> · ${margin < 0 ? `about ${-margin} min late` : `only ${margin} min margin`}</div>
+            <div class="risk-sub">expected ${esc(s.eta)} · promised ${esc(s.promise)}</div>
+            ${margin < 0 ? `<button data-name="${esc(s.name)}" data-min="${-margin}">Copy apology for WeChat</button>` : ''}
+          </div>`).join('');
+    }
+
     let lastStopCount = -1;
     let lastSignature = '';
     const seenIds = new Set();
@@ -983,6 +1012,7 @@ const INTENT_NAMES = {new_order: 'New order', cancel: 'Cancel', question: 'Quest
 
       if (pts.length > 1) {
         drawRoute(pts);
+        renderRisk(data.stops);
         if (data.stops.length !== lastStopCount) {
           map.fitBounds(pts, {padding: [40, 40]});
         }

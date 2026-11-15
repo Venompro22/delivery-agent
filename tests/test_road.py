@@ -26,3 +26,12 @@ def test_road_rejects_bad_points(client):
     _owner(client)
     assert client.get("/api/road?pts=abc").status_code == 400
     assert client.get("/api/road?pts=30.25,119.72").status_code == 400
+
+
+def test_route_gives_raw_times_for_the_risk_card(client):
+    import time
+    from models import Order
+    _owner(client)
+    fileapp.store.add(Order(customer_name="R", lat=30.25, lng=119.72, promised_by=time.time() + 600))
+    stop = client.get("/api/route").get_json()["stops"][0]
+    assert stop["eta_epoch"] and stop["promised_epoch"]

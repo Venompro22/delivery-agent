@@ -102,3 +102,16 @@ mark.ent { padding: 0 1px; border-radius: 0; color: inherit; background: none; b
 .ai-facts b { font-weight: 600; color: #e2e8f0; word-break: break-word; }
 .ai-many { display: inline-block; margin-top: 8px; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600;
   color: #cbd5e1; background: rgba(255, 255, 255, .06); }
+
+/* Orders at risk of being late */
+#risk-card { position: fixed; top: 16px; right: 16px; z-index: 550; width: 290px; padding: 14px; border-radius: 16px;
+  border: 1px solid rgba(248, 113, 113, .35); color: #e2e8f0; background: rgba(15, 23, 42, .82);
+  -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); box-shadow: 0 18px 50px rgba(0, 0, 0, .5); }
+.risk-title { margin-bottom: 6px; font-size: 14px; font-weight: 700; color: #fca5a5; }
+.risk-row { padding: 9px 0; border-top: 1px solid rgba(255, 255, 255, .06); font-size: 13px; line-height: 1.5; }
+.risk-row.tight b { color: #fbbf24; }
+.risk-row.late b { color: #f87171; }
+.risk-sub { margin-top: 2px; font-size: 12px; color: #94a3b8; }
+.risk-row button { width: 100%; margin-top: 7px; padding: 7px; border-radius: 9px; border: 1px solid rgba(255, 255, 255, .14);
+  background: rgba(255, 255, 255, .06); color: #e2e8f0; font-size: 12px; font-weight: 600; cursor: pointer; }
+@media (max-width: 899px) { #risk-card { top: auto; bottom: 16px; left: 16px; right: 16px; width: auto; } }
