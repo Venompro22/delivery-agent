@@ -49,6 +49,7 @@
     "Simulate": "模拟配送", "All orders delivered!": "所有订单已送达！", "Try:": "试试：",
     "Next stop": "下一站", "Up next": "接下来", "No more stops": "没有更多站点了",
     "Great job!": "干得好！", "Start GPS": "开启定位", "GPS on — tap to stop": "定位中 — 点击停止",
+    "Customers to bring back": "需要回访的老客户", "Everyone is ordering as usual.": "老客户都在正常下单。", "Copy message": "复制消息",
     "Log in instead": "直接登录",
     "Create an account": "创建账号", "Customers can use it right away. Drivers wait for the owner's approval.": "顾客注册后可立即使用，骑手需等待店主审核。", "Welcome!": "欢迎！", "Your account is ready.": "账号已创建好啦。",
     "No account needed · Free": "无需注册 · 免费", "For water shops & local stores": "专为水站和社区小店打造", "How it works": "使用流程", "Customer sends a WeChat message": "顾客发来微信消息", "AI turns it into an order on the map": "AI 自动生成订单并标在地图上", "Driver delivers, customer tracks live": "骑手配送，顾客实时追踪", "Made in Lin'an": "临安出品",

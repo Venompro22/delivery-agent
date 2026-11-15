@@ -31,3 +31,15 @@ def test_new_customer_gets_no_memory(client, monkeypatch):
     monkeypatch.setattr(fileapp, "predict_intent", lambda text: ("new_order", 0.95))
     r = client.post("/api/agent", json={"text": "我要两桶水 13900000009"}).get_json()
     assert "regular" not in r
+
+
+def test_quiet_customers_are_found():
+    import time
+    now = time.time()
+    day = 86400
+    old = [Order(customer_name="李明", lat=30.2, lng=119.7, phone="13700000001", created_at=now - d * day)
+           for d in (30, 23, 16)]                       # every 7 days, silent for 16
+    busy = [Order(customer_name="张伟", lat=30.2, lng=119.7, phone="13700000002", created_at=now - d * day)
+            for d in (14, 7, 1)]                        # every 7 days, ordered yesterday
+    found = customers.quiet(old + busy, now)
+    assert [c["name"] for c in found] == ["李明"] and found[0]["every_days"] == 7

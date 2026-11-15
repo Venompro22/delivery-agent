@@ -34,3 +34,25 @@ def profile(phone: str, orders) -> Optional[dict]:
     qtys = [q for q in (quantity(o.note) for o in mine) if q]
     return {"name": last.customer_name, "count": len(mine), "last_order": last,
             "usual_qty": Counter(qtys).most_common(1)[0][0] if qtys else None}
+
+
+def quiet(orders, now: float, min_orders: int = 3) -> list:
+    """Regulars who stopped ordering: their last order is much older than their usual gap.
+    Usual gap = median time between their orders (one odd week doesn't fool it)."""
+    by_phone = {}
+    for o in orders:
+        if o.phone and o.created_at and o.status.value != "cancelled":
+            by_phone.setdefault(o.phone, []).append(o)
+    out = []
+    for mine in by_phone.values():
+        if len(mine) < min_orders:
+            continue
+        mine.sort(key=lambda o: o.created_at)
+        gaps = sorted(b.created_at - a.created_at for a, b in zip(mine, mine[1:]))
+        usual = gaps[len(gaps) // 2]
+        since = now - mine[-1].created_at
+        if usual <= 0 or since < max(2 * usual, 3 * 86400):
+            continue
+        out.append({"name": mine[-1].customer_name, "every_days": max(1, round(usual / 86400)),
+                    "since_days": round(since / 86400), "count": len(mine), "overdue": round(since / usual, 1)})
+    return sorted(out, key=lambda c: -c["overdue"])

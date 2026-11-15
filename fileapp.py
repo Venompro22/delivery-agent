@@ -543,6 +543,14 @@ def road_path():
     return jsonify({"ok": True, "path": path, "road": True})
 
 
+@app.route("/api/customers/quiet")
+@owner_required
+def quiet_customers():
+    """🧠 Regulars who went quiet (usually every ~7 days, nothing for 14): bring them back."""
+    import customers
+    return jsonify({"ok": True, "customers": customers.quiet(orders_for_request(), time.time())[:10]})
+
+
 @app.route("/drivers")
 @owner_required
 def drivers_page():

@@ -33,3 +33,14 @@ body.app :is(.wrap, .me-wrap) { animation: app-in .45s ease both; }
 @media (prefers-reduced-motion: reduce) {
   body.app::before, body.app :is(.wrap, .me-wrap) { animation: none; }
 }
+
+/* Stats: customers to bring back */
+.quiet-wrap { max-width: 960px; margin: 16px auto 40px; padding: 0 16px; }
+.quiet-box { padding: 18px; }
+.quiet-box h3 { margin: 0 0 10px; font-size: 16px; }
+.q-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0;
+  border-top: 1px solid rgba(255, 255, 255, .06); font-size: 14px; }
+.q-sub { margin-top: 3px; font-size: 12px; color: #94a3b8; }
+.q-row button { flex: none; padding: 8px 14px; border: 0; border-radius: 10px; color: #fff; font-size: 12px; font-weight: 600;
+  cursor: pointer; background: linear-gradient(135deg, #3b82f6, #10b981); }
+.q-empty { font-size: 14px; color: #94a3b8; }
