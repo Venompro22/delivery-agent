@@ -31,7 +31,7 @@ def test_viewer_only_sees_demo_orders(client):
     fileapp.store.add(Order(customer_name="Demo", lat=30.2, lng=120.2,
                             note=fileapp.DEMO_TAG + " x"))
     names = [o["name"] for o in _viewer(client).get("/api/orders").get_json()]
-    assert names == ["Demo"]
+    assert "Demo" in names and "Real" not in names
 
 
 def test_viewer_gets_the_banner_and_others_dont(client):
@@ -109,3 +109,12 @@ def test_demo_rebuilt_when_a_promise_is_long_past(client):
     fileapp.store.add(late)
     client.get("/try")
     assert fileapp.store.get(late.id) is None
+
+
+def test_demo_has_history_with_quiet_regulars(client):
+    import customers, time
+    client.get("/try")
+    demo = [o for o in fileapp.store.all() if (o.note or "").startswith(fileapp.DEMO_TAG)]
+    assert sum(o.status.value == "delivered" for o in demo) > 30
+    quiet = [c["name"] for c in customers.quiet(demo, time.time())]
+    assert "李明" in quiet and "周婷" in quiet

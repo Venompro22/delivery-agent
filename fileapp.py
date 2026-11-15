@@ -1134,6 +1134,9 @@ def demo_orders():
         _store_add(order)
         ids.append(order.id)
     print(f"✨ Demo: added {len(ids)} orders", flush=True)
+    if not any((o.note or "").startswith(DEMO_TAG) and (o.created_at or 0) < time.time() - 2 * 86400
+               for o in store.all()):
+        seed_demo_history()  # owner pressed Demo: show the history too
     return jsonify({"ok": True, "ids": ids})
 
 @app.route("/api/demo/clear", methods=["POST"])
@@ -1441,18 +1444,58 @@ def seed_demo_orders() -> list:
     return ids
 
 
-def ensure_demo_data() -> None:
-    """Visitors always land on a full, fresh demo: refill when empty, reset daily.
-    Real orders are never touched."""
-    demo = [o for o in store.all() if (o.note or "").startswith(DEMO_TAG)]
+# Two regulars who stopped ordering (name, phone, every N days, place, km north, km east, silent days)
+DEMO_QUIET = [("李明", "13700137011", 7, "阳光小区 3单元502室", -0.6, 0.9, 21),
+              ("周婷", "13500135007", 5, "花园小区 2栋1201", 0.9, -1.1, 18)]
+
+
+def seed_demo_history(days: int = 42) -> int:
+    """📈 Six weeks of realistic past deliveries for the demo, so stats and the AI have
+    something to show: regulars every few days, lunch and evening rush hours, ratings,
+    and two regulars who went quiet. All tagged demo: never mixed with real orders."""
+    import math, random
+    rnd = random.Random(42)                       # same history every time: predictable demo
     now = time.time()
-    late = any(o.status == OrderStatus.PENDING and o.promised_by and o.promised_by < now - 1800 for o in demo)
-    if demo and (late or min(o.created_at or 0 for o in demo) < now - DEMO_MAX_AGE):
-        store.orders = [o for o in store.orders if not (o.note or "").startswith(DEMO_TAG)]
+    people = [(name, phone, 4 + i % 5, note, north, east, 0)
+              for i, (name, phone, note, _promise, north, east) in enumerate(DEMO_ORDERS)] + DEMO_QUIET
+    added = 0
+    for name, phone, every, place, north, east, silent in people:
+        lat = round(driver.lat + north / 111.0, 5)
+        lng = round(driver.lng + east / (111.0 * math.cos(math.radians(driver.lat))), 5)
+        qty = rnd.choice([1, 2, 2, 3])
+        t = now - days * 86400 + rnd.uniform(0, every) * 86400
+        while t < now - max(silent, 1) * 86400:
+            created = datetime.fromtimestamp(t).replace(
+                hour=rnd.choice([10, 11, 11, 12, 16, 17, 17, 18]), minute=rnd.randrange(60)).timestamp()
+            if created < now - 3600:
+                took = rnd.randint(18, 45)
+                store.add(Order(customer_name=name, lat=lat, lng=lng, phone=phone,
+                                note=f"{DEMO_TAG}{qty}桶 {place}", created_at=created,
+                                promised_by=created + 45 * 60 if rnd.random() < .6 else None,
+                                status=OrderStatus.DELIVERED, delivered_at=created + took * 60,
+                                rating=rnd.choice([5, 5, 5, 4, 4, None])))
+                added += 1
+            t += (every + rnd.uniform(-1, 1)) * 86400
+    return added
+
+
+def ensure_demo_data() -> None:
+    """Visitors always land on a full, fresh demo: today's orders plus six weeks of history.
+    Today's orders are rebuilt daily or when a promise is long past. Real orders are never touched."""
+    now = time.time()
+    demo = [o for o in store.all() if (o.note or "").startswith(DEMO_TAG)]
+    live = [o for o in demo if o.status == OrderStatus.PENDING]
+    late = any(o.promised_by and o.promised_by < now - 1800 for o in live)
+    stale = bool(live) and min(o.created_at or 0 for o in live) < now - DEMO_MAX_AGE
+    if late or stale:
+        store.orders = [o for o in store.orders
+                        if not ((o.note or "").startswith(DEMO_TAG) and o.status == OrderStatus.PENDING)]
         store.save()
-        demo = []
-    if not any(o.status == OrderStatus.PENDING for o in demo):
+        live = []
+    if not live:
         seed_demo_orders()
+    if not any((o.created_at or now) < now - 2 * 86400 for o in demo):
+        seed_demo_history()
 
 
 @app.route("/try")
