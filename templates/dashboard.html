@@ -952,6 +952,7 @@ const INTENT_NAMES = {new_order: 'New order', cancel: 'Cancel', question: 'Quest
       return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
     }
 
+    let glideId = 0, arrowDeg = null;
     function updateDriver(lat, lng) {
       const to = [lat, lng];
       if (!driverMarker) {
@@ -960,16 +961,23 @@ const INTENT_NAMES = {new_order: 'New order', cancel: 'Cancel', question: 'Quest
         driverPos = to;
         return;
       }
-      const from = driverPos;
-      if (from[0] === lat && from[1] === lng) return;
-      if (map.distance(from, to) > 3) {                       // turn the arrow toward where we are going
+      if (driverPos[0] === lat && driverPos[1] === lng) return;
+      const cur = driverMarker.getLatLng();
+      const from = [cur.lat, cur.lng];                          // start from where the arrow really is now
+      if (map.distance(from, to) > 3) {                         // turn the arrow toward where we are going
         const arrow = driverMarker.getElement() && driverMarker.getElement().querySelector('.puck-arrow');
-        if (arrow) arrow.style.transform = `rotate(${bearing(from, to)}deg)`;
+        if (arrow) {
+          const target = bearing(from, to);
+          // the short way round: 350° → 10° is +20°, not a full turn back
+          arrowDeg = arrowDeg === null ? target : arrowDeg + ((((target - arrowDeg) % 360) + 540) % 360 - 180);
+          arrow.style.transform = `rotate(${arrowDeg}deg)`;
+        }
       }
-      const t0 = performance.now(), D = 900;                    // glide instead of jumping
+      const id = ++glideId, t0 = performance.now(), D = 550;   // one glide at a time: a new one cancels the old
       (function step(now) {
+        if (id !== glideId) return;
         const k = Math.min(1, (now - t0) / D);
-        const e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+        const e = 1 - Math.pow(1 - k, 3);                        // ease-out: smooth stop, no overshoot
         driverMarker.setLatLng([from[0] + (to[0] - from[0]) * e, from[1] + (to[1] - from[1]) * e]);
         if (k < 1) requestAnimationFrame(step);
       })(t0);
@@ -999,9 +1007,12 @@ const INTENT_NAMES = {new_order: 'New order', cancel: 'Cancel', question: 'Quest
       }
     }
 
+    let refreshSeq = 0;
     async function refresh() {
+      const seq = ++refreshSeq;
       const res = await api('/api/route');
       const data = await res.json();
+      if (seq !== refreshSeq) return;        // a newer refresh started meanwhile: ignore this older answer
       drawDrivers(data.drivers || []);       // before the check below: drivers move even when orders don't
 
       // Same data as last time? Only update the clock — no redraw, no flicker.

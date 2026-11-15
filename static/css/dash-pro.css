@@ -128,3 +128,6 @@ mark.ent { padding: 0 1px; border-radius: 0; color: inherit; background: none; b
 .map-tools .tool svg { width: 18px; height: 18px; }
 .map-tools .tool:hover { background: rgba(255, 255, 255, .08); }
 .map-tools .tool.on { background: #3b82f6; color: #fff; }
+
+/* The driver arrow turns smoothly */
+.puck-arrow { transition: transform .35s ease-out; }
