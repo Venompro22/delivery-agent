@@ -32,6 +32,24 @@ import numpy as np
 from intent_nn import INTENTS, DATA, MODEL_PATH, predict_intent, train, load_feedback
 
 app = Flask(__name__)
+
+
+# Behind Render's proxy every request comes from the proxy itself; the real
+# visitor IP is the last entry Render adds to X-Forwarded-For. ProxyFix reads
+# only that entry, so a visitor cannot fake it with their own headers.
+BEHIND_PROXY = os.environ.get("BEHIND_PROXY") == "1"
+if BEHIND_PROXY:
+    from werkzeug.middleware.proxy_fix import ProxyFix
+    app.wsgi_app = ProxyFix(app.wsgi_app,
+                            x_for=int(os.environ.get("PROXY_HOPS", "1")),
+                            x_proto=1, x_host=1)
+
+
+def _visitor_ip() -> str:
+    """Client IP for rate limits and the security log."""
+    if BEHIND_PROXY:
+        return request.remote_addr or "?"        # already fixed by ProxyFix
+    return request.headers.get("X-Real-IP") or request.remote_addr or "?"
 from flask_compress import Compress  # noqa: E402
 Compress(app)   # ⚡ gzip/brotli: smaller pages on slow networks
 
@@ -73,6 +91,32 @@ PROOF_DIR = os.environ.get("PROOF_DIR", os.path.join(HERE, "proofs"))
 os.makedirs(PROOF_DIR, exist_ok=True)
 MAX_PROOF_BYTES = 5 * 1024 * 1024          # 5 MB per photo
 ALLOWED_PROOF_TYPES = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}
+
+from flask import Response as _PhotoResponse
+from photos import PhotoStore
+
+_photos = None
+
+
+def photo_store() -> PhotoStore:
+    """Photo table in the same database as the orders (created on first use)."""
+    global _photos
+    if _photos is None:
+        _photos = PhotoStore(getattr(store, "path", os.path.join(HERE, "orders.db")))
+    return _photos
+
+
+def proof_response(name: str):
+    """Serve a delivery photo from the database; older photos still come from disk."""
+    found = photo_store().get(name)
+    if found is None:
+        # send_from_directory is safe: it refuses paths that escape PROOF_DIR.
+        return send_from_directory(PROOF_DIR, name, max_age=0)
+    data, mime = found
+    resp = _PhotoResponse(data, mimetype=mime)
+    resp.headers["Cache-Control"] = "no-cache"
+    return resp
+
 
 
 # 👀 In demo (viewer) sessions, every page gets a banner, controls a visitor can't
@@ -203,6 +247,7 @@ def twofa_save(data: dict) -> None:
     """Write 2FA state, readable only by this user."""
     with open(TWOFA_PATH, "w") as f:
         json.dump(data, f)
+    filesync.persist(TWOFA_PATH)
     os.chmod(TWOFA_PATH, 0o600)
 
 
@@ -235,6 +280,10 @@ def twofa_check(code: str) -> bool:
 PANIC_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".panic_mode")
 PANIC_MODES = ("normal", "readonly", "lockdown", "off")
 
+# On Render, bring the state files back from the database (no-op locally).
+import filesync
+filesync.restore([SESSION_VERSION_PATH, TWOFA_PATH, PANIC_PATH])
+
 
 def panic_mode() -> str:
     """Current emergency mode (defaults to normal if the file is missing)."""
@@ -252,6 +301,7 @@ def set_panic_mode(mode: str) -> None:
         f.write(mode)
 
 
+    filesync.persist(PANIC_PATH)
 def panic_key(mode: str) -> str:
     """Signature for one mode, so only links you generated can switch it."""
     secret = app.secret_key if isinstance(app.secret_key, bytes) else str(app.secret_key).encode()
@@ -376,7 +426,7 @@ def my_orders() -> list:
 
 
 def client_ip() -> str:
-    return request.headers.get("X-Real-IP") or request.remote_addr or "?"
+    return _visitor_ip()
 
 
 def track_key(order_id: str) -> str:
@@ -392,7 +442,7 @@ def login():
         return redirect(url_for("home"))
     error = None
     if request.method == "POST":
-        ip = request.headers.get("X-Real-IP") or request.remote_addr or "?"
+        ip = _visitor_ip()
         phone = request.form.get("phone", "").strip()
         if limiter.blocked(ip, phone):
             error = "Too many attempts. Wait 10 minutes."
@@ -445,7 +495,7 @@ def signup():
     """👤 Drivers create an account; it waits until the owner approves it."""
     error = done = None
     if request.method == "POST":
-        ip = request.headers.get("X-Real-IP") or request.remote_addr or "?"
+        ip = _visitor_ip()
         if limiter.signup_blocked(ip):
             error = "Too many new accounts from this network today. Try again tomorrow."
             audit.add("signup_blocked", ip)
@@ -931,6 +981,7 @@ def upload_proof(order_id):
     filename = f"{order_id}{ext}"                 # order_id is a random uuid; never the user's name
     with open(os.path.join(PROOF_DIR, filename), "wb") as f:
         f.write(data)
+    photo_store().put(filename, data, file.mimetype)
     order.proof = filename
     store.save()
     print(f"📷 Proof saved: {order.customer_name} ({len(data)} bytes)", flush=True)
@@ -947,7 +998,7 @@ def get_proof(order_id):
     if not order.proof:
         return jsonify({"ok": False, "error": "no photo"}), 404
     # send_from_directory is safe: it refuses paths that escape PROOF_DIR.
-    return send_from_directory(PROOF_DIR, order.proof, max_age=0)
+    return proof_response(order.proof)
 
 
 @app.route("/api/orders/<order_id>/assign", methods=["POST"])
@@ -1215,6 +1266,7 @@ def logout_all():
     new = session_version() + 1
     with open(SESSION_VERSION_PATH, "w") as f:
         f.write(str(new))
+    filesync.persist(SESSION_VERSION_PATH)
     session.clear()
     print(f"🚪 Logged everyone out (session version {new})", flush=True)
     return jsonify({"ok": True})
@@ -1377,7 +1429,7 @@ def track_proof(order_id):
     if not order or not order.proof:
         return jsonify({"ok": False, "error": "no photo"}), 404
     # send_from_directory is safe: it refuses paths that escape PROOF_DIR.
-    return send_from_directory(PROOF_DIR, order.proof, max_age=0)
+    return proof_response(order.proof)
 
 
 @app.route("/security/2fa", methods=["GET", "POST"])
@@ -1387,6 +1439,7 @@ def setup_2fa():
     if request.method == "POST" and request.form.get("action") == "disable":
         if os.path.exists(TWOFA_PATH):
             os.remove(TWOFA_PATH)
+            filesync.persist(TWOFA_PATH)
         audit.add("2fa_disabled", client_ip(), "owner")
         return render_template("twofa.html", enabled=False, message="Two-factor is now off.")
 
@@ -1547,6 +1600,7 @@ def panic_switch(mode):
         new = session_version() + 1
         with open(SESSION_VERSION_PATH, "w") as f:
             f.write(str(new))
+        filesync.persist(SESSION_VERSION_PATH)
     print(f"\U0001f534 PANIC MODE: {mode}", flush=True)
     return f"<h1>Mode: {mode}</h1><p>Saved.</p>"
 

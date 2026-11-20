@@ -6,6 +6,8 @@ import os
 import re
 import secrets
 import sqlite3
+
+import db
 import time
 from typing import List, Optional
 
@@ -82,7 +84,7 @@ class UserStore:
             con.close()
 
     def _connect(self):
-        con = sqlite3.connect(self.path)
+        con = db.connect(self.path)
         con.row_factory = sqlite3.Row      # rows behave like dicts: row["phone"]
         return con
 
@@ -113,7 +115,7 @@ class UserStore:
                 "VALUES (?, ?, ?, ?, ?, ?, ?)",
                 (user_id, phone, name, generate_password_hash(password), role, status, time.time()))
             con.commit()
-        except sqlite3.IntegrityError:
+        except db.IntegrityError:
             raise ValueError("this phone number is already registered")
         finally:
             con.close()

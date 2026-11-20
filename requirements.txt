@@ -8,3 +8,4 @@ pyotp
 qrcode
 pillow
 flask-compress
+psycopg[binary]

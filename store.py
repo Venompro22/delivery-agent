@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
+
+import db
 from typing import List, Optional
 
 from models import Order
@@ -37,7 +39,7 @@ class OrderStore:
     def __init__(self, path: str = os.path.join(HERE, "orders.db")):
         self.path = path
         self.orders: List[Order] = []
-        con = sqlite3.connect(self.path)
+        con = db.connect(self.path)
         try:
             con.execute(SCHEMA)
             cols = {r[1] for r in con.execute("PRAGMA table_info(orders)")}
@@ -56,7 +58,7 @@ class OrderStore:
     # ---------- helpers ----------
     def _run(self, sql: str, rows=None):
         """Run SQL inside ONE transaction: everything is saved, or nothing is."""
-        con = sqlite3.connect(self.path)
+        con = db.connect(self.path)
         try:
             with con:
                 if rows is None:
@@ -94,7 +96,7 @@ class OrderStore:
     def save(self) -> None:
         """Write all orders (one atomic transaction — never half-written)."""
         marks = ", ".join("?" for _ in COLUMNS)
-        con = sqlite3.connect(self.path)
+        con = db.connect(self.path)
         try:
             with con:
                 con.execute("DELETE FROM orders")

@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import os
 import sqlite3
+
+import db
 import time
 
 import alerts
@@ -25,7 +27,7 @@ CREATE TABLE IF NOT EXISTS security_log (
 class AuditLog:
     def __init__(self, path: str = os.path.join(HERE, "orders.db")):
         self.path = path
-        con = sqlite3.connect(self.path)
+        con = db.connect(self.path)
         try:
             con.execute(SCHEMA)
             con.commit()
@@ -35,7 +37,7 @@ class AuditLog:
     def add(self, event: str, ip: str = "", who: str = "", detail: str = "") -> None:
         """Write one event (and delete the ones older than 90 days)."""
         now = time.time()
-        con = sqlite3.connect(self.path)
+        con = db.connect(self.path)
         try:
             con.execute(
                 "INSERT INTO security_log (at, event, ip, who, detail) VALUES (?, ?, ?, ?, ?)",
@@ -47,7 +49,7 @@ class AuditLog:
 
     def recent(self, limit: int = 50) -> list:
         """The newest events first."""
-        con = sqlite3.connect(self.path)
+        con = db.connect(self.path)
         try:
             rows = con.execute(
                 "SELECT at, event, ip, who, detail FROM security_log ORDER BY id DESC LIMIT ?",

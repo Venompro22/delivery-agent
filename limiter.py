@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import os
 import sqlite3
+
+import db
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -23,7 +25,7 @@ INDEX = "CREATE INDEX IF NOT EXISTS login_failures_key ON login_failures (key, a
 class LoginLimiter:
     def __init__(self, path: str = os.path.join(HERE, "orders.db")):
         self.path = path
-        con = sqlite3.connect(self.path)
+        con = db.connect(self.path)
         try:
             con.execute(SCHEMA)
             con.execute(INDEX)
@@ -41,7 +43,7 @@ class LoginLimiter:
     def blocked(self, ip: str, phone: str = "") -> bool:
         """True if this IP or this phone failed too many times in the last 10 minutes."""
         since = time.time() - WINDOW
-        con = sqlite3.connect(self.path)
+        con = db.connect(self.path)
         try:
             for kind, key in self._keys(ip, phone):
                 (count,) = con.execute(
@@ -56,7 +58,7 @@ class LoginLimiter:
     def fail(self, ip: str, phone: str = "") -> None:
         """Remember one wrong password (and forget the old ones)."""
         now = time.time()
-        con = sqlite3.connect(self.path)
+        con = db.connect(self.path)
         try:
             con.executemany("INSERT INTO login_failures (key, at) VALUES (?, ?)",
                             [(key, now) for _, key in self._keys(ip, phone)])
@@ -69,7 +71,7 @@ class LoginLimiter:
     def signup_blocked(self, ip: str) -> bool:
         """True if this IP already created too many accounts today."""
         since = time.time() - SIGNUP_WINDOW
-        con = sqlite3.connect(self.path)
+        con = db.connect(self.path)
         try:
             (count,) = con.execute(
                 "SELECT COUNT(*) FROM login_failures WHERE key = ? AND at > ?",
@@ -80,7 +82,7 @@ class LoginLimiter:
 
     def signup_done(self, ip: str) -> None:
         """Remember one new account from this IP."""
-        con = sqlite3.connect(self.path)
+        con = db.connect(self.path)
         try:
             con.execute("INSERT INTO login_failures (key, at) VALUES (?, ?)",
                         ("signup:" + ip, time.time()))
@@ -92,7 +94,7 @@ class LoginLimiter:
         """Right password: this phone starts from zero again."""
         if not phone:
             return
-        con = sqlite3.connect(self.path)
+        con = db.connect(self.path)
         try:
             con.execute("DELETE FROM login_failures WHERE key = ?", ("phone:" + phone,))
             con.commit()
