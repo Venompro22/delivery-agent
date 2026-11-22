@@ -21,6 +21,12 @@
       document.getElementById('k-today').textContent = today;
       document.getElementById('k-time').textContent = d.avg_minutes ?? '–';
       document.getElementById('k-ontime').textContent = d.on_time_pct !== null ? d.on_time_pct + '%' : '–';
+      const yuan = n => '¥' + (Number.isInteger(n) ? n : n.toFixed(2));
+      document.getElementById('k-rev-today').textContent = yuan(d.revenue_today ?? 0);
+      document.getElementById('k-rev-week').textContent = yuan(d.revenue_week ?? 0);
+      const collect = document.getElementById('k-collect');
+      collect.textContent = yuan(d.to_collect ?? 0);
+      collect.style.color = d.to_collect > 0 ? 'var(--warn)' : '';
 
       Chart.defaults.color = '#8a8f98';
       Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;

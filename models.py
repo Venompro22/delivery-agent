@@ -33,6 +33,9 @@ class Order:
     driver_id: Optional[str] = None   # 👤 the driver account it's assigned to (None = nobody yet)
     rating: Optional[int] = None      # ⭐ customer rating 1-5 after delivery (None = not rated)
     proof: Optional[str] = None       # 📷 filename of the delivery photo (None = no photo)
+    price: Optional[float] = None     # order total in yuan (None = not set)
+    pay_method: str = ""              # "cash" / "wechat" / "alipay" once paid
+    paid_at: Optional[float] = None   # when the money was received (None = unpaid)
     created_at: float = field(default_factory=time.time)
     id: str = field(default_factory=lambda: uuid.uuid4().hex[:8])
 

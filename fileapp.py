@@ -871,6 +871,9 @@ def api_route():
                 "late": o.id in late_ids,
                 "eta_epoch": o.eta_epoch,
                 "promised_epoch": o.promised_by,
+                "price": o.price,                     # yuan to collect (None = not set)
+                "paid": o.paid_at is not None,
+                "pay_method": o.pay_method or "",
             }
             for o in route
         ],
@@ -915,6 +918,17 @@ def add_order():
     if len(note) > 200:
         return bad_request("note is too long (max 200 characters)")
 
+    # 4b) Price is optional: the order total in yuan.
+    price = None
+    price_raw = str(body.get("price", "")).strip()
+    if price_raw:
+        try:
+            price = round(float(price_raw), 2)
+        except ValueError:
+            return bad_request("price must be a number")
+        if not (0 <= price <= 100000):            # also rejects nan and inf
+            return bad_request("price is out of range")
+
     # 5) Promise is optional, but if given it must be a positive number.
     kw = {}
     promise_raw = str(body.get("promise_minutes", "")).strip()
@@ -927,7 +941,7 @@ def add_order():
             return bad_request("promise must be positive")
         kw["promised_by"] = time.time() + minutes * 60
 
-    order = Order(customer_name=name, lat=lat, lng=lng, phone=phone, note=note, **kw)
+    order = Order(customer_name=name, lat=lat, lng=lng, phone=phone, note=note, price=price, **kw)
     # Auto-assign to the nearest approved driver that has a GPS position.
     # If none is available, driver_id stays None and the order sits in the pool.
     nearest = find_nearest_driver(users, order.lat, order.lng)
@@ -954,6 +968,27 @@ def deliver_order(order_id):
         print(f"✅ Delivered: {order.customer_name}", flush=True)
         return jsonify({"ok": True})
     return jsonify({"ok": False}), 404
+
+PAY_METHODS = ("cash", "wechat", "alipay")
+
+
+@app.route("/api/orders/<order_id>/paid", methods=["POST"])
+@login_required
+def mark_paid(order_id):
+    """Record that the customer paid (cash / wechat / alipay), or undo it with "none"."""
+    order = store.get(order_id)
+    if not order or not visible_to_me(order):      # never someone else's order (IDOR)
+        return jsonify({"ok": False}), 404
+    method = str((request.get_json(silent=True) or {}).get("method", "")).strip().lower()
+    if method == "none":
+        order.pay_method, order.paid_at = "", None
+    elif method in PAY_METHODS:
+        order.pay_method, order.paid_at = method, time.time()
+    else:
+        return bad_request("method must be cash, wechat, alipay or none")
+    store.save()
+    return jsonify({"ok": True, "paid": order.paid_at is not None, "method": order.pay_method})
+
 
 @app.route("/api/orders/<order_id>/proof", methods=["POST"])
 @login_required
@@ -1049,6 +1084,18 @@ def edit_order(order_id):
     return bad_request("phone looks invalid")
   if len(note) > 200:
     return bad_request("note is too long (max 200 characters)")
+  if "price" in body:                         # empty value clears the price
+    raw = str(body.get("price") or "").strip()
+    if raw:
+      try:
+        new_price = round(float(raw), 2)
+      except ValueError:
+        return bad_request("price must be a number")
+      if not (0 <= new_price <= 100000):
+        return bad_request("price is out of range")
+      order.price = new_price
+    else:
+      order.price = None
   order.customer_name = name
   order.phone = phone
   order.note = note
@@ -1213,12 +1260,19 @@ def api_stats():
     minutes = []
     by_hour = [0] * 24
     on_time = late = 0
+    revenue = {d: 0.0 for d in days}               # yuan earned per day (delivered orders)
+    to_collect = 0.0                              # delivered but not paid yet
     per_driver = {}                               # driver id → their numbers (same rules as above)
 
     for o in orders_for_request():
         if o.status != OrderStatus.DELIVERED or not o.delivered_at:
             continue
         done = datetime.fromtimestamp(o.delivered_at)
+        if o.price:
+            if done.date() in revenue:
+                revenue[done.date()] += o.price
+            if o.paid_at is None:
+                to_collect += o.price
         p = per_driver.setdefault(o.driver_id, {"today": 0, "week": 0, "minutes": [], "on_time": 0, "late": 0})
         p["today"] += done.date() == today
         p["week"] += done.date() in per_day
@@ -1256,6 +1310,10 @@ def api_stats():
         "total_delivered": sum(by_hour),
         "avg_minutes": round(statistics.median(minutes)) if minutes else None,
         "on_time_pct": round(on_time / promised * 100) if promised else None,
+        "revenue": [round(revenue[d], 2) for d in days],
+        "revenue_today": round(revenue[today], 2),
+        "revenue_week": round(sum(revenue.values()), 2),
+        "to_collect": round(to_collect, 2),
     })
 
 @app.route("/api/logout-all", methods=["POST"])
@@ -1339,6 +1397,9 @@ def list_orders():
                        if o.delivered_at and o.created_at else None,
             "has_proof": bool(o.proof),       # 📷 is there a delivery photo?
             "rating": o.rating,               # ⭐ customer rating, if any
+            "price": o.price,                 # order total in yuan (None = not set)
+            "pay_method": o.pay_method or "",
+            "paid": o.paid_at is not None,
         })
     return jsonify(items)
 

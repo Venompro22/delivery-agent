@@ -66,6 +66,31 @@
       catch (e) { prompt('Copy this tracking link for the customer:', url); }
     }
 
+    // Money: a pill with the price (green = paid, amber = still to collect)
+    const PAY_LABEL = {cash: 'Cash', wechat: 'WeChat', alipay: 'Alipay'};
+    function yuan(n) { return '¥' + (Number.isInteger(n) ? n : n.toFixed(2)); }
+    function money(o) {
+      if (o.price === null || o.price === undefined) return '';
+      return o.paid
+        ? `<span class="money paid">${yuan(o.price)} · ${PAY_LABEL[o.pay_method] || 'Paid'}</span>`
+        : `<span class="money unpaid">${yuan(o.price)} · Unpaid</span>`;
+    }
+    function payButtons(o) {
+      if (o.price === null || o.price === undefined || o.status === 'cancelled') return '';
+      if (o.paid) return `<button class="btn" onclick="markPaid('${o.id}', 'none')">Undo paid</button>`;
+      return ['cash', 'wechat', 'alipay'].map(m =>
+        `<button class="btn pay" onclick="markPaid('${o.id}', '${m}')">${PAY_LABEL[m]}</button>`).join('');
+    }
+    async function markPaid(id, method) {
+      const res = await fetch(`/api/orders/${id}/paid`, {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({method}),
+      });
+      if (!res.ok) { alert((await res.json()).error || 'Could not save'); return; }
+      lastSignature = '';
+      load();
+    }
+
     async function cancelOrder(id) {
       if (!confirm('Cancel this order?')) return;
       const res = await fetch(`/api/orders/${id}/cancel`, {method: 'POST'});
@@ -82,10 +107,12 @@
       if (phone === null) return;
       const note = prompt('Address / notes:', o.note || '');
       if (note === null) return;
+      const price = prompt('Price ¥ (empty = none):', o.price ?? '');
+      if (price === null) return;
       const res = await fetch(`/api/orders/${id}`, {
         method: 'PUT',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({name, phone, note}),
+        body: JSON.stringify({name, phone, note, price}),
       });
       if (!res.ok) { alert((await res.json()).error || 'Could not save'); return; }
       lastSignature = '';
@@ -114,6 +141,7 @@
         <div class="order ${o.status}">
           <div class="row">
             <b>${esc(o.name)}</b>
+            ${money(o)}
             <span class="badge ${o.status}">${o.status}</span>
           </div>
           <div class="meta">${o.created}${o.promise ? ' · promised ' + o.promise : ''}${o.phone ? ' · ' + esc(o.phone) : ''}${o.rating ? ' · ' + '★'.repeat(o.rating) : ''}</div>
@@ -123,6 +151,7 @@
             ${o.phone ? `<a class="btn call" href="tel:${esc(o.phone)}">${ICON.phone}Call</a>` : ''}
             <button class="btn share" onclick="share('${o.id}', '${o.track_key}')">${ICON.share}Share</button>
             ${o.has_proof ? `<a class="btn photo" href="/api/orders/${o.id}/proof" target="_blank" rel="noopener">${ICON.camera}Photo</a>` : ''}
+            ${payButtons(o)}
             ${o.status === 'pending' ? `<button class="btn" onclick="editOrder('${o.id}')">Edit</button>
             <button class="btn cancel" onclick="cancelOrder('${o.id}')">✕ Cancel</button>` : ''}
           </div>

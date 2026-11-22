@@ -87,6 +87,7 @@
         <div class="name">${esc(s.name)}${s.late ? '<span class="badge">LATE</span>' : ''}</div>
         ${s.note ? `<div class="note">${esc(s.note)}</div>` : ''}
         <div class="info">ETA ${s.eta} · ${s.leg_km} km${s.promise ? ` · promised ${s.promise}` : ''}</div>
+        ${collectBox(s)}
         <a class="btn nav" href="${navUrl(s)}" target="_blank" rel="noopener">${ICON.nav}Navigate</a>
         <div class="row">
           ${s.phone ? `<a class="btn call" href="tel:${esc(s.phone)}">${ICON.phone}Call</a>` : ''}
@@ -119,6 +120,26 @@
       const d = await res.json();
       if (navigator.vibrate) navigator.vibrate(80);
       toast(d.ok ? `${s.name} delivered with photo` : `Delivered, but the photo failed to upload`);
+      load();
+    }
+
+    // Money to collect at the door: tap how the customer paid (tap again to undo)
+    const PAY_LABEL = {cash: 'Cash', wechat: 'WeChat', alipay: 'Alipay'};
+    function yuan(n) { return '¥' + (Number.isInteger(n) ? n : n.toFixed(2)); }
+    function collectBox(s) {
+      if (s.price === null || s.price === undefined) return '';
+      const chips = ['cash', 'wechat', 'alipay'].map(m => `<button class="pay-chip ${s.pay_method === m ? 'on' : ''}"
+          onclick="markPaid('${s.id}', '${s.pay_method === m ? 'none' : m}')">${PAY_LABEL[m]}</button>`).join('');
+      return `<div class="collect ${s.paid ? 'paid' : ''}">
+          <div class="collect-amount">${s.paid ? 'Paid' : 'Collect'} ${yuan(s.price)}</div>
+          <div class="pay-chips">${chips}</div></div>`;
+    }
+    async function markPaid(id, method) {
+      const res = await api(`/api/orders/${id}/paid`, {
+        method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({method}),
+      });
+      if (!res.ok) { toast('Could not save the payment'); return; }
+      if (navigator.vibrate) navigator.vibrate(40);
       load();
     }
 

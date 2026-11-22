@@ -40,3 +40,13 @@ body { font-family: -apple-system, "Segoe UI", sans-serif; margin: 0; background
          padding: 14px 20px; border-radius: 12px; font-weight: 700; opacity: 0; transition: opacity .25s;
          pointer-events: none; max-width: 90vw; text-align: center; z-index: 9999; }
 .toast.show { opacity: 1; }
+
+/* Money to collect at the door */
+.collect { margin-top: 12px; padding: 12px; border-radius: 14px; border: 2px solid var(--warn); }
+.collect.paid { border-color: var(--ok); }
+.collect-amount { font-size: 24px; font-weight: 800; color: var(--warn); font-variant-numeric: tabular-nums; }
+.collect.paid .collect-amount { color: var(--ok); }
+.pay-chips { display: flex; gap: 8px; margin-top: 8px; }
+.pay-chip { flex: 1; padding: 12px 0; border-radius: 12px; border: 2px solid var(--border);
+            background: transparent; color: var(--text); font-size: 16px; font-weight: 700; cursor: pointer; }
+.pay-chip.on { background: var(--ok); border-color: var(--ok); color: #fff; }

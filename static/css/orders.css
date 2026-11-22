@@ -52,3 +52,10 @@ input:focus { outline: none; border-color: var(--accent); }
 .btn.share { background: var(--accent); }
 .btn.cancel { background: var(--danger); }
 .empty { color: var(--faint); text-align: center; padding: 30px; font-size: 13px; }
+
+/* Money pill next to the status badge */
+.money { font-size: 11px; padding: 3px 8px; border-radius: 20px; font-weight: 700;
+         font-variant-numeric: tabular-nums; white-space: nowrap; }
+.money.paid { background: rgba(31,157,85,0.15); color: var(--ok); }
+.money.unpaid { background: rgba(240,160,32,0.15); color: var(--warn); }
+.btn.pay { border-color: var(--ok); color: var(--ok); }

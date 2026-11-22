@@ -70,6 +70,7 @@
       <input id="lng" placeholder="Longitude" inputmode="decimal" autocomplete="off"/>
     </div>
     <input id="promise" placeholder="Promise in minutes (optional)" inputmode="numeric" autocomplete="off"/>
+    <input id="price" placeholder="Price ¥ (optional)" inputmode="decimal" autocomplete="off"/>
     <button onclick="addOrder()">Add order</button>
     </details>
     <div id="error" class="error"></div>
@@ -459,6 +460,7 @@
         <input class="qa-name" placeholder="Customer name" autocomplete="off"/>
         <input class="qa-phone" placeholder="Phone (optional)" inputmode="tel" autocomplete="off"/>
         <input class="qa-note" placeholder="Address / notes (optional)" maxlength="200" autocomplete="off"/>
+        <input class="qa-price" placeholder="Price ¥ (optional)" inputmode="decimal" autocomplete="off"/>
         <div class="qa-promise"><button type="button" data-m="">No promise</button><button type="button" data-m="30">30 min</button><button type="button" data-m="60">1 h</button></div>
         <div class="qa-error"></div>
         <button type="button" class="qa-add">Add order</button>`;
@@ -475,6 +477,7 @@
         document.getElementById('phone').value = form.querySelector('.qa-phone').value;
         document.getElementById('note').value = form.querySelector('.qa-note').value;
         document.getElementById('promise').value = promise;
+        document.getElementById('price').value = form.querySelector('.qa-price').value;
         await addOrder();
         const err = document.getElementById('error');
         if (err.style.display === 'block') {
@@ -497,7 +500,7 @@
     }
     function clearError() {
       document.getElementById('error').style.display = 'none';
-      ['name','phone','note','lat','lng','promise'].forEach(id =>
+      ['name','phone','note','lat','lng','promise','price'].forEach(id =>
         document.getElementById(id).classList.remove('invalid'));
     }
 
@@ -510,6 +513,7 @@
         lat: document.getElementById('lat').value.trim(),
         lng: document.getElementById('lng').value.trim(),
         promise_minutes: document.getElementById('promise').value.trim(),
+        price: document.getElementById('price').value.trim(),
       };
 
       const missing = ['name','lat','lng'].filter(k => !body[k]);
@@ -528,7 +532,7 @@
       const data = await res.json();
       if (!res.ok) { showError(data.error || 'Could not add order.'); return; }
 
-      ['name','phone','note','lat','lng','promise'].forEach(id => document.getElementById(id).value = '');
+      ['name','phone','note','lat','lng','promise','price'].forEach(id => document.getElementById(id).value = '');
       if (pickMarker) { map.removeLayer(pickMarker); pickMarker = null; }
       knownIds.add(data.id);
       await refresh();

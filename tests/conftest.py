@@ -7,6 +7,7 @@ import pytest
 os.environ["DASHBOARD_PASSWORD"] = "owner-pass"
 os.environ["SKIP_AUTO_RETRAIN"] = "1"
 os.environ.pop("COOKIE_SECURE", None)
+os.environ.pop("DATABASE_URL", None)     # tests always use temporary SQLite, never Neon
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import fileapp                      # noqa: E402
