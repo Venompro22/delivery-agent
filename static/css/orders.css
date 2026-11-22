@@ -58,4 +58,4 @@ input:focus { outline: none; border-color: var(--accent); }
          font-variant-numeric: tabular-nums; white-space: nowrap; }
 .money.paid { background: rgba(31,157,85,0.15); color: var(--ok); }
 .money.unpaid { background: rgba(240,160,32,0.15); color: var(--warn); }
-.btn.pay { border-color: var(--ok); color: var(--ok); }
+.btn.pay { background: var(--ok); }

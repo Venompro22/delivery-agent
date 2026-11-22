@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta name="google" content="notranslate"/>
+  <meta charset="utf-8"/>
+  <link rel="icon" type="image/svg+xml" href="/static/logo.svg?v={{ asset_v }}"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Products - 智送管家</title>
+  <link rel="stylesheet" href="/static/css/orders.css?v={{ asset_v }}"/>
+  <link rel="stylesheet" href="/static/vendor/inter/inter.css?v={{ asset_v }}" media="print"/>
+  <link rel="stylesheet" href="/static/pro.css?v={{ asset_v }}"/>
+  <link rel="stylesheet" href="/static/css/theme.css?v={{ asset_v }}"/>
+</head>
+<body class="app">
+  <div class="wrap">
+    <div class="top">
+      <h1>Products</h1>
+      <span class="lang-slot" data-lang-slot></span>
+      <a class="back" href="/">← Dashboard</a>
+    </div>
+
+    <div class="order">
+      <input id="p-name" placeholder="Product name" maxlength="60" autocomplete="off"/>
+      <div class="coords" style="display:flex; gap:8px">
+        <input id="p-price" placeholder="Price ¥" inputmode="decimal" autocomplete="off"/>
+        <input id="p-unit" placeholder="Unit (optional) — e.g. bucket, box" maxlength="20" autocomplete="off"/>
+      </div>
+      <div id="p-error" class="meta" style="color:var(--danger); min-height:16px"></div>
+      <button class="btn" style="width:100%; padding:11px; font-size:14px" onclick="addProduct()">Add product</button>
+    </div>
+
+    <div id="list" style="margin-top:14px"></div>
+  </div>
+
+  <script src="/static/font-load.js?v={{ asset_v }}"></script>
+  <script>
+    let products = [];
+
+    function esc(t) {
+      return String(t).replace(/[&<>"']/g, c => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      }[c]));
+    }
+    function yuan(n) { return '¥' + (Number.isInteger(n) ? n : n.toFixed(2)); }
+
+    async function send(url, method, body) {
+      const res = await fetch(url, {
+        method, headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body),
+      });
+      if (res.status === 401) { location.href = '/login'; return null; }
+      const data = await res.json();
+      if (!res.ok) { alert(data.error || 'Could not save'); return null; }
+      return data;
+    }
+
+    function render() {
+      document.getElementById('list').innerHTML = products.map(p => `
+        <div class="order ${p.active ? '' : 'delivered'}">
+          <div class="row">
+            <b>${esc(p.name)}</b>
+            <span class="money paid">${yuan(p.price)}${p.unit ? ' / ' + esc(p.unit) : ''}</span>
+            ${p.active ? '' : '<span class="badge cancelled">Hidden</span>'}
+          </div>
+          <div class="actions">
+            <button class="btn" onclick="editProduct('${p.id}')">Edit</button>
+            <button class="btn ${p.active ? 'cancel' : 'pay'}" onclick="toggleProduct('${p.id}')">${p.active ? 'Hide' : 'Show'}</button>
+          </div>
+        </div>`).join('') || '<div class="empty">No products yet.</div>';
+    }
+
+    async function load() {
+      const res = await fetch('/api/products?all=1');
+      if (res.status === 401) { location.href = '/login'; return; }
+      products = await res.json();
+      render();
+    }
+
+    async function addProduct() {
+      const err = document.getElementById('p-error');
+      err.textContent = '';
+      const body = {
+        name: document.getElementById('p-name').value.trim(),
+        price: document.getElementById('p-price').value.trim(),
+        unit: document.getElementById('p-unit').value.trim(),
+      };
+      if (!body.name || !body.price) { err.textContent = 'Name and price are required.'; return; }
+      const res = await fetch('/api/products', {
+        method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok) { err.textContent = data.error || 'Could not add'; return; }
+      ['p-name', 'p-price', 'p-unit'].forEach(id => document.getElementById(id).value = '');
+      document.getElementById('p-name').focus();
+      load();
+    }
+
+    async function editProduct(id) {
+      const p = products.find(x => x.id === id);
+      const name = prompt('Product name:', p.name);
+      if (name === null) return;
+      const price = prompt('Price ¥:', p.price);
+      if (price === null) return;
+      const unit = prompt('Unit (optional):', p.unit || '');
+      if (unit === null) return;
+      if (await send(`/api/products/${id}`, 'PUT', {name, price, unit})) load();
+    }
+
+    async function toggleProduct(id) {
+      const p = products.find(x => x.id === id);
+      if (await send(`/api/products/${id}`, 'PUT', {active: !p.active})) load();
+    }
+
+    document.getElementById('p-unit').addEventListener('keydown', e => { if (e.key === 'Enter') addProduct(); });
+    load();
+  </script>
+  <script src="/static/i18n.js?v={{ asset_v }}"></script>
+  <script src="/static/pro.js?v={{ asset_v }}"></script>
+  <script src="/static/app.js?v={{ asset_v }}"></script>
+</body>
+</html>

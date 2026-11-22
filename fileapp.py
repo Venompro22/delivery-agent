@@ -1360,6 +1360,59 @@ def mark_orders_seen():
     return jsonify({"ok": True, "lat": lat, "lng": lng})
 
 
+from products import ProductStore, clean as clean_product
+
+_products = None
+
+
+def product_store() -> ProductStore:
+    """Product table in the same database as the orders (follows store.path, so tests stay isolated)."""
+    global _products
+    path = getattr(store, "path", os.path.join(HERE, "orders.db"))
+    if _products is None or _products.path != path:
+        _products = ProductStore(path)
+    return _products
+
+
+@app.route("/products")
+@owner_required
+def products_page():
+    return render_template("products.html")
+
+
+@app.route("/api/products")
+@login_required
+def list_products():
+    """The catalog. The owner also sees hidden products (?all=1)."""
+    show_hidden = current_role() == "owner" and request.args.get("all") == "1"
+    return jsonify(product_store().all(include_hidden=show_hidden))
+
+
+@app.route("/api/products", methods=["POST"])
+@owner_required
+def add_product():
+    body = request.get_json(silent=True) or {}
+    fields, error = clean_product(body.get("name", ""), body.get("price", ""), body.get("unit", ""))
+    if error:
+        return bad_request(error)
+    product = product_store().create(fields["name"], fields["price"], fields["unit"])
+    return jsonify({"ok": True, "product": product})
+
+
+@app.route("/api/products/<product_id>", methods=["PUT"])
+@owner_required
+def edit_product(product_id):
+    if not product_store().get(product_id):
+        return jsonify({"ok": False}), 404
+    body = request.get_json(silent=True) or {}
+    fields, error = clean_product(body.get("name"), body.get("price"), body.get("unit"))
+    if error:
+        return bad_request(error)
+    if "active" in body:
+        fields["active"] = bool(body["active"])
+    return jsonify({"ok": True, "product": product_store().update(product_id, **fields)})
+
+
 @app.route("/orders")
 @owner_required
 def orders_page():
