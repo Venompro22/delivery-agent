@@ -131,3 +131,10 @@ mark.ent { padding: 0 1px; border-radius: 0; color: inherit; background: none; b
 
 /* The driver arrow turns smoothly */
 .puck-arrow { transition: transform .35s ease-out; }
+
+/* Customer orders waiting for confirmation */
+.req-banner { display: block; margin: 8px 0; padding: 10px 14px; border-radius: 12px; font-weight: 700; font-size: 14px;
+  text-decoration: none; color: #fff; background: var(--accent); animation: req-pulse 2s ease-in-out infinite; }
+.req-banner[hidden] { display: none; }
+@keyframes req-pulse { 50% { box-shadow: 0 0 0 6px rgba(59, 130, 246, .25); } }
+@media (prefers-reduced-motion: reduce) { .req-banner { animation: none; } }

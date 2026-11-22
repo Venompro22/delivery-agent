@@ -59,3 +59,5 @@ input:focus { outline: none; border-color: var(--accent); }
 .money.paid { background: rgba(31,157,85,0.15); color: var(--ok); }
 .money.unpaid { background: rgba(240,160,32,0.15); color: var(--warn); }
 .btn.pay { background: var(--ok); }
+.badge.requested { background: rgba(59,130,246,0.15); color: var(--accent); }
+.order.requested { border-color: var(--accent); }

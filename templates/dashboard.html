@@ -76,6 +76,7 @@
     </details>
     <div id="error" class="error"></div>
     <div id="toast" class="toast"></div>
+    <a id="req-banner" class="req-banner" href="/orders#requested" hidden></a>
 
     <div class="stats">
       <div class="stat"><div class="num" id="stat-stops">0</div><div class="label">Stops</div></div>
@@ -1098,6 +1099,9 @@ const INTENT_NAMES = {new_order: 'New order', cancel: 'Cancel', question: 'Quest
         </div>`;
       });
 
+      const nReq = data.summary.requested_count || 0, reqBanner = document.getElementById('req-banner');
+      reqBanner.hidden = !nReq;
+      reqBanner.textContent = nReq === 1 ? '1 customer order waiting — review' : `${nReq} customer orders waiting — review`;
       document.getElementById('stat-stops').textContent = data.summary.stops;
       document.getElementById('stat-km').textContent = data.summary.total_km;
       document.getElementById('stat-finish').textContent = data.summary.finish;

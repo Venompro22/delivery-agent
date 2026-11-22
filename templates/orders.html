@@ -27,6 +27,7 @@
     <div class="meta" id="stats" style="margin-bottom:12px"></div>
     <div class="tabs" id="tabs">
       <button class="tab on" data-f="all">All</button>
+      <button class="tab" data-f="requested">Requests <span id="c-req"></span></button>
       <button class="tab" data-f="pending">Pending</button>
       <button class="tab" data-f="delivered">Delivered</button>
       <button class="tab" data-f="today">Today</button>
@@ -91,6 +92,13 @@
       load();
     }
 
+    async function confirmOrder(id) {
+      const res = await fetch(`/api/orders/${id}/confirm`, {method: 'POST'});
+      if (!res.ok) { alert((await res.json()).error || 'Could not confirm'); return; }
+      lastSignature = '';
+      load();
+    }
+
     async function cancelOrder(id) {
       if (!confirm('Cancel this order?')) return;
       const res = await fetch(`/api/orders/${id}/cancel`, {method: 'POST'});
@@ -122,6 +130,7 @@
     function render() {
       const q = document.getElementById('q').value.trim().toLowerCase();
       const shown = orders.filter(o => {
+        if (filter === 'requested' && o.status !== 'requested') return false;
         if (filter === 'pending' && o.status !== 'pending') return false;
         if (filter === 'delivered' && o.status !== 'delivered') return false;
         if (filter === 'today' && !o.today) return false;
@@ -134,6 +143,8 @@
       document.getElementById('stats').textContent =
         `Today: ${doneToday.length} delivered` + (avg !== null ? ` · avg ${avg} min per order` : '');
       document.getElementById('c-all').textContent = orders.length;
+      const nReq = orders.filter(o => o.status === 'requested').length;
+      document.getElementById('c-req').textContent = nReq ? `(${nReq})` : '';
       document.getElementById('c-pending').textContent = orders.filter(o => o.status === 'pending').length;
       document.getElementById('c-delivered').textContent = orders.filter(o => o.status === 'delivered').length;
 
@@ -151,6 +162,8 @@
             ${o.phone ? `<a class="btn call" href="tel:${esc(o.phone)}">${ICON.phone}Call</a>` : ''}
             <button class="btn share" onclick="share('${o.id}', '${o.track_key}')">${ICON.share}Share</button>
             ${o.has_proof ? `<a class="btn photo" href="/api/orders/${o.id}/proof" target="_blank" rel="noopener">${ICON.camera}Photo</a>` : ''}
+            ${o.status === 'requested' ? `<button class="btn pay" onclick="confirmOrder('${o.id}')">Accept</button>
+            <button class="btn cancel" onclick="cancelOrder('${o.id}')">Decline</button>` : ''}
             ${payButtons(o)}
             ${o.status === 'pending' ? `<button class="btn" onclick="editOrder('${o.id}')">Edit</button>
             <button class="btn cancel" onclick="cancelOrder('${o.id}')">✕ Cancel</button>` : ''}
@@ -178,6 +191,11 @@
       render();
     });
     document.getElementById('q').addEventListener('input', render);
+    // /orders#requested opens straight on the customer requests
+    if (location.hash === '#requested') {
+      filter = 'requested';
+      document.querySelectorAll('.tab').forEach(t => t.classList.toggle('on', t.dataset.f === 'requested'));
+    }
 
     load();
     setInterval(() => { if (!document.hidden) load(); }, 15000);

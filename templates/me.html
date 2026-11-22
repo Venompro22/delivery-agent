@@ -25,6 +25,15 @@
     <h1 id="hello"></h1>
     <div id="map" class="me-map"></div>
 
+    <section class="me-card" id="shop" hidden>
+      <h2 id="t-shop"></h2>
+      <div id="menu" class="me-menu"></div>
+      <p class="me-hint" id="t-where"></p>
+      <input id="addr" class="me-input" maxlength="120" autocomplete="off"/>
+      <div class="me-total-row"><span id="total"></span><button id="place" class="me-place"></button></div>
+      <div class="me-msg" id="order-msg"></div>
+    </section>
+
     <section class="me-card">
       <h2 id="t-orders"></h2>
       <div id="orders" class="me-orders"></div>
@@ -52,12 +61,21 @@
             hint: 'Got a tracking link from the shop? Paste it here to keep the order in your account.',
             empty: 'No orders yet. Paste a tracking link below to add one.',
             added: 'Order added', bad: 'This tracking link is not valid',
-            st: { pending: 'On the way', delivered: 'Delivered', cancelled: 'Cancelled' } },
+            shop: 'Order now', where: 'Tap the map to set where we deliver, then add your building and room.',
+            addr: 'Building, floor, room (e.g. Bldg 5, room 302)', place: 'Place order', total: n => `Total ¥${n}`,
+            needItems: 'Choose at least one product', needPin: 'Tap the map to set the delivery spot',
+            needAddr: 'Add your building and room', placed: 'Order sent! The shop will confirm it soon.',
+            cancel: 'Cancel', cancelAsk: 'Cancel this order?', here: 'Deliver here',
+            st: { requested: 'Waiting for the shop', pending: 'On the way', delivered: 'Delivered', cancelled: 'Cancelled' } },
       zh: { hello: n => `您好，${n}`, orders: '我的订单', add: '添加订单', btn: '添加',
             hint: '收到商家发来的追踪链接？粘贴到这里，订单就会保存到您的账号。',
             empty: '还没有订单。在下面粘贴追踪链接即可添加。',
             added: '订单已添加', bad: '追踪链接无效',
-            st: { pending: '配送中', delivered: '已送达', cancelled: '已取消' } },
+            shop: '立即下单', where: '在地图上点一下送货位置，再填楼号和房间号～',
+            addr: '楼号、楼层、房间（如 5号楼302）', place: '下单', total: n => `合计 ¥${n}`,
+            needItems: '先选一件商品吧', needPin: '在地图上点一下送货位置', needAddr: '填一下楼号和房间号',
+            placed: '下单成功！商家确认后马上配送～', cancel: '取消', cancelAsk: '确定取消这个订单吗？', here: '送到这里',
+            st: { requested: '等商家确认', pending: '配送中', delivered: '已送达', cancelled: '已取消' } },
     }[lang === 'en' ? 'en' : 'zh'];
 
     function esc(t) {
@@ -74,7 +92,8 @@
     L.tileLayer('https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
                 { subdomains: '1234', maxZoom: 18 }).addTo(map);
     const pins = L.layerGroup().addTo(map);
-    const COLOR = { pending: '#3b82f6', delivered: '#16a34a', cancelled: '#94a3b8' };
+    const COLOR = { requested: '#f59e0b', pending: '#3b82f6', delivered: '#16a34a', cancelled: '#94a3b8' };
+    const yuan = n => Number.isInteger(n) ? String(n) : n.toFixed(2);
 
     async function load() {
       const d = await (await fetch('/api/me/orders')).json();
@@ -87,8 +106,11 @@
       list.innerHTML = d.orders.map(o => `
         <a class="me-order" href="${esc(o.track_url)}">
           <div><div class="me-note">${esc(o.note || '—')}</div>
-            <div class="me-time">${new Date(o.created_at * 1000).toLocaleString()}</div></div>
-          <span class="chip ${esc(o.status)}">${T.st[o.status] || esc(o.status)}</span>
+            <div class="me-time">${new Date(o.created_at * 1000).toLocaleString()}${o.price != null ? ' · ¥' + yuan(o.price) : ''}</div></div>
+          <div class="me-order-side">
+            ${o.status === 'requested' ? `<button class="me-cancel" onclick="cancelOrder(event, '${esc(o.id)}')">${T.cancel}</button>` : ''}
+            <span class="chip ${esc(o.status)}">${T.st[o.status] || esc(o.status)}</span>
+          </div>
         </a>`).join('');
       const pts = d.orders.map(o => {
         L.circleMarker([o.lat, o.lng], { radius: 9, color: '#fff', weight: 2, fillColor: COLOR[o.status] || '#94a3b8', fillOpacity: 1 })
@@ -96,6 +118,86 @@
         return [o.lat, o.lng];
       });
       map.fitBounds(pts, { padding: [40, 40], maxZoom: 16 });
+      if (!pin) setPin(d.orders[0].lat, d.orders[0].lng);   // same spot as last time, easy to move
+    }
+
+    // ---------- Order now: catalog, quantities, delivery spot ----------
+    const qty = {};
+    let products = [], pin = null;
+
+    function setPin(lat, lng) {
+      if (pin) pin.setLatLng([lat, lng]);
+      else pin = L.marker([lat, lng], { draggable: true }).addTo(map).bindTooltip(T.here, { permanent: true, direction: 'top', offset: [-15, -12] });
+    }
+    map.on('click', e => setPin(e.latlng.lat, e.latlng.lng));
+
+    function renderMenu() {
+      document.getElementById('menu').innerHTML = products.map(p => `
+        <div class="me-item">
+          <div><div class="me-item-name">${esc(p.name)}</div>
+            <div class="me-time">¥${yuan(p.price)}${p.unit ? ' / ' + esc(p.unit) : ''}</div></div>
+          <div class="me-qty">
+            <button onclick="changeQty('${esc(p.id)}', -1)" aria-label="-">−</button>
+            <span>${qty[p.id] || 0}</span>
+            <button onclick="changeQty('${esc(p.id)}', 1)" aria-label="+">+</button>
+          </div>
+        </div>`).join('');
+      const total = products.reduce((sum, p) => sum + p.price * (qty[p.id] || 0), 0);
+      document.getElementById('total').textContent = T.total(yuan(Math.round(total * 100) / 100));
+    }
+    function changeQty(id, step) {
+      qty[id] = Math.max(0, Math.min(99, (qty[id] || 0) + step));
+      renderMenu();
+    }
+
+    async function loadMenu() {
+      const res = await fetch('/api/products');
+      if (!res.ok) return;
+      products = await res.json();
+      document.getElementById('shop').hidden = !products.length;   // nothing to sell: no shop box
+      renderMenu();
+    }
+
+    document.getElementById('t-shop').textContent = T.shop;
+    document.getElementById('t-where').textContent = T.where;
+    document.getElementById('addr').placeholder = T.addr;
+    document.getElementById('place').textContent = T.place;
+    try { document.getElementById('addr').value = localStorage.getItem('lastAddress') || ''; } catch (e) {}
+
+    document.getElementById('place').onclick = async () => {
+      const msg = document.getElementById('order-msg');
+      const items = Object.entries(qty).filter(([, n]) => n > 0).map(([id, n]) => ({ id, qty: n }));
+      const address = document.getElementById('addr').value.trim();
+      const fail = text => { msg.textContent = text; msg.className = 'me-msg bad'; };
+      if (!items.length) return fail(T.needItems);
+      if (!pin) return fail(T.needPin);
+      if (!address) return fail(T.needAddr);
+      const at = pin.getLatLng();
+      const btn = document.getElementById('place');
+      btn.disabled = true;
+      try {
+        const res = await fetch('/api/me/order', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ items, lat: at.lat, lng: at.lng, address }) });
+        const d = await res.json();
+        if (!d.ok) return fail(d.error || 'Error');
+        try { localStorage.setItem('lastAddress', address); } catch (e) {}
+        Object.keys(qty).forEach(k => delete qty[k]);
+        renderMenu();
+        msg.textContent = T.placed; msg.className = 'me-msg ok';
+        load();
+      } finally {
+        btn.disabled = false;
+      }
+    };
+
+    async function cancelOrder(event, id) {
+      event.preventDefault();                  // the button sits inside the order link
+      event.stopPropagation();
+      if (!confirm(T.cancelAsk)) return;
+      const res = await fetch(`/api/me/orders/${encodeURIComponent(id)}/cancel`, { method: 'POST' });
+      const d = await res.json();
+      if (!d.ok) { alert(d.error || 'Error'); return; }
+      load();
     }
 
     // Add an order by its tracking link (the signed key proves it belongs to you)
@@ -109,6 +211,8 @@
       if (d.ok) { input.value = ''; load(); }
     };
     load();
+    loadMenu();
+    setInterval(() => { if (!document.hidden) load(); }, 20000);   // see when the shop confirms
   </script>
   <script src="/static/i18n.js?v={{ asset_v }}"></script>
   <script src="/static/pro.js?v={{ asset_v }}"></script>

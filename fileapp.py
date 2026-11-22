@@ -528,7 +528,7 @@ def customer_order_view(order) -> dict:
     """What a customer sees about one of their orders."""
     return {"id": order.id, "name": order.customer_name, "note": public_note(order),
             "status": order.status.value, "created_at": order.created_at,
-            "lat": order.lat, "lng": order.lng,
+            "lat": order.lat, "lng": order.lng, "price": order.price,
             "track_url": f"/track/{order.id}?k={track_key(order.id)}"}
 
 
@@ -553,6 +553,116 @@ def claim_order():
             not hmac.compare_digest(m.group(2).encode(), track_key(m.group(1)).encode()):
         return jsonify({"ok": False, "error": "this tracking link is not valid"}), 400
     users.link_order(session["uid"], m.group(1))
+    return jsonify({"ok": True})
+
+
+MAX_OPEN_REQUESTS = 3          # orders a customer can have waiting for the shop at once
+MAX_REQUESTS_PER_HOUR = 5      # orders a customer can place per hour (anti-spam)
+MAX_ADDRESS = 120
+
+
+def _notify_new_request(order, summary: str) -> None:
+    """Telegram ping for the owner, sent in the background so the customer never waits."""
+    import threading
+    import alerts
+    text = (f"New customer order: {order.customer_name} ({order.phone})\n"
+            f"{summary}\nTotal: {order.price} yuan\nOpen the Orders page to confirm.")
+    threading.Thread(target=alerts._telegram, args=(text,), daemon=True).start()
+
+
+@app.route("/api/me/order", methods=["POST"])
+@login_required
+def customer_place_order():
+    """A customer orders from the catalog. The server computes the total; the shop confirms it."""
+    if current_role() != "customer":
+        return jsonify({"ok": False, "error": "customers only"}), 403
+    uid = session["uid"]
+    me = users.get(uid) or {}
+    body = request.get_json(silent=True) or {}
+
+    # 1) Items: visible products and whole quantities. Prices come from the catalog,
+    #    never from the browser, so a customer cannot change what they pay.
+    raw_items = body.get("items")
+    if not isinstance(raw_items, list) or not 1 <= len(raw_items) <= 20:
+        return bad_request("choose between 1 and 20 products")
+    catalog = {p["id"]: p for p in product_store().all()}
+    items, total = [], 0.0
+    for it in raw_items:
+        p = catalog.get(str(it.get("id", ""))) if isinstance(it, dict) else None
+        if not p:
+            return bad_request("a product is not available any more")
+        try:
+            qty = int(it.get("qty", 0))
+        except (TypeError, ValueError):
+            return bad_request("quantity must be a whole number")
+        if not 1 <= qty <= 99:
+            return bad_request("quantity must be between 1 and 99")
+        items.append({"id": p["id"], "name": p["name"], "unit": p["unit"], "price": p["price"], "qty": qty})
+        total += p["price"] * qty
+
+    # 2) Where: a point on the map plus building / floor details.
+    try:
+        lat, lng = float(body.get("lat")), float(body.get("lng"))
+    except (TypeError, ValueError):
+        return bad_request("tap the map to set your location")
+    if not (-90 <= lat <= 90 and -180 <= lng <= 180):      # also rejects nan
+        return bad_request("tap the map to set your location")
+    address = str(body.get("address", "")).strip()
+    if not address:
+        return bad_request("add your address details (building, floor, room)")
+    if len(address) > MAX_ADDRESS:
+        return bad_request(f"address is too long (max {MAX_ADDRESS} characters)")
+
+    # 3) Anti-spam: a few waiting orders at most, and a few per hour.
+    now = time.time()
+    mine = [o for o in (store.get(i) for i in users.customer_order_ids(uid)) if o]
+    if sum(1 for o in mine if o.status == OrderStatus.REQUESTED) >= MAX_OPEN_REQUESTS:
+        return bad_request("you already have orders waiting for the shop")
+    if sum(1 for o in mine if (o.created_at or 0) > now - 3600) >= MAX_REQUESTS_PER_HOUR:
+        return jsonify({"ok": False, "error": "too many orders, please try again later"}), 429
+
+    summary = ", ".join(f"{i['name']} x{i['qty']}" for i in items)
+    order = Order(customer_name=me.get("name") or "Customer", lat=lat, lng=lng,
+                  phone=me.get("phone", ""), note=f"{address} | {summary}"[:200],
+                  price=round(total, 2), status=OrderStatus.REQUESTED,
+                  items=json.dumps(items, ensure_ascii=False))
+    _store_add(order)
+    users.link_order(uid, order.id)
+    _notify_new_request(order, summary)
+    return jsonify({"ok": True, "id": order.id, "total": order.price,
+                    "track_url": f"/track/{order.id}?k={track_key(order.id)}"})
+
+
+@app.route("/api/me/orders/<order_id>/cancel", methods=["POST"])
+@login_required
+def customer_cancel_order(order_id):
+    """A customer can take back an order while the shop has not confirmed it yet."""
+    if current_role() != "customer":
+        return jsonify({"ok": False, "error": "customers only"}), 403
+    order = store.get(order_id)
+    if not order or order_id not in users.customer_order_ids(session["uid"]):
+        return jsonify({"ok": False}), 404
+    if order.status != OrderStatus.REQUESTED:
+        return bad_request("the shop already confirmed this order, please contact them")
+    order.status = OrderStatus.CANCELLED
+    store.save()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/orders/<order_id>/confirm", methods=["POST"])
+@owner_required
+def confirm_order(order_id):
+    """The shop accepts a customer's order: it joins the route like any other order."""
+    order = store.get(order_id)
+    if not order:
+        return jsonify({"ok": False}), 404
+    if order.status != OrderStatus.REQUESTED:
+        return bad_request("this order is not waiting for confirmation")
+    order.status = OrderStatus.PENDING
+    nearest = find_nearest_driver(users, order.lat, order.lng)
+    if nearest and not order.driver_id:
+        order.driver_id = nearest["id"]
+    store.save()
     return jsonify({"ok": True})
 
 
@@ -679,7 +789,7 @@ def _viewer_may_write() -> bool:
     return False
 
 
-CUSTOMER_ALLOWED = ("/me", "/api/me/", "/track/", "/api/track/", "/static/", "/logout")
+CUSTOMER_ALLOWED = ("/me", "/api/me/", "/api/products", "/track/", "/api/track/", "/static/", "/logout")
 
 
 @app.before_request
@@ -853,6 +963,8 @@ def api_route():
             "late_count": len(late_ids),
             "delivered": delivered,
             "new_count": new_count,
+            "requested_count": sum(1 for o in orders_for_request() if o.status == OrderStatus.REQUESTED)
+                               if current_role() == "owner" else 0,
         },
         "stops": [
             {
@@ -1485,6 +1597,9 @@ def track_payload(order_id, order) -> dict:
                         "created_at": order.created_at, "delivered_at": getattr(order, "delivered_at", None)})
     if order.status == OrderStatus.CANCELLED:
         return ({"ok": True, "status": "cancelled", "name": order.customer_name})
+    if order.status == OrderStatus.REQUESTED:
+        return ({"ok": True, "status": "requested", "name": order.customer_name,
+                 "note": public_note(order), "created_at": order.created_at, "price": order.price})
 
     # Where is this order in the current route?
     same_driver = [o for o in orders_for_request() if o.driver_id == order.driver_id]

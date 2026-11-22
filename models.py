@@ -11,6 +11,7 @@ from typing import Optional
 
 class OrderStatus(str, Enum):
     """Lifecycle states of an order."""
+    REQUESTED = "requested"   # placed by a customer, waiting for the shop to confirm
     PENDING = "pending"
     DELIVERED = "delivered"
     CANCELLED = "cancelled"
@@ -36,6 +37,7 @@ class Order:
     price: Optional[float] = None     # order total in yuan (None = not set)
     pay_method: str = ""              # "cash" / "wechat" / "alipay" once paid
     paid_at: Optional[float] = None   # when the money was received (None = unpaid)
+    items: str = ""                   # JSON list of {id, name, unit, price, qty} (customer orders)
     created_at: float = field(default_factory=time.time)
     id: str = field(default_factory=lambda: uuid.uuid4().hex[:8])
 

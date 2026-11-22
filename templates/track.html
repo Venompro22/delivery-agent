@@ -39,7 +39,8 @@
         updates: 'Updates automatically', conn: 'Connection problem', retry: 'Retrying…',
         s1: 'Order received', s2: 'On the way', s3: 'Delivered', you: 'You',
         rateMe: 'How did it go? Tap to rate', thanks: 'Thanks for the feedback!',
-        proofAlt: 'Delivery photo', about: m => `About ${m} min`, soon: 'Arriving any moment', expected: 'expected', late: 'Running a little late, the driver is hurrying', shop: 'Shop', contact: 'Contact the shop'},
+        proofAlt: 'Delivery photo', about: m => `About ${m} min`, soon: 'Arriving any moment', expected: 'expected', late: 'Running a little late, the driver is hurrying', shop: 'Shop', contact: 'Contact the shop',
+        waiting: 'Waiting for the shop to confirm', waitingSub: 'Delivery starts as soon as the shop confirms.'},
       zh: {
         title: '订单追踪', notFound: '未找到订单', checkLink: '请检查您的追踪链接。',
         delivered: '已送达！', enjoy: '祝您愉快', cancelled: '订单已取消', hi: '您好',
@@ -48,7 +49,8 @@
         updates: '自动更新', conn: '网络连接问题', retry: '正在重试…',
         s1: '已接单', s2: '配送中', s3: '已送达', you: '您',
         rateMe: '给骑手打个分吧', thanks: '谢啦~',
-        proofAlt: '送达照片', about: m => `约 ${m} 分钟`, soon: '马上就到', expected: '预计', late: '稍有延迟，骑手正在加速赶来', shop: '商家', contact: '联系商家'},
+        proofAlt: '送达照片', about: m => `约 ${m} 分钟`, soon: '马上就到', expected: '预计', late: '稍有延迟，骑手正在加速赶来', shop: '商家', contact: '联系商家',
+        waiting: '等商家确认中', waitingSub: '商家一确认就马上出发～'},
     }[lang === 'en' ? 'en' : 'zh'];
     document.title = T.title + ' · 智送管家';
 
@@ -180,6 +182,12 @@
         if (d.status === 'cancelled') {
           card.innerHTML = `<div class="icon bad">${ICON.x}</div><h1>${T.cancelled}</h1>${contact(d)}`;
           return stop();
+        }
+        if (d.status === 'requested') {        // keeps polling: the page updates once the shop confirms
+          card.innerHTML = `<div class="icon muted">${ICON.box}</div><h1>${T.waiting}</h1>
+            <div class="sub">${T.waitingSub}</div>${d.note ? `<div class="item">${ICON.box}${esc(d.note)}</div>` : ''}
+            ${contact(d)}<div class="foot">${T.updates} · ${new Date().toLocaleTimeString()}</div>`;
+          return;
         }
         etaEpoch = d.eta_epoch;
         createdAt = d.created_at;
