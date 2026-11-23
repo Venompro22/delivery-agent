@@ -609,6 +609,12 @@ def customer_place_order():
         items.append({"id": p["id"], "name": p["name"], "unit": p["unit"], "price": p["price"], "qty": qty})
         total += p["price"] * qty
 
+    # 1b) Shop rules: minimum order and delivery fee (never trusted from the browser).
+    shop = settings_store().all()
+    if total < shop["min_order"]:
+        return bad_request(f"minimum order is {shop['min_order']:g} yuan")
+    fee = delivery_fee_for(total, shop)
+
     # 2) Where: a point on the map plus building / floor details.
     try:
         lat, lng = float(body.get("lat")), float(body.get("lng"))
@@ -631,14 +637,16 @@ def customer_place_order():
         return jsonify({"ok": False, "error": "too many orders, please try again later"}), 429
 
     summary = ", ".join(f"{i['name']} x{i['qty']}" for i in items)
+    if fee:
+        summary += f", delivery {fee:g}"
     order = Order(customer_name=me.get("name") or "Customer", lat=lat, lng=lng,
                   phone=me.get("phone", ""), note=f"{address} | {summary}"[:200],
-                  price=round(total, 2), status=OrderStatus.REQUESTED,
+                  price=round(total + fee, 2), status=OrderStatus.REQUESTED,
                   items=json.dumps(items, ensure_ascii=False))
     _store_add(order)
     users.link_order(uid, order.id)
     _notify_new_request(order, summary)
-    return jsonify({"ok": True, "id": order.id, "total": order.price,
+    return jsonify({"ok": True, "id": order.id, "total": order.price, "fee": fee,
                     "track_url": f"/track/{order.id}?k={track_key(order.id)}"})
 
 
@@ -1493,6 +1501,42 @@ def product_store() -> ProductStore:
     if _products is None or _products.path != path:
         _products = ProductStore(path)
     return _products
+
+
+from settings import SettingsStore, clean as clean_settings, delivery_fee_for
+
+_settings = None
+
+
+def settings_store() -> SettingsStore:
+    """Shop settings in the same database as the orders (follows store.path for tests)."""
+    global _settings
+    path = getattr(store, "path", os.path.join(HERE, "orders.db"))
+    if _settings is None or _settings.path != path:
+        _settings = SettingsStore(path)
+    return _settings
+
+
+@app.route("/api/settings/shop")
+@owner_required
+def get_shop_settings():
+    return jsonify(settings_store().all())
+
+
+@app.route("/api/settings/shop", methods=["PUT"])
+@owner_required
+def update_shop_settings():
+    values, error = clean_settings(request.get_json(silent=True) or {})
+    if error:
+        return bad_request(error)
+    return jsonify({"ok": True, "settings": settings_store().update(**values)})
+
+
+@app.route("/api/me/shop")
+@login_required
+def shop_info():
+    """What customers need to know before ordering: delivery fee and minimum order."""
+    return jsonify(settings_store().all())
 
 
 @app.route("/products")

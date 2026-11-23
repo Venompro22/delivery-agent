@@ -29,6 +29,17 @@
       <button class="btn" style="width:100%; padding:11px; font-size:14px" onclick="addProduct()">Add product</button>
     </div>
 
+    <div class="order" style="margin-top:14px">
+      <b>Delivery</b>
+      <div style="display:flex; gap:8px; margin-top:10px">
+        <label class="meta" style="flex:1">Delivery fee ¥<input id="s-fee" inputmode="decimal" autocomplete="off"/></label>
+        <label class="meta" style="flex:1">Free over ¥ (0 = never)<input id="s-free" inputmode="decimal" autocomplete="off"/></label>
+        <label class="meta" style="flex:1">Minimum order ¥<input id="s-min" inputmode="decimal" autocomplete="off"/></label>
+      </div>
+      <div id="s-msg" class="meta" style="min-height:16px"></div>
+      <button class="btn" style="width:100%; padding:11px; font-size:14px" onclick="saveSettings()">Save delivery settings</button>
+    </div>
+
     <div id="list" style="margin-top:14px"></div>
   </div>
 
@@ -109,6 +120,30 @@
       const p = products.find(x => x.id === id);
       if (await send(`/api/products/${id}`, 'PUT', {active: !p.active})) load();
     }
+
+    // Delivery settings: fee, free-delivery threshold, minimum order
+    async function loadSettings() {
+      const res = await fetch('/api/settings/shop');
+      if (!res.ok) return;
+      const s = await res.json();
+      document.getElementById('s-fee').value = s.delivery_fee;
+      document.getElementById('s-free').value = s.free_over;
+      document.getElementById('s-min').value = s.min_order;
+    }
+    async function saveSettings() {
+      const msg = document.getElementById('s-msg');
+      const data = await send('/api/settings/shop', 'PUT', {
+        delivery_fee: document.getElementById('s-fee').value,
+        free_over: document.getElementById('s-free').value,
+        min_order: document.getElementById('s-min').value,
+      });
+      if (!data) return;
+      msg.textContent = 'Saved';
+      msg.style.color = 'var(--ok)';
+      setTimeout(() => { msg.textContent = ''; }, 2000);
+      loadSettings();
+    }
+    loadSettings();
 
     document.getElementById('p-unit').addEventListener('keydown', e => { if (e.key === 'Enter') addProduct(); });
     load();

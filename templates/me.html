@@ -30,6 +30,7 @@
       <div id="menu" class="me-menu"></div>
       <p class="me-hint" id="t-where"></p>
       <input id="addr" class="me-input" maxlength="120" autocomplete="off"/>
+      <div class="me-fee" id="fee-line"></div>
       <div class="me-total-row"><span id="total"></span><button id="place" class="me-place"></button></div>
       <div class="me-msg" id="order-msg"></div>
     </section>
@@ -67,6 +68,8 @@
             needAddr: 'Add your building and room', placed: 'Order sent! The shop will confirm it soon.',
             cancel: 'Cancel', cancelAsk: 'Cancel this order?', here: 'Deliver here',
             again: 'Order again', againGone: 'Some products are not sold any more',
+            fee: n => `Delivery ¥${n}`, feeFree: 'Free delivery', freeOver: n => `free over ¥${n}`,
+            minOrder: n => `Minimum order ¥${n}`,
             st: { requested: 'Waiting for the shop', pending: 'On the way', delivered: 'Delivered', cancelled: 'Cancelled' } },
       zh: { hello: n => `您好，${n}`, orders: '我的订单', add: '添加订单', btn: '添加',
             hint: '收到商家发来的追踪链接？粘贴到这里，订单就会保存到您的账号。',
@@ -77,6 +80,8 @@
             needItems: '先选一件商品吧', needPin: '在地图上点一下送货位置', needAddr: '填一下楼号和房间号',
             placed: '下单成功！商家确认后马上配送～', cancel: '取消', cancelAsk: '确定取消这个订单吗？', here: '送到这里',
             again: '再来一单', againGone: '有些商品已下架啦',
+            fee: n => `配送费 ¥${n}`, feeFree: '免配送费', freeOver: n => `满¥${n}免配送费`,
+            minOrder: n => `起送价 ¥${n}`,
             st: { requested: '等商家确认', pending: '配送中', delivered: '已送达', cancelled: '已取消' } },
     }[lang === 'en' ? 'en' : 'zh'];
 
@@ -128,6 +133,17 @@
     // ---------- Order now: catalog, quantities, delivery spot ----------
     const qty = {};
     let lastOrders = [];
+    let shopInfo = { delivery_fee: 0, free_over: 0, min_order: 0 };
+
+    // Same rule as the server (settings.delivery_fee_for); the server has the final word.
+    function feeFor(sub) { return shopInfo.free_over > 0 && sub >= shopInfo.free_over ? 0 : shopInfo.delivery_fee; }
+    function feeText(sub, fee) {
+      const parts = [];
+      if (shopInfo.delivery_fee > 0) parts.push(fee > 0 ? T.fee(yuan(fee)) : T.feeFree);
+      if (shopInfo.free_over > 0 && fee > 0) parts.push(T.freeOver(yuan(shopInfo.free_over)));
+      if (shopInfo.min_order > 0 && sub < shopInfo.min_order) parts.push(T.minOrder(yuan(shopInfo.min_order)));
+      return parts.join(' · ');
+    }
     let products = [], pin = null;
 
     function setPin(lat, lng) {
@@ -147,8 +163,10 @@
             <button onclick="changeQty('${esc(p.id)}', 1)" aria-label="+">+</button>
           </div>
         </div>`).join('');
-      const total = products.reduce((sum, p) => sum + p.price * (qty[p.id] || 0), 0);
-      document.getElementById('total').textContent = T.total(yuan(Math.round(total * 100) / 100));
+      const sub = products.reduce((sum, p) => sum + p.price * (qty[p.id] || 0), 0);
+      const fee = sub > 0 ? feeFor(sub) : 0;
+      document.getElementById('total').textContent = T.total(yuan(Math.round((sub + fee) * 100) / 100));
+      document.getElementById('fee-line').textContent = feeText(sub, fee);
     }
     function changeQty(id, step) {
       qty[id] = Math.max(0, Math.min(99, (qty[id] || 0) + step));
@@ -159,6 +177,7 @@
       const res = await fetch('/api/products');
       if (!res.ok) return;
       products = await res.json();
+      try { shopInfo = await (await fetch('/api/me/shop')).json(); } catch (e) {}
       document.getElementById('shop').hidden = !products.length;   // nothing to sell: no shop box
       renderMenu();
     }
@@ -175,6 +194,8 @@
       const address = document.getElementById('addr').value.trim();
       const fail = text => { msg.textContent = text; msg.className = 'me-msg bad'; };
       if (!items.length) return fail(T.needItems);
+      const sub = products.reduce((s, p) => s + p.price * (qty[p.id] || 0), 0);
+      if (shopInfo.min_order > 0 && sub < shopInfo.min_order) return fail(T.minOrder(yuan(shopInfo.min_order)));
       if (!pin) return fail(T.needPin);
       if (!address) return fail(T.needAddr);
       const at = pin.getLatLng();
