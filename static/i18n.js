@@ -16,6 +16,8 @@
     "Requests": "新订单请求", "Accept": "接单", "Decline": "拒绝",
     "Delivery": "配送", "Delivery fee ¥": "配送费 ¥", "Free over ¥ (0 = never)": "满多少免配送费 ¥（0 = 不免）",
     "Minimum order ¥": "起送价 ¥", "Save delivery settings": "保存配送设置", "Saved": "已保存",
+    "ETA brain": "智能预计时间", "Learned from": "学习样本", "delivery legs": "段配送", "Slowest time": "最慢时段",
+    "average error": "平均误差", "minutes per km": "分钟/公里",
     "Stops": "站点", "Finish": "完成时间", "Route": "路线", "updated": "更新于",
     "No orders yet.": "暂无订单。", "Tap the map to add one": "点击地图添加订单",
     "Order added — stop #": "订单已添加 — 第", " in the route": " 站",

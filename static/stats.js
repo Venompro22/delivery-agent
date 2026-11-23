@@ -82,3 +82,27 @@
       }
       box.append(table);
     }
+
+
+// ETA brain: what the learned ETA model knows (owner only)
+(async function loadEtaBrain() {
+  try {
+    const res = await fetch('/api/eta-model');
+    if (!res.ok) return;
+    const m = await res.json();
+    if (!m.legs) return;
+    document.getElementById('eta-brain').hidden = false;
+    document.getElementById('k-eta-legs').textContent = m.legs;
+    if (m.mae == null) {
+      document.getElementById('k-eta-err').textContent = 'learning';
+      document.getElementById('k-eta-sub').textContent = 'needs more deliveries';
+      return;
+    }
+    document.getElementById('k-eta-err').textContent = '±' + m.mae + ' min';
+    document.getElementById('k-eta-sub').textContent = m.active
+      ? `in use · simple formula was ±${m.baseline_mae} min`
+      : `not better than the simple formula (±${m.baseline_mae} min) yet`;
+    document.getElementById('k-eta-slow').textContent = m.slowest.hours;
+    document.getElementById('k-eta-slow-sub').textContent = m.slowest.min_per_km + ' min per km';
+  } catch (e) {}
+})();

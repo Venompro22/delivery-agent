@@ -6,7 +6,11 @@ import time
 from typing import List, Optional
 
 from models import Order, Driver
-from geo import GeoService
+from geo import GeoService, haversine_km
+
+# Set by the app: a function returning the learned EtaModel, or None to keep
+# the simple fixed-speed formula.
+ETA_PROVIDER = None
 
 
 def _urgency_bonus(order: Order, now: float) -> float:
@@ -48,6 +52,7 @@ def optimize_route(
         The open orders ordered as a delivery route.
     """
     start_time = start_time or time.time()
+    model = ETA_PROVIDER() if ETA_PROVIDER else None
     remaining = [o for o in orders if o.is_open]
     route: List[Order] = []
 
@@ -74,11 +79,17 @@ def optimize_route(
         assert nearest is not None
 
         sequence += 1
-        elapsed_minutes += nearest_minutes
         nearest.sequence = sequence
         nearest.leg_distance_km = round(nearest_km, 2)
-        nearest.eta_epoch = start_time + elapsed_minutes * 60.0
-        elapsed_minutes += nearest.service_minutes
+        if model:
+            # Learned leg time already includes handing over the order.
+            straight_km = haversine_km(current_lat, current_lng, nearest.lat, nearest.lng)
+            elapsed_minutes += model.predict(straight_km, start_time + elapsed_minutes * 60.0)
+            nearest.eta_epoch = start_time + elapsed_minutes * 60.0
+        else:
+            elapsed_minutes += nearest_minutes
+            nearest.eta_epoch = start_time + elapsed_minutes * 60.0
+            elapsed_minutes += nearest.service_minutes
 
         route.append(nearest)
         remaining.remove(nearest)

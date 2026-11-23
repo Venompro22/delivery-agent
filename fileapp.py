@@ -1898,5 +1898,41 @@ def driver_page():
     return render_template("driver.html", role=current_role())
 
 
+# ---------- Learned ETA (AI): retrained from finished deliveries ----------
+import optimizer as _optimizer_mod  # noqa: E402
+from eta_model import EtaModel, legs_from_orders  # noqa: E402
+
+ETA_RETRAIN_SECONDS = 30 * 60
+_eta_cache = {"model": None, "at": 0.0, "store": None, "info": None}
+
+
+def learned_eta_model():
+    """Learned ETA model, retrained at most every 30 minutes. None = simple formula."""
+    if time.time() - _eta_cache["at"] > ETA_RETRAIN_SECONDS or _eta_cache["store"] is not store:
+        _eta_cache.update(at=time.time(), store=store)
+        try:
+            legs = legs_from_orders(
+                store.all(),
+                baseline=lambda a, b: geo.distance_time(a.lat, a.lng, b.lat, b.lng)[1] + b.service_minutes)
+            model = EtaModel.train(legs)
+            _eta_cache["model"] = model if (model and model.active) else None
+            _eta_cache["info"] = model.info() if model else {"active": False, "legs": len(legs)}
+        except Exception as e:                       # never break routing because of the model
+            print(f"ETA model training failed: {e}", flush=True)
+            _eta_cache["model"] = None
+    return _eta_cache["model"]
+
+
+_optimizer_mod.ETA_PROVIDER = learned_eta_model
+
+
+@app.route("/api/eta-model")
+@owner_required
+def eta_model_info():
+    """What the learned ETA model knows (Stats page)."""
+    learned_eta_model()
+    return jsonify(_eta_cache["info"] or {"active": False, "legs": 0})
+
+
 if __name__ == "__main__":
     app.run(debug=True, port=5000)

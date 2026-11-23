@@ -37,3 +37,5 @@ body { font-family: -apple-system, "Segoe UI", sans-serif; margin: 0; background
 /* Revenue row: three cards under the delivery numbers */
 .kpis-money { grid-template-columns: repeat(3, 1fr); margin-top: 12px; }
 @media (max-width: 700px) { .kpis-money { grid-template-columns: 1fr; } }
+
+.kpis[hidden] { display: none; }
