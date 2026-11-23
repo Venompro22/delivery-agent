@@ -66,6 +66,7 @@
             needItems: 'Choose at least one product', needPin: 'Tap the map to set the delivery spot',
             needAddr: 'Add your building and room', placed: 'Order sent! The shop will confirm it soon.',
             cancel: 'Cancel', cancelAsk: 'Cancel this order?', here: 'Deliver here',
+            again: 'Order again', againGone: 'Some products are not sold any more',
             st: { requested: 'Waiting for the shop', pending: 'On the way', delivered: 'Delivered', cancelled: 'Cancelled' } },
       zh: { hello: n => `您好，${n}`, orders: '我的订单', add: '添加订单', btn: '添加',
             hint: '收到商家发来的追踪链接？粘贴到这里，订单就会保存到您的账号。',
@@ -75,6 +76,7 @@
             addr: '楼号、楼层、房间（如 5号楼302）', place: '下单', total: n => `合计 ¥${n}`,
             needItems: '先选一件商品吧', needPin: '在地图上点一下送货位置', needAddr: '填一下楼号和房间号',
             placed: '下单成功！商家确认后马上配送～', cancel: '取消', cancelAsk: '确定取消这个订单吗？', here: '送到这里',
+            again: '再来一单', againGone: '有些商品已下架啦',
             st: { requested: '等商家确认', pending: '配送中', delivered: '已送达', cancelled: '已取消' } },
     }[lang === 'en' ? 'en' : 'zh'];
 
@@ -97,6 +99,7 @@
 
     async function load() {
       const d = await (await fetch('/api/me/orders')).json();
+      lastOrders = (d.ok && d.orders) || [];
       const list = document.getElementById('orders');
       pins.clearLayers();
       if (!d.ok || !d.orders.length) {
@@ -109,6 +112,7 @@
             <div class="me-time">${new Date(o.created_at * 1000).toLocaleString()}${o.price != null ? ' · ¥' + yuan(o.price) : ''}</div></div>
           <div class="me-order-side">
             ${o.status === 'requested' ? `<button class="me-cancel" onclick="cancelOrder(event, '${esc(o.id)}')">${T.cancel}</button>` : ''}
+            ${o.items && o.items.length && o.status !== 'requested' ? `<button class="me-again" onclick="orderAgain(event, '${esc(o.id)}')">${T.again}</button>` : ''}
             <span class="chip ${esc(o.status)}">${T.st[o.status] || esc(o.status)}</span>
           </div>
         </a>`).join('');
@@ -123,6 +127,7 @@
 
     // ---------- Order now: catalog, quantities, delivery spot ----------
     const qty = {};
+    let lastOrders = [];
     let products = [], pin = null;
 
     function setPin(lat, lng) {
@@ -189,6 +194,29 @@
         btn.disabled = false;
       }
     };
+
+    // Order again: same products, quantities, spot and address. The customer still
+    // presses "Place order", so they always see today's prices first.
+    function orderAgain(event, id) {
+      event.preventDefault();                  // the button sits inside the order link
+      event.stopPropagation();
+      const o = lastOrders.find(x => x.id === id);
+      if (!o) return;
+      Object.keys(qty).forEach(k => delete qty[k]);
+      let missing = false;
+      o.items.forEach(it => {
+        if (products.some(p => p.id === it.id)) qty[it.id] = Math.min(99, (qty[it.id] || 0) + it.qty);
+        else missing = true;                   // hidden since then: skip it
+      });
+      renderMenu();
+      setPin(o.lat, o.lng);
+      const addr = (o.note || '').split(' | ')[0];
+      if (addr) document.getElementById('addr').value = addr;
+      const msg = document.getElementById('order-msg');
+      msg.textContent = missing ? T.againGone : '';
+      msg.className = 'me-msg bad';
+      document.getElementById('shop').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
 
     async function cancelOrder(event, id) {
       event.preventDefault();                  // the button sits inside the order link

@@ -524,11 +524,20 @@ def my_page():
     return render_template("me.html", name=me.get("name", ""))
 
 
+def _order_items(order) -> list:
+    """The product lines of a customer order ([] for orders typed in by the shop)."""
+    try:
+        items = json.loads(order.items or "[]")
+    except ValueError:
+        return []
+    return items if isinstance(items, list) else []
+
+
 def customer_order_view(order) -> dict:
     """What a customer sees about one of their orders."""
     return {"id": order.id, "name": order.customer_name, "note": public_note(order),
             "status": order.status.value, "created_at": order.created_at,
-            "lat": order.lat, "lng": order.lng, "price": order.price,
+            "lat": order.lat, "lng": order.lng, "price": order.price, "items": _order_items(order),
             "track_url": f"/track/{order.id}?k={track_key(order.id)}"}
 
 

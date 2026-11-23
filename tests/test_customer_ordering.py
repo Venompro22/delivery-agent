@@ -134,3 +134,11 @@ def test_items_survive_a_reload(client):
     import json
     items = json.loads(fileapp.store.get(oid).items)
     assert items == [{"id": water["id"], "name": "桶装水", "unit": "桶", "price": 18, "qty": 2}]
+
+
+def test_my_orders_list_the_items(client):
+    water, tea, _ = owner_adds_products(client)
+    as_customer(client)
+    place(client, [{"id": water["id"], "qty": 2}, {"id": tea["id"], "qty": 1}])
+    order = client.get("/api/me/orders").get_json()["orders"][0]
+    assert [(i["name"], i["qty"]) for i in order["items"]] == [("桶装水", 2), ("茶", 1)]

@@ -56,3 +56,6 @@ body { margin: 0; }
 .me-place { padding: 12px 22px; border: 0; border-radius: 10px; background: var(--accent, #3b82f6); color: #fff;
   font-weight: 700; font-size: 15px; cursor: pointer; }
 .me-place:disabled { opacity: .6; cursor: default; }
+
+.me-again { padding: 4px 10px; border-radius: 999px; border: 1px solid var(--accent, #3b82f6);
+  background: transparent; color: var(--accent, #3b82f6); font-size: 12px; font-weight: 600; cursor: pointer; }
