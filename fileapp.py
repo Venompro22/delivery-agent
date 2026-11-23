@@ -53,7 +53,7 @@ def _visitor_ip() -> str:
 from flask_compress import Compress  # noqa: E402
 Compress(app)   # ⚡ gzip/brotli: smaller pages on slow networks
 
-DEV_MODE = os.environ.get("DEV_MODE") == "1"   # demo / simulate tools — only on my Mac
+DEV_MODE = os.environ.get("DEV_MODE", "1") == "1"   # set DEV_MODE=0 to hide demo tools   # demo / simulate tools — only on my Mac
 
 
 @app.context_processor
@@ -132,7 +132,7 @@ VIEWER_SNIPPET = """
     z-index: 99999; background: #222; color: #fff; padding: 10px 16px; border-radius: 10px;
     font: 14px system-ui, sans-serif; display: none; }
   /* Hide every control a demo visitor can't use */
-  button[onclick="locateOnce()"], #live-btn, #sim-btn, #gps-status, #gps-btn, #log,
+  #log,
   button[onclick*="retrain" i],
   button[onclick*="logoutAll"], body:has(#log) #list button { display: none !important; }
 </style>
@@ -150,7 +150,7 @@ VIEWER_SNIPPET = """
   window.fetch = function (url, opts) {
     var method = ((opts && opts.method) || 'GET').toUpperCase();
     var path = String(url).split('?')[0];
-    var ok = ['/api/agent', '/api/parse', '/api/orders', '/api/demo', '/api/demo/clear', '/api/driver/location'].indexOf(path) !== -1
+    var ok = ['/api/agent', '/api/parse', '/api/orders', '/api/demo', '/api/demo/clear', '/api/driver/location'].indexOf(path) !== -1 || (path.indexOf('/api/orders/') === 0 && path.slice(-8) === '/deliver')
              || path.indexOf('/api/orders/') === 0;
     if (method !== 'GET' && !ok && path.indexOf('/logout') === -1) {
       toast();
