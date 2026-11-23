@@ -150,7 +150,7 @@ VIEWER_SNIPPET = """
   window.fetch = function (url, opts) {
     var method = ((opts && opts.method) || 'GET').toUpperCase();
     var path = String(url).split('?')[0];
-    var ok = ['/api/agent', '/api/parse', '/api/orders', '/api/demo', '/api/demo/clear'].indexOf(path) !== -1
+    var ok = ['/api/agent', '/api/parse', '/api/orders', '/api/demo', '/api/demo/clear', '/api/driver/location'].indexOf(path) !== -1
              || path.indexOf('/api/orders/') === 0;
     if (method !== 'GET' && !ok && path.indexOf('/logout') === -1) {
       toast();
@@ -411,7 +411,35 @@ def driver_for(uid):
     user = users.get(uid) if uid else None
     if user and user.get("lat") is not None:
         return Driver(name=user["name"], lat=user["lat"], lng=user["lng"])
+    here = session.get("here") if has_request_context() and not uid else None
+    if here:                                     # owner / demo visitor: this browser's own GPS
+        return Driver(name=driver.name, lat=here[0], lng=here[1])
     return driver
+
+
+DEMO_FOLLOW_KM = 5    # GPS this far from today's demo orders: move them next to the visitor
+
+
+def _demo_center() -> tuple:
+    """Where demo orders go: this browser's GPS position, else the default start point."""
+    here = session.get("here") if has_request_context() else None
+    return (here[0], here[1]) if here else (driver.lat, driver.lng)
+
+
+def _move_demo_near(lat: float, lng: float) -> None:
+    """A visitor far from today's demo orders gets them rebuilt in their own city."""
+    from geo import haversine_km
+    live = [o for o in store.all()
+            if (o.note or "").startswith(DEMO_TAG) and o.status == OrderStatus.PENDING]
+    if live:
+        c_lat = sum(o.lat for o in live) / len(live)
+        c_lng = sum(o.lng for o in live) / len(live)
+        if haversine_km(lat, lng, c_lat, c_lng) < DEMO_FOLLOW_KM:
+            return
+        store.orders = [o for o in store.orders
+                        if not ((o.note or "").startswith(DEMO_TAG) and o.status == OrderStatus.PENDING)]
+        store.save()
+    seed_demo_orders(center=(lat, lng))
 
 
 def visible_to_me(order) -> bool:
@@ -782,7 +810,8 @@ def demo_key() -> str:
     return base64.urlsafe_b64encode(mac)[:22].decode()
 
 
-VIEWER_WRITES = ("/api/agent", "/api/parse", "/api/orders", "/api/demo", "/api/demo/clear")
+VIEWER_WRITES = ("/api/agent", "/api/parse", "/api/orders", "/api/demo", "/api/demo/clear",
+                 "/api/driver/location")
 
 
 def _store_add(order):
@@ -1352,9 +1381,10 @@ def demo_orders():
         abort(404)
     import math
     ids = []
+    c_lat, c_lng = _demo_center()
     for name, phone, note, promise, north_km, east_km in DEMO_ORDERS:
-        lat = driver.lat + north_km / 111.0
-        lng = driver.lng + east_km / (111.0 * math.cos(math.radians(driver.lat)))
+        lat = c_lat + north_km / 111.0
+        lng = c_lng + east_km / (111.0 * math.cos(math.radians(c_lat)))
         kw = {"promised_by": time.time() + promise * 60} if promise else {}
         order = Order(customer_name=name, lat=round(lat, 5), lng=round(lng, 5),
                       phone=phone, note=DEMO_TAG + note, **kw)
@@ -1474,7 +1504,10 @@ def update_driver_location():
     if uid:
         users.set_location(uid, lat, lng)        # 📍 this driver's own position
     else:
-        driver.lat, driver.lng = lat, lng        # the owner moves the default start point
+        session["here"] = [lat, lng]             # this browser's start point (survives restarts)
+        if current_role() == "owner":
+            driver.lat, driver.lng = lat, lng    # default start for drivers without GPS
+        _move_demo_near(lat, lng)
     return jsonify({"ok": True})
 
 
@@ -1764,13 +1797,14 @@ def _twofa_qr(secret: str) -> str:
 DEMO_MAX_AGE = 24 * 3600          # demo orders are rebuilt once a day
 
 
-def seed_demo_orders() -> list:
-    """Add the demo scenario around the start point (ZAFU). Returns the new ids."""
+def seed_demo_orders(center=None) -> list:
+    """Add the demo scenario around `center` (default: this browser's GPS or ZAFU). Returns the new ids."""
     import math
     ids = []
+    c_lat, c_lng = center or _demo_center()
     for name, phone, note, promise, north_km, east_km in DEMO_ORDERS:
-        lat = driver.lat + north_km / 111.0
-        lng = driver.lng + east_km / (111.0 * math.cos(math.radians(driver.lat)))
+        lat = c_lat + north_km / 111.0
+        lng = c_lng + east_km / (111.0 * math.cos(math.radians(c_lat)))
         kw = {"promised_by": time.time() + promise * 60} if promise else {}
         order = Order(customer_name=name, lat=round(lat, 5), lng=round(lng, 5),
                       phone=phone, note=DEMO_TAG + note, **kw)
