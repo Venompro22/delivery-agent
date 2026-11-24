@@ -255,7 +255,8 @@
       return bestD > 0.0006 ? null : [p, ...path.slice(best + 1)];
     }
     function drawRoute(pts) {
-      if (followDriver && pts.length) map.panTo(pts[0], {animate: true});
+      focusTarget = pts.length > 1 ? pts[1] : null;
+      if (pts.length && !simDriving) camera(pts[0]);
       if (pts.length < 2) { routeLayer.clearLayers(); route = null; return; }
       const key = roadKey(pts), stops = roadKey(pts.slice(1));
       // Same stops (or the first one just got delivered): keep the road we have, trimmed
@@ -387,6 +388,40 @@
       traffic.options.t = Date.now();
       if (map.hasLayer(traffic)) traffic.redraw();
     }, 120000);
+    // 🎥 Camera focus. 'driver': the camera rides with the truck, a little ahead of it.
+    // 'customer': the truck and the next customer both in view, closer as they meet.
+    // Dragging the map gives the camera back to you ('free').
+    let focusMode = 'free', focusTarget = null, camLast = 0;
+    const focusBtns = {};
+    function aheadOf(p, deg, metres) {
+      const r = deg * Math.PI / 180;
+      return L.latLng(p.lat + Math.cos(r) * metres / 111320,
+                      p.lng + Math.sin(r) * metres / (111320 * Math.cos(p.lat * Math.PI / 180)));
+    }
+    function camera(pos) {
+      if (!pos || focusMode === 'free') return;
+      const p = L.latLng(pos);
+      if (focusMode === 'driver') {
+        map.panTo(arrowDeg === null ? p : aheadOf(p, arrowDeg, 60), {animate: false});
+        return;
+      }
+      const now = performance.now();
+      if (focusMode === 'customer' && focusTarget && now - camLast > 800) {
+        camLast = now;
+        map.fitBounds(L.latLngBounds([p, L.latLng(focusTarget)]),
+          {padding: [90, 90], maxZoom: 17, animate: true, duration: 0.7});
+      }
+    }
+    function setFocus(mode) {
+      focusMode = mode;
+      followDriver = mode === 'driver';
+      Object.entries(focusBtns).forEach(([m, b]) => b.classList.toggle('on', m === mode));
+      const here = driverMarker ? driverMarker.getLatLng() : null;
+      if (mode === 'driver' && here) map.setView(here, Math.max(map.getZoom(), 16), {animate: true});
+      if (mode === 'customer') { camLast = 0; camera(here); }
+    }
+    map.on('dragstart', () => { if (focusMode !== 'free') setFocus('free'); });
+
     const ToolBox = L.Control.extend({
       options: {position: 'bottomright'},
       onAdd() {
@@ -397,15 +432,18 @@
           b.type = 'button'; b.title = title; b.setAttribute('aria-label', title);
           b.innerHTML = icon;
           L.DomEvent.on(b, 'click', ev => { L.DomEvent.stop(ev); onClick(b); });
+          return b;
         };
         tool('Fit all orders', S('<path d="M3 9V5a2 2 0 0 1 2-2h4M21 9V5a2 2 0 0 0-2-2h-4M3 15v4a2 2 0 0 0 2 2h4M21 15v4a2 2 0 0 1-2 2h-4"/>'), () => {
+          setFocus('free');
           const g = L.featureGroup([...layer.getLayers(), ...routeLayer.getLayers()]);
           if (g.getLayers().length) map.fitBounds(g.getBounds(), {padding: [60, 60], maxZoom: 16});
         });
-        tool('Follow the driver', S('<polygon points="3 11 22 2 13 21 11 13 3 11"/>'), b => {
-          followDriver = !followDriver;
-          b.classList.toggle('on', followDriver);
-        });
+        focusBtns.driver = tool('Focus on the driver', S('<polygon points="3 11 22 2 13 21 11 13 3 11"/>'), () =>
+          setFocus(focusMode === 'driver' ? 'free' : 'driver'));
+        focusBtns.customer = tool('Focus on the next customer',
+          S('<circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/>'), () =>
+          setFocus(focusMode === 'customer' ? 'free' : 'customer'));
         tool('Live traffic', S('<rect x="7" y="2" width="10" height="20" rx="3"/><circle cx="12" cy="7" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="17" r="1.5"/>'), b => {
           if (map.hasLayer(traffic)) map.removeLayer(traffic);
           else { traffic.options.t = Date.now(); traffic.addTo(map); }
@@ -427,31 +465,56 @@
       arrowDeg = arrowDeg === null ? target : arrowDeg + ((((target - arrowDeg) % 360) + 540) % 360 - 180);
       arrow.style.transform = `rotate(${arrowDeg}deg)`;
     }
-    function driveAlong(path) {
+    // 🚗 Drive like a real driver: city speed, slower into sharp corners, braking into the stop,
+    // speeding up again after. Real-world speeds, sped up so one trip lasts 6-16 s on screen.
+    const SIM_KMH = 30;
+    function cornerFactors(path) {
+      const f = path.map(() => 1);
+      for (let i = 1; i < path.length - 1; i++) {
+        const turn = Math.abs((((bearing(path[i], path[i + 1]) - bearing(path[i - 1], path[i])) % 360) + 540) % 360 - 180);
+        f[i] = turn > 75 ? 0.3 : turn > 40 ? 0.55 : turn > 20 ? 0.8 : 1;
+      }
+      return f;
+    }
+    function driveAlong(path, stop) {
       return new Promise(resolve => {
-        const cum = [0];                                        // distance from the start to each point
+        const cum = [0];
         for (let i = 1; i < path.length; i++) cum.push(cum[i - 1] + map.distance(path[i - 1], path[i]));
         const total = cum[cum.length - 1] || 1;
-        const D = Math.min(12, Math.max(4, total / 150)) * 1000; // 4–12 s per trip, whatever its length
-        const t0 = performance.now();
-        let seg = 0, lastPost = 0;
+        const corner = cornerFactors(path);
+        const cruise = SIM_KMH / 3.6;                                  // real metres per second
+        const speedup = (total / cruise) / Math.min(16, Math.max(6, total / 120));
+        const vMax = cruise * speedup;                                 // metres per screen second
+        if (stop) showToast(`Driving to ${stop.name} · ${(total / 1000).toFixed(1)} km`);
+        let dist = 0, v = 0, seg = 0, lastPost = 0, last = performance.now();
         (function frame(now) {
           if (!simRunning) return resolve(false);
-          const k = Math.min(1, (now - t0) / D), want = total * k;
-          while (seg < cum.length - 2 && cum[seg + 1] < want) seg++;
+          const dt = Math.min(0.05, (now - last) / 1000);
+          last = now;
+          while (seg < cum.length - 2 && cum[seg + 1] <= dist) seg++;
+          // How fast right now? (real metres: corner within 35 m, braking over the last 90 m)
+          let want = 1;
+          if (cum[seg + 1] - dist < 35) want = Math.min(want, corner[seg + 1] ?? 1);
+          want = Math.min(want, Math.max(0.15, (total - dist) / 90));
+          const target = vMax * want;
+          const step = (target > v ? vMax / 1.5 : vMax / 0.6) * dt;     // gentle gas, firmer brakes
+          v = target > v ? Math.min(target, v + step) : Math.max(target, v - step);
+          dist = Math.min(total, dist + Math.max(v, vMax * 0.05) * dt);
+          while (seg < cum.length - 2 && cum[seg + 1] <= dist) seg++;
           const a = path[seg], b = path[seg + 1] || a;
-          const t = Math.min(1, (want - cum[seg]) / ((cum[seg + 1] - cum[seg]) || 1));
+          const t = Math.min(1, (dist - cum[seg]) / ((cum[seg + 1] - cum[seg]) || 1));
           const p = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
           driverMarker.setLatLng(p);
-          if (b !== a) setArrow(bearing(a, b));                // face along the street we're on
+          if (b !== a) setArrow(bearing(a, b));                       // face along the street
           driverPos = p;
-          if (now - lastPost > 1000 || k === 1) {              // tell the server about once a second
+          camera(p);
+          if (now - lastPost > 1000 || dist >= total) {               // tell the server about once a second
             lastPost = now;
             api('/api/driver/location', {method: 'POST', headers: {'Content-Type': 'application/json'},
                                          body: JSON.stringify({lat: p[0], lng: p[1]})}).then(() => refresh());
           }
-          if (k < 1) requestAnimationFrame(frame); else resolve(true);
-        })(t0);
+          if (dist < total) requestAnimationFrame(frame); else resolve(true);
+        })(last);
       });
     }
 
@@ -756,9 +819,12 @@ const INTENT_NAMES = {new_order: 'New order', cancel: 'Cancel', question: 'Quest
           const straight = [[from.lat, from.lng], [stop.lat, stop.lng]];
           const path = (await roadPath(straight)) || straight;
           simDriving = true;
-          const arrived = await driveAlong(path);
+          const arrived = await driveAlong(path, stop);
           simDriving = false;
           if (!arrived) break;
+          if (!simRunning) break;
+          showToast(`Arrived · handing over to ${stop.name}`);
+          await sleep(1200);
           if (!simRunning) break;
           await api(`/api/orders/${stop.id}/deliver`, {method: 'POST'});   // arrived
           showToast(`${stop.name} delivered`);
@@ -1058,6 +1124,7 @@ const INTENT_NAMES = {new_order: 'New order', cancel: 'Cancel', question: 'Quest
         const k = Math.min(1, (now - t0) / D);
         const e = 1 - Math.pow(1 - k, 3);                        // ease-out: smooth stop, no overshoot
         driverMarker.setLatLng([from[0] + (to[0] - from[0]) * e, from[1] + (to[1] - from[1]) * e]);
+        camera(driverMarker.getLatLng());
         if (k < 1) requestAnimationFrame(step);
       })(t0);
       driverPos = to;
