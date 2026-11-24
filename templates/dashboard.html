@@ -489,7 +489,8 @@
         let dist = 0, v = 0, seg = 0, lastPost = 0, last = performance.now();
         (function frame(now) {
           if (!simRunning) return resolve(false);
-          const dt = Math.min(0.05, (now - last) / 1000);
+          // Slow phones draw few frames: allow bigger steps so the truck keeps real speed
+          const dt = Math.min(0.25, (now - last) / 1000);
           last = now;
           while (seg < cum.length - 2 && cum[seg + 1] <= dist) seg++;
           // How fast right now? (real metres: corner within 35 m, braking over the last 90 m)
