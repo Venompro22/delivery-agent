@@ -1675,6 +1675,21 @@ def api_track(order_id):
     return jsonify(resp)
 
 
+ARRIVED_KM = 0.08          # driver this close to the next stop = arrived
+ARRIVED_FRESH_S = 120      # older GPS than this proves nothing
+
+
+def driver_has_arrived(order, routed) -> bool:
+    """True when this order is the driver's next stop and their fresh GPS is right there."""
+    from geo import haversine_km
+    if not routed or routed.sequence != 1 or not order.driver_id:
+        return False
+    u = users.get(order.driver_id) or {}
+    if u.get("lat") is None or time.time() - (u.get("located_at") or 0) > ARRIVED_FRESH_S:
+        return False
+    return haversine_km(u["lat"], u["lng"], order.lat, order.lng) <= ARRIVED_KM
+
+
 def track_payload(order_id, order) -> dict:
     """What the tracking page shows for one order (without the shop contact)."""
     if order.status == OrderStatus.DELIVERED:
@@ -1694,6 +1709,7 @@ def track_payload(order_id, order) -> dict:
     return ({
         "ok": True,
         "status": "on_the_way",
+        "arrived": driver_has_arrived(order, me),
         "name": order.customer_name,
         "position": me.sequence if me else None,
         "stops_before": (me.sequence - 1) if me else None,

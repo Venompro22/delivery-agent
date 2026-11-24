@@ -40,7 +40,7 @@
         s1: 'Order received', s2: 'On the way', s3: 'Delivered', you: 'You',
         rateMe: 'How did it go? Tap to rate', thanks: 'Thanks for the feedback!',
         proofAlt: 'Delivery photo', about: m => `About ${m} min`, soon: 'Arriving any moment', expected: 'expected', late: 'Running a little late, the driver is hurrying', shop: 'Shop', contact: 'Contact the shop',
-        waiting: 'Waiting for the shop to confirm', waitingSub: 'Delivery starts as soon as the shop confirms.'},
+        waiting: 'Waiting for the shop to confirm', arrived: 'Your driver is here! Please come down', waitingSub: 'Delivery starts as soon as the shop confirms.'},
       zh: {
         title: '订单追踪', notFound: '未找到订单', checkLink: '请检查您的追踪链接。',
         delivered: '已送达！', enjoy: '祝您愉快', cancelled: '订单已取消', hi: '您好',
@@ -50,7 +50,7 @@
         s1: '已接单', s2: '配送中', s3: '已送达', you: '您',
         rateMe: '给骑手打个分吧', thanks: '谢啦~',
         proofAlt: '送达照片', about: m => `约 ${m} 分钟`, soon: '马上就到', expected: '预计', late: '稍有延迟，骑手正在加速赶来', shop: '商家', contact: '联系商家',
-        waiting: '等商家确认中', waitingSub: '商家一确认就马上出发～'},
+        waiting: '等商家确认中', arrived: '司机到啦，下楼取一下～', waitingSub: '商家一确认就马上出发～'},
     }[lang === 'en' ? 'en' : 'zh'];
     document.title = T.title + ' · 智送管家';
 
@@ -194,7 +194,7 @@
         const n = d.stops_before;
         card.innerHTML = `
           <h1>${T.hi}, ${esc(d.name)}</h1>
-          <div class="sub">${T.onWay}</div>
+          ${d.arrived ? `<div class="arrived">${T.arrived}</div>` : `<div class="sub">${T.onWay}</div>`}
           ${d.note ? `<div class="item">${ICON.box}${esc(d.note)}</div>` : ''}
           ${steps(1, [hm(d.created_at), '', d.eta_epoch ? T.expected + ' ' + hm(d.eta_epoch) : ''])}
           <div class="label">${T.eta} ${esc(d.eta)}</div>

@@ -113,3 +113,9 @@ h1.done { color: var(--ok); }
 
 /* Small credit under the card */
 .powered { text-align: center; font-size: 11px; opacity: .45; margin: 14px 0 24px; }
+
+/* Driver is at the door */
+.arrived { margin: 10px 0; padding: 12px; border-radius: 12px; font-weight: 800;
+  text-align: center; color: #fff; background: #16a34a; animation: arrived-pulse 1.6s ease-in-out infinite; }
+@keyframes arrived-pulse { 50% { box-shadow: 0 0 0 8px rgba(22, 163, 74, .25); } }
+@media (prefers-reduced-motion: reduce) { .arrived { animation: none; } }
