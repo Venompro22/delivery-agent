@@ -156,8 +156,17 @@
     // 🇨🇳 Inside China, Gaode alone: Esri underneath only doubled the tiles and
     // printed a second set of place names on top. Outside China, Esri comes back.
     const isEsri = l => l._url && l._url.indexOf('arcgisonline') !== -1;
+    // Gaode can be unreachable (VPN, outside China). If its tiles keep failing and none
+    // ever loaded, keep Esri everywhere so the map is never left black.
+    let gaodeLoaded = 0, gaodeFailed = 0;
+    const gaodeBroken = () => gaodeFailed >= 3 && gaodeLoaded === 0;
+    Object.values(mapStyles).forEach(group => group.eachLayer(l => {
+      if (isEsri(l)) return;
+      l.on('tileload', () => { gaodeLoaded++; });
+      l.on('tileerror', () => { gaodeFailed++; if (gaodeBroken()) syncEsri(); });
+    }));
     function syncEsri() {
-      const inChina = map.getZoom() >= GAODE_MIN_ZOOM && CHINA_VIEW.contains(map.getCenter());
+      const inChina = !gaodeBroken() && map.getZoom() >= GAODE_MIN_ZOOM && CHINA_VIEW.contains(map.getCenter());
       Object.values(mapStyles).forEach(group => {
         if (!map.hasLayer(group)) return;
         group.eachLayer(l => {
