@@ -1984,5 +1984,48 @@ def eta_model_info():
     return jsonify(_eta_cache["info"] or {"active": False, "legs": 0})
 
 
+# ---------- Plan B for GPS: the visitor's city from their IP ----------
+_IP_GEO = OrderedDict()          # ip -> (lat, lng, city) or None, newest last
+
+
+def _ip_location(ip):
+    """Approximate (lat, lng, city) in WGS-84 for a public IP, or None. Cached, 3 s timeout."""
+    import ipaddress
+    try:
+        if not ipaddress.ip_address(ip).is_global:
+            return None
+    except ValueError:
+        return None
+    if ip in _IP_GEO:
+        return _IP_GEO[ip]
+    try:
+        r = requests.get(f"https://ipapi.co/{ip}/json/", timeout=3,
+                         headers={"User-Agent": "zhisong-delivery/1.0"})
+        d = r.json()
+        loc = (float(d["latitude"]), float(d["longitude"]),
+               str(d.get("city") or d.get("country_name") or "")[:60])
+    except Exception:
+        loc = None                                # offline, rate-limited, unknown IP
+    _IP_GEO[ip] = loc
+    if len(_IP_GEO) > 500:
+        _IP_GEO.popitem(last=False)
+    return loc
+
+
+@app.route("/api/where-am-i")
+@login_required
+def where_am_i():
+    """Demo visitors without GPS land on their own city. Never moves the owner's real data."""
+    if current_role() != "viewer" or session.get("here"):
+        return jsonify({"ok": False})
+    loc = _ip_location(client_ip())
+    if not loc:
+        return jsonify({"ok": False})
+    lat, lng = wgs84_to_gcj02(loc[0], loc[1])     # same coordinates as the Chinese map
+    session["here"] = [lat, lng]
+    _move_demo_near(lat, lng)
+    return jsonify({"ok": True, "lat": lat, "lng": lng, "city": loc[2]})
+
+
 if __name__ == "__main__":
     app.run(debug=True, port=5000)

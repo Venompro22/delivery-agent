@@ -960,9 +960,25 @@ const INTENT_NAMES = {new_order: 'New order', cancel: 'Cancel', question: 'Quest
       if (navigator.permissions && window.isSecureContext) {
         navigator.permissions.query({name: 'geolocation'}).then(p => {
           if (p.state === 'granted' && !window.__autoLocated) { window.__autoLocated = true; locateOnce(); }
-        }).catch(() => {});
+          else roughLocate();
+        }).catch(() => roughLocate());
       }
     } catch (e) {}
+
+    // No GPS permission (yet): the server guesses the visitor's city from their IP,
+    // so a demo visitor anywhere in the world lands on their own city.
+    async function roughLocate() {
+      if (window.__roughLocated) return;
+      window.__roughLocated = true;
+      try {
+        const d = await (await fetch('/api/where-am-i')).json();
+        if (!d.ok) return;
+        map.flyTo([d.lat, d.lng], 13, {duration: 1.2});
+        gpsStatus(`Showing ${d.city || 'your area'} (approximate) · tap Use my location for the exact spot`);
+        lastStopCount = -1;
+        refresh();
+      } catch (e) {}
+    }
 
     function locateOnce() {
       if (!navigator.geolocation || !window.isSecureContext) { gpsError(); return; }
