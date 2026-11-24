@@ -863,10 +863,39 @@ const INTENT_NAMES = {new_order: 'New order', cancel: 'Cancel', question: 'Quest
       });
       if (!res.ok) { gpsStatus('Server rejected the location.'); return; }
       lastSent = Date.now();
+      showMe(lat, lng, acc);
       gpsStatus(`You are here (±${acc} m) · ${new Date().toLocaleTimeString()}`);
       lastStopCount = -1;
       refresh();
     }
+
+    // You are here: a blue dot (with its accuracy) wherever you are in the world.
+    // The map flies there on the first fix only, so Live GPS never yanks the view around.
+    let meDot = null, meRing = null, flownToMe = false;
+    function showMe(lat, lng, acc) {
+      const at = [lat, lng];
+      if (!meDot) {
+        meRing = L.circle(at, {radius: acc, color: '#3b82f6', weight: 1, fillOpacity: 0.12, interactive: false}).addTo(map);
+        meDot = L.circleMarker(at, {radius: 8, color: '#fff', weight: 3, fillColor: '#3b82f6', fillOpacity: 1})
+          .addTo(map).bindTooltip('You are here');
+      } else {
+        meDot.setLatLng(at);
+        meRing.setLatLng(at).setRadius(acc);
+      }
+      if (!flownToMe) {
+        flownToMe = true;
+        map.flyTo(at, Math.max(map.getZoom(), 15), {duration: 1.2});
+      }
+    }
+
+    // Location already allowed before: find the user as soon as the page opens.
+    try {
+      if (navigator.permissions && window.isSecureContext) {
+        navigator.permissions.query({name: 'geolocation'}).then(p => {
+          if (p.state === 'granted' && !window.__autoLocated) { window.__autoLocated = true; locateOnce(); }
+        }).catch(() => {});
+      }
+    } catch (e) {}
 
     function locateOnce() {
       if (!navigator.geolocation || !window.isSecureContext) { gpsError(); return; }
