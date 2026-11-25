@@ -1514,10 +1514,12 @@ def update_driver_location():
     uid = session.get("uid")
     if uid:
         users.set_location(uid, lat, lng)        # 📍 this driver's own position
+        _remember_trail(uid, lat, lng)
     else:
         session["here"] = [lat, lng]             # this browser's start point (survives restarts)
         if current_role() == "owner":
             driver.lat, driver.lng = lat, lng    # default start for drivers without GPS
+            _remember_trail("default", lat, lng)
         _move_demo_near(lat, lng)
     return jsonify({"ok": True})
 
@@ -2219,6 +2221,89 @@ def try_demo_customer():
     order = live[min(2, len(live) - 1)]           # a few stops before it: the queue is interesting
     audit.add("demo_open", client_ip(), "visitor", "customer")
     return redirect(f"/track/{order.id}?k={track_key(order.id)}")
+
+
+# ---------- Customer live view: the driver coming, the road once they are next ----------
+from collections import deque  # noqa: E402
+
+TRAIL_KEEP_S = 1800        # trail = the last 30 minutes of driving at most
+TRAIL_HIDE_KM = 0.25       # skip the start of the trail: it sits at the previous customer's door
+_TRAILS = {}               # driver id (or "default") -> deque of (time, lat, lng)
+_ROAD_LINES = OrderedDict()
+
+
+def _remember_trail(key, lat, lng) -> None:
+    q = _TRAILS.setdefault(key, deque(maxlen=400))
+    if not q or abs(q[-1][1] - lat) > 1e-5 or abs(q[-1][2] - lng) > 1e-5:
+        q.append((time.time(), lat, lng))
+
+
+def _trail_for(driver_id, now) -> list:
+    """Where this driver passed since their last delivery, without the previous customer's door."""
+    from geo import haversine_km
+    last_done = max((o.delivered_at or 0 for o in store.all()
+                     if o.driver_id == driver_id and o.status == OrderStatus.DELIVERED), default=0)
+    since = max(last_done, now - TRAIL_KEEP_S)
+    pts = [(p[1], p[2]) for p in _TRAILS.get(driver_id or "default", ()) if p[0] >= since]
+    if not pts:
+        return []
+    start = pts[0]
+    pts = [p for p in pts if haversine_km(start[0], start[1], p[0], p[1]) >= TRAIL_HIDE_KM]
+    return [list(p) for p in pts]
+
+
+def _road_line(a, b) -> list:
+    """Road from a to b as [[lat, lng], ...] in map coordinates; a straight line if routing fails."""
+    key = (round(a[0], 4), round(a[1], 4), round(b[0], 4), round(b[1], 4))
+    if key in _ROAD_LINES:
+        return _ROAD_LINES[key]
+    path = [list(a), list(b)]
+    try:
+        wa, wb = gcj02_to_wgs84(a[0], a[1]), gcj02_to_wgs84(b[0], b[1])
+        r = requests.get(f"https://router.project-osrm.org/route/v1/driving/{wa[1]},{wa[0]};{wb[1]},{wb[0]}",
+                         params={"overview": "full", "geometries": "geojson"}, timeout=4)
+        coords = r.json()["routes"][0]["geometry"]["coordinates"]
+        path = [list(wgs84_to_gcj02(lat, lng)) for lng, lat in coords]
+    except Exception:
+        pass                                      # offline or routing down: keep the straight line
+    _ROAD_LINES[key] = path
+    if len(_ROAD_LINES) > 300:
+        _ROAD_LINES.popitem(last=False)
+    return path
+
+
+@app.route("/api/me/live")
+@login_required
+def my_live():
+    """The customer's open orders: where the driver is, and the road only once they are next."""
+    if current_role() != "customer":
+        return jsonify({"ok": False, "error": "customers only"}), 403
+    now = time.time()
+    items = []
+    for oid in users.customer_order_ids(session["uid"]):
+        o = store.get(oid)
+        if not o or o.status not in (OrderStatus.PENDING, OrderStatus.REQUESTED):
+            continue
+        item = {"id": o.id, "status": o.status.value, "lat": o.lat, "lng": o.lng, "price": o.price,
+                "note": public_note(o), "track_url": f"/track/{o.id}?k={track_key(o.id)}"}
+        if o.status == OrderStatus.PENDING:
+            d = driver_for(o.driver_id)
+            same = [x for x in store.all() if x.driver_id == o.driver_id]
+            me = next((x for x in optimize_route(d, same, geo, start_time=now) if x.id == o.id), None)
+            is_next = bool(me and me.sequence == 1)
+            item.update({
+                "eta": fmt(me.eta_epoch) if me else "--",
+                "eta_epoch": me.eta_epoch if me else None,
+                "stops_before": (me.sequence - 1) if me else None,
+                "promise": fmt(o.promised_by) if o.promised_by else None,
+                "arrived": driver_has_arrived(o, me),
+                "driver": [d.lat, d.lng],
+                "next": is_next,
+                "road": _road_line((d.lat, d.lng), (o.lat, o.lng)) if is_next else [],
+                "trail": _trail_for(o.driver_id, now) if is_next else [],
+            })
+        items.append(item)
+    return jsonify({"ok": True, "orders": items})
 
 
 if __name__ == "__main__":

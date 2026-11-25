@@ -5,210 +5,304 @@
   <meta charset="utf-8"/>
   <link rel="icon" type="image/svg+xml" href="/static/logo.svg?v={{ asset_v }}"/>
   <link rel="manifest" href="/manifest.webmanifest"/>
-  <meta name="theme-color" content="#1f5fd6"/>
+  <meta name="theme-color" content="#0b1220"/>
   <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png"/>
   <meta name="apple-mobile-web-app-capable" content="yes"/>
   <meta name="mobile-web-app-capable" content="yes"/>
   <meta name="apple-mobile-web-app-title" content="智送管家"/>
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
   <script src="/static/pwa.js?v={{ asset_v }}" defer></script>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
   <title>我的订单 · 智送管家</title>
   <link rel="stylesheet" href="/static/vendor/leaflet/leaflet.css?v={{ asset_v }}"/>
-  <link rel="stylesheet" href="/static/vendor/inter/inter.css?v={{ asset_v }}" media="print"/>
-  <link rel="stylesheet" href="/static/pro.css?v={{ asset_v }}"/>
-  <link rel="stylesheet" href="/static/css/me.css?v={{ asset_v }}"/>
-  <link rel="stylesheet" href="/static/css/theme.css?v={{ asset_v }}"/>
+  <link rel="stylesheet" href="/static/css/me-pro.css?v={{ asset_v }}"/>
 </head>
-<body class="app">
-  <header class="me-top">
-    <a class="me-brand" href="/me"><img src="/static/logo.svg?v={{ asset_v }}" alt=""/><span>智送管家</span></a>
-    <div class="me-right">
-      <span data-lang-slot></span>
-      <form method="post" action="/logout"><button class="me-out" type="submit">Log out</button></form>
+<body>
+  <div id="map"></div>
+
+  <header class="mp-top">
+    <div class="mp-brand"><img src="/static/logo.svg?v={{ asset_v }}" alt=""/><span>智送管家</span></div>
+    <div class="mp-actions">
+      <button id="lang" class="mp-chip" type="button"></button>
+      <form method="post" action="/logout"><button class="mp-chip" type="submit" id="t-out"></button></form>
     </div>
   </header>
 
-  <main class="me-wrap">
+  <div class="mp-fabs">
+    <button id="focus" class="mp-fab" type="button" aria-label="Focus"><svg viewBox="0 0 24 24"><path d="M3 9V5a2 2 0 0 1 2-2h4M21 9V5a2 2 0 0 0-2-2h-4M3 15v4a2 2 0 0 0 2 2h4M21 15v4a2 2 0 0 1-2 2h-4"/></svg></button>
+    <button id="locate" class="mp-fab" type="button" aria-label="My location"><svg viewBox="0 0 24 24"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg></button>
+  </div>
+
+  <section class="mp-sheet">
+    <div class="mp-grip"></div>
     <h1 id="hello"></h1>
-    <div id="map" class="me-map"></div>
+    <div id="live"></div>
 
-    <section class="me-card" id="shop" hidden>
+    <div class="mp-card" id="shop" hidden>
       <h2 id="t-shop"></h2>
-      <div id="menu" class="me-menu"></div>
-      <p class="me-hint" id="t-where"></p>
-      <input id="addr" class="me-input" maxlength="120" autocomplete="off"/>
-      <div class="me-fee" id="fee-line"></div>
-      <div class="me-total-row"><span id="total"></span><button id="place" class="me-place"></button></div>
-      <div class="me-msg" id="order-msg"></div>
-    </section>
+      <div id="menu" class="mp-menu"></div>
+      <p class="mp-hint" id="t-where"></p>
+      <input id="addr" class="mp-input" maxlength="120" autocomplete="off"/>
+      <div class="mp-fee" id="fee-line"></div>
+      <div class="mp-total"><span id="total"></span><button id="place" class="mp-btn" type="button"></button></div>
+      <div class="mp-msg" id="order-msg"></div>
+    </div>
 
-    <section class="me-card">
+    <div class="mp-card">
       <h2 id="t-orders"></h2>
-      <div id="orders" class="me-orders"></div>
-    </section>
+      <div id="orders" class="mp-list"></div>
+    </div>
 
-    <section class="me-card">
-      <h2 id="t-add"></h2>
-      <p class="me-hint" id="t-add-hint"></p>
-      <div class="me-claim">
-        <input id="link" placeholder="https://…/track/…" autocomplete="off"/>
-        <button id="claim"></button>
+    <details class="mp-card mp-more">
+      <summary id="t-add"></summary>
+      <div class="mp-claim">
+        <input id="link" class="mp-input" placeholder="https://.../track/..." autocomplete="off"/>
+        <button id="claim" class="mp-btn" type="button"></button>
       </div>
-      <div class="me-msg" id="msg"></div>
-    </section>
-  </main>
+      <div class="mp-msg" id="msg"></div>
+    </details>
+  </section>
 
   <script src="/static/vendor/leaflet/leaflet.js?v={{ asset_v }}"></script>
-  <script src="/static/font-load.js?v={{ asset_v }}"></script>
   <script>
     const NAME = {{ name|tojson }};
     let lang = 'zh';
     try { lang = localStorage.getItem('lang') || (navigator.language.startsWith('zh') ? 'zh' : 'en'); } catch (e) {}
     const T = {
-      en: { hello: n => `Hi, ${n}`, orders: 'My orders', add: 'Add an order', btn: 'Add',
-            hint: 'Got a tracking link from the shop? Paste it here to keep the order in your account.',
-            empty: 'No orders yet. Paste a tracking link below to add one.',
-            added: 'Order added', bad: 'This tracking link is not valid',
+      en: { hello: n => `Hi, ${n}`, out: 'Log out', orders: 'My orders', add: 'Add an order with its tracking link', btn: 'Add',
+            empty: 'No past orders yet.', added: 'Order added', bad: 'This tracking link is not valid',
             shop: 'Order now', where: 'Tap the map to set where we deliver, then add your building and room.',
             addr: 'Building, floor, room (e.g. Bldg 5, room 302)', place: 'Place order', total: n => `Total ¥${n}`,
             needItems: 'Choose at least one product', needPin: 'Tap the map to set the delivery spot',
             needAddr: 'Add your building and room', placed: 'Order sent! The shop will confirm it soon.',
             cancel: 'Cancel', cancelAsk: 'Cancel this order?', here: 'Deliver here',
             again: 'Order again', againGone: 'Some products are not sold any more',
-            fee: n => `Delivery ¥${n}`, feeFree: 'Free delivery', freeOver: n => `free over ¥${n}`,
-            minOrder: n => `Minimum order ¥${n}`,
-            st: { requested: 'Waiting for the shop', pending: 'On the way', delivered: 'Delivered', cancelled: 'Cancelled' } },
-      zh: { hello: n => `您好，${n}`, orders: '我的订单', add: '添加订单', btn: '添加',
-            hint: '收到商家发来的追踪链接？粘贴到这里，订单就会保存到您的账号。',
-            empty: '还没有订单。在下面粘贴追踪链接即可添加。',
-            added: '订单已添加', bad: '追踪链接无效',
+            fee: n => `Delivery ¥${n}`, feeFree: 'Free delivery', freeOver: n => `free over ¥${n}`, minOrder: n => `Minimum order ¥${n}`,
+            waiting: 'Waiting for the shop to confirm', onWay: 'On the way', eta: 'Arriving around',
+            next: 'You are next: the driver is heading to you', before: n => `${n} stop${n === 1 ? '' : 's'} before you`,
+            arrived: 'Your driver is here! Please come down', arrivedShort: 'Here!', soon: 'Any moment', mins: m => `${m} min`,
+            track: 'Track', me: 'You are here', other: '中文',
+            st: { requested: 'Waiting', pending: 'On the way', delivered: 'Delivered', cancelled: 'Cancelled' } },
+      zh: { hello: n => `你好，${n}`, out: '退出', orders: '我的订单', add: '用追踪链接添加订单', btn: '添加',
+            empty: '还没有历史订单～', added: '订单已添加', bad: '追踪链接无效',
             shop: '立即下单', where: '在地图上点一下送货位置，再填楼号和房间号～',
             addr: '楼号、楼层、房间（如 5号楼302）', place: '下单', total: n => `合计 ¥${n}`,
             needItems: '先选一件商品吧', needPin: '在地图上点一下送货位置', needAddr: '填一下楼号和房间号',
             placed: '下单成功！商家确认后马上配送～', cancel: '取消', cancelAsk: '确定取消这个订单吗？', here: '送到这里',
             again: '再来一单', againGone: '有些商品已下架啦',
-            fee: n => `配送费 ¥${n}`, feeFree: '免配送费', freeOver: n => `满¥${n}免配送费`,
-            minOrder: n => `起送价 ¥${n}`,
+            fee: n => `配送费 ¥${n}`, feeFree: '免配送费', freeOver: n => `满¥${n}免配送费`, minOrder: n => `起送价 ¥${n}`,
+            waiting: '等商家确认中', onWay: '配送中', eta: '预计送达',
+            next: '下一站就是你，骑手正在赶来', before: n => `前面还有 ${n} 站`,
+            arrived: '司机到啦，下楼取一下～', arrivedShort: '到啦！', soon: '马上到', mins: m => `${m} 分钟`,
+            track: '查看进度', me: '你在这', other: 'EN',
             st: { requested: '等商家确认', pending: '配送中', delivered: '已送达', cancelled: '已取消' } },
     }[lang === 'en' ? 'en' : 'zh'];
 
-    function esc(t) {
-      return String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-    }
-    document.getElementById('hello').textContent = T.hello(NAME);
-    document.getElementById('t-orders').textContent = T.orders;
-    document.getElementById('t-add').textContent = T.add;
-    document.getElementById('t-add-hint').textContent = T.hint;
-    document.getElementById('claim').textContent = T.btn;
-
-    // Map: Gaode tiles (fast in China), centred on ZAFU until we know the orders
-    const map = L.map('map', { zoomControl: false, attributionControl: false }).setView([30.257, 119.727], 14);
-    L.tileLayer('https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
-                { subdomains: '1234', maxZoom: 18 }).addTo(map);
-    const pins = L.layerGroup().addTo(map);
-    const COLOR = { requested: '#f59e0b', pending: '#3b82f6', delivered: '#16a34a', cancelled: '#94a3b8' };
+    const esc = t => String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     const yuan = n => Number.isInteger(n) ? String(n) : n.toFixed(2);
+    const $ = id => document.getElementById(id);
 
-    async function load() {
-      const d = await (await fetch('/api/me/orders')).json();
-      lastOrders = (d.ok && d.orders) || [];
-      const list = document.getElementById('orders');
-      pins.clearLayers();
-      if (!d.ok || !d.orders.length) {
-        list.innerHTML = `<div class="me-empty">${T.empty}</div>`;
-        return;
+    $('hello').textContent = T.hello(NAME);
+    $('t-out').textContent = T.out;
+    $('t-orders').textContent = T.orders;
+    $('t-add').textContent = T.add;
+    $('claim').textContent = T.btn;
+    $('t-shop').textContent = T.shop;
+    $('t-where').textContent = T.where;
+    $('addr').placeholder = T.addr;
+    $('place').textContent = T.place;
+    $('lang').textContent = T.other;
+    $('lang').onclick = () => { try { localStorage.setItem('lang', lang === 'en' ? 'zh' : 'en'); } catch (e) {} location.reload(); };
+    try { $('addr').value = localStorage.getItem('lastAddress') || ''; } catch (e) {}
+
+    // ---------- Map: Esri underneath everywhere, Gaode (complete Chinese map) on top in China ----------
+    const CHINA = L.latLngBounds([18, 73], [54, 135.5]);
+    const map = L.map('map', { zoomControl: false, attributionControl: false, zoomSnap: 0.25 }).setView([30.257, 119.727], 14);
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}',
+                { maxZoom: 18, maxNativeZoom: 16 }).addTo(map);
+    L.tileLayer('https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=2&style=8&x={x}&y={y}&z={z}',
+                { subdomains: '1234', maxZoom: 18, bounds: CHINA, minZoom: 6 }).addTo(map);
+    let userMoved = false;
+    map.on('dragstart', () => { userMoved = true; });
+
+    // ---------- You are here (phones give WGS-84; Chinese maps use GCJ-02) ----------
+    const PI = Math.PI;
+    function outOfChina(lat, lng) { return lng < 72.004 || lng > 137.8347 || lat < 0.8293 || lat > 55.8271; }
+    function tLat(x, y) {
+      let r = -100 + 2 * x + 3 * y + 0.2 * y * y + 0.1 * x * y + 0.2 * Math.sqrt(Math.abs(x));
+      r += (20 * Math.sin(6 * x * PI) + 20 * Math.sin(2 * x * PI)) * 2 / 3;
+      r += (20 * Math.sin(y * PI) + 40 * Math.sin(y / 3 * PI)) * 2 / 3;
+      r += (160 * Math.sin(y / 12 * PI) + 320 * Math.sin(y * PI / 30)) * 2 / 3;
+      return r;
+    }
+    function tLng(x, y) {
+      let r = 300 + x + 2 * y + 0.1 * x * x + 0.1 * x * y + 0.1 * Math.sqrt(Math.abs(x));
+      r += (20 * Math.sin(6 * x * PI) + 20 * Math.sin(2 * x * PI)) * 2 / 3;
+      r += (20 * Math.sin(x * PI) + 40 * Math.sin(x / 3 * PI)) * 2 / 3;
+      r += (150 * Math.sin(x / 12 * PI) + 300 * Math.sin(x / 30 * PI)) * 2 / 3;
+      return r;
+    }
+    function wgs2gcj(lat, lng) {
+      if (outOfChina(lat, lng)) return [lat, lng];
+      const a = 6378245.0, ee = 0.00669342162296594323;
+      let dLat = tLat(lng - 105, lat - 35), dLng = tLng(lng - 105, lat - 35);
+      const rad = lat / 180 * PI;
+      let m = Math.sin(rad); m = 1 - ee * m * m;
+      const s = Math.sqrt(m);
+      dLat = (dLat * 180) / ((a * (1 - ee)) / (m * s) * PI);
+      dLng = (dLng * 180) / (a / s * Math.cos(rad) * PI);
+      return [lat + dLat, lng + dLng];
+    }
+    let meDot = null, meRing = null, myPos = null;
+    function showMe(lat, lng, acc) {
+      myPos = [lat, lng];
+      if (!meDot) {
+        meRing = L.circle(myPos, { radius: acc, color: '#3b82f6', weight: 1, fillOpacity: 0.12, interactive: false }).addTo(map);
+        meDot = L.circleMarker(myPos, { radius: 8, color: '#fff', weight: 3, fillColor: '#3b82f6', fillOpacity: 1 }).addTo(map).bindTooltip(T.me);
+      } else { meDot.setLatLng(myPos); meRing.setLatLng(myPos).setRadius(acc); }
+    }
+    function locate(fly) {
+      if (!navigator.geolocation || !window.isSecureContext) return;
+      navigator.geolocation.getCurrentPosition(p => {
+        const [lat, lng] = wgs2gcj(p.coords.latitude, p.coords.longitude);
+        showMe(lat, lng, Math.round(p.coords.accuracy));
+        if (!pin && !$('shop').hidden) setPin(lat, lng);
+        if (fly || !activeOrder) map.flyTo([lat, lng], 16, { duration: 1 });
+      }, () => {}, { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 });
+    }
+    $('locate').onclick = () => { userMoved = true; locate(true); };
+    $('focus').onclick = () => { userMoved = false; lastFrame = ''; loadLive(); };
+    try {
+      navigator.permissions.query({ name: 'geolocation' }).then(p => { if (p.state === 'granted') locate(false); }).catch(() => {});
+    } catch (e) {}
+
+    // ---------- Live: the order on its way, the driver moving, the road once you are next ----------
+    let activeOrder = null, driverMk = null, homeMk = null, roadLn = null, trailLn = null, lastFrame = '';
+    function glide(marker, to) {
+      const from = marker.getLatLng(), t0 = performance.now();
+      (function step(now) {
+        const k = Math.min(1, (now - t0) / 800), e = 1 - Math.pow(1 - k, 3);
+        marker.setLatLng([from.lat + (to[0] - from.lat) * e, from.lng + (to[1] - from.lng) * e]);
+        if (k < 1) requestAnimationFrame(step);
+      })(t0);
+    }
+    function clearLive() {
+      [driverMk, homeMk, roadLn, trailLn].forEach(l => { if (l) map.removeLayer(l); });
+      driverMk = homeMk = roadLn = trailLn = null;
+    }
+    function drawLive(o) {
+      activeOrder = o;
+      if (!o) { clearLive(); return; }
+      const dest = [o.lat, o.lng], drv = o.driver;
+      if (!homeMk) homeMk = L.marker(dest, { icon: L.divIcon({ className: '', html: '<div class="mp-home"></div>', iconSize: [30, 30], iconAnchor: [15, 15] }) }).addTo(map);
+      else homeMk.setLatLng(dest);
+      if (!drv) return;
+      if (!driverMk) driverMk = L.marker(drv, { zIndexOffset: 1000, icon: L.divIcon({ className: '', html: '<div class="mp-car"></div>', iconSize: [36, 36], iconAnchor: [18, 18] }) }).addTo(map);
+      else glide(driverMk, drv);
+      if (trailLn) { map.removeLayer(trailLn); trailLn = null; }
+      if (roadLn) { map.removeLayer(roadLn); roadLn = null; }
+      if (o.trail && o.trail.length) trailLn = L.polyline([...o.trail, drv], { color: '#94a3b8', weight: 4, dashArray: '2 9', lineCap: 'round', interactive: false }).addTo(map);
+      if (o.road && o.road.length > 1) roadLn = L.polyline(o.road, { className: 'mp-road', color: '#2563eb', weight: 6, lineCap: 'round', lineJoin: 'round', interactive: false }).addTo(map);
+      const frame = (o.next ? 'n' : 'w') + o.id;
+      if (!userMoved && frame !== lastFrame) {
+        lastFrame = frame;
+        map.fitBounds(L.latLngBounds([drv, dest]).pad(0.35), { maxZoom: 17 });
       }
-      list.innerHTML = d.orders.map(o => `
-        <a class="me-order" href="${esc(o.track_url)}">
-          <div><div class="me-note">${esc(o.note || '—')}</div>
-            <div class="me-time">${new Date(o.created_at * 1000).toLocaleString()}${o.price != null ? ' · ¥' + yuan(o.price) : ''}</div></div>
-          <div class="me-order-side">
-            ${o.status === 'requested' ? `<button class="me-cancel" onclick="cancelOrder(event, '${esc(o.id)}')">${T.cancel}</button>` : ''}
-            ${o.items && o.items.length && o.status !== 'requested' ? `<button class="me-again" onclick="orderAgain(event, '${esc(o.id)}')">${T.again}</button>` : ''}
-            <span class="chip ${esc(o.status)}">${T.st[o.status] || esc(o.status)}</span>
-          </div>
-        </a>`).join('');
-      const pts = d.orders.map(o => {
-        L.circleMarker([o.lat, o.lng], { radius: 9, color: '#fff', weight: 2, fillColor: COLOR[o.status] || '#94a3b8', fillOpacity: 1 })
-          .bindPopup(esc(o.note || T.st[o.status] || '')).addTo(pins);
-        return [o.lat, o.lng];
-      });
-      map.fitBounds(pts, { padding: [40, 40], maxZoom: 16 });
-      if (!pin) setPin(d.orders[0].lat, d.orders[0].lng);   // same spot as last time, easy to move
+    }
+    function liveCard(o) {
+      if (o.status === 'requested') {
+        return `<div class="mp-live wait">
+          <div class="mp-live-top"><span class="mp-dot amber"></span><b>${T.waiting}</b></div>
+          ${o.note ? `<div class="mp-note">${esc(o.note)}</div>` : ''}
+          <div class="mp-row"><a class="mp-btn ghost" href="${esc(o.track_url)}">${T.track}</a>
+          <button class="mp-btn danger" type="button" onclick="cancelOrder('${esc(o.id)}')">${T.cancel}</button></div></div>`;
+      }
+      const m = o.eta_epoch ? Math.round((o.eta_epoch - Date.now() / 1000) / 60) : null;
+      const big = o.arrived ? T.arrivedShort : (m === null ? '--' : (m <= 1 ? T.soon : T.mins(m)));
+      const sub = o.arrived ? T.arrived : (o.next ? T.next : (o.stops_before !== null && o.stops_before !== undefined ? T.before(o.stops_before) : T.onWay));
+      return `<div class="mp-live ${o.arrived ? 'here' : ''}">
+        <div class="mp-live-top"><span class="mp-dot ${o.arrived ? 'green' : 'blue'}"></span><b>${T.onWay}</b>
+          <span class="mp-at">${T.eta} ${esc(o.eta || '--')}</span></div>
+        <div class="mp-big">${big}</div>
+        <div class="mp-sub">${sub}</div>
+        ${o.note ? `<div class="mp-note">${esc(o.note)}</div>` : ''}
+        <a class="mp-btn" href="${esc(o.track_url)}">${T.track}</a></div>`;
+    }
+    async function loadLive() {
+      let d;
+      try { d = await (await fetch('/api/me/live')).json(); } catch (e) { return; }
+      if (!d.ok) return;
+      $('live').innerHTML = d.orders.map(liveCard).join('');
+      drawLive(d.orders.find(o => o.status === 'pending') || null);
     }
 
-    // ---------- Order now: catalog, quantities, delivery spot ----------
-    const qty = {};
     let lastOrders = [];
-    let shopInfo = { delivery_fee: 0, free_over: 0, min_order: 0 };
-
-    // Same rule as the server (settings.delivery_fee_for); the server has the final word.
-    function feeFor(sub) { return shopInfo.free_over > 0 && sub >= shopInfo.free_over ? 0 : shopInfo.delivery_fee; }
-    function feeText(sub, fee) {
-      const parts = [];
-      if (shopInfo.delivery_fee > 0) parts.push(fee > 0 ? T.fee(yuan(fee)) : T.feeFree);
-      if (shopInfo.free_over > 0 && fee > 0) parts.push(T.freeOver(yuan(shopInfo.free_over)));
-      if (shopInfo.min_order > 0 && sub < shopInfo.min_order) parts.push(T.minOrder(yuan(shopInfo.min_order)));
-      return parts.join(' · ');
+    async function loadOrders() {
+      let d;
+      try { d = await (await fetch('/api/me/orders')).json(); } catch (e) { return; }
+      lastOrders = (d.ok && d.orders) || [];
+      const past = lastOrders.filter(o => o.status === 'delivered' || o.status === 'cancelled');
+      $('orders').innerHTML = past.map(o => `
+        <div class="mp-item">
+          <a class="mp-item-main" href="${esc(o.track_url)}">
+            <div class="mp-item-name">${esc(o.note || '-')}</div>
+            <div class="mp-time">${new Date(o.created_at * 1000).toLocaleString()}${o.price != null ? ' · ¥' + yuan(o.price) : ''}</div>
+          </a>
+          <div class="mp-item-side">
+            ${o.items && o.items.length ? `<button class="mp-chip small" type="button" onclick="orderAgain('${esc(o.id)}')">${T.again}</button>` : ''}
+            <span class="mp-tag ${esc(o.status)}">${T.st[o.status] || esc(o.status)}</span>
+          </div>
+        </div>`).join('') || `<div class="mp-empty">${T.empty}</div>`;
+      if (!pin && !myPos && lastOrders.length) setPin(lastOrders[0].lat, lastOrders[0].lng);
     }
-    let products = [], pin = null;
 
+    const qty = {};
+    let products = [], pin = null, shopInfo = { delivery_fee: 0, free_over: 0, min_order: 0 };
     function setPin(lat, lng) {
       if (pin) pin.setLatLng([lat, lng]);
       else pin = L.marker([lat, lng], { draggable: true }).addTo(map).bindTooltip(T.here, { permanent: true, direction: 'top', offset: [-15, -12] });
     }
-    map.on('click', e => setPin(e.latlng.lat, e.latlng.lng));
-
+    map.on('click', e => { if (!$('shop').hidden) setPin(e.latlng.lat, e.latlng.lng); });
+    const feeFor = sub => shopInfo.free_over > 0 && sub >= shopInfo.free_over ? 0 : shopInfo.delivery_fee;
     function renderMenu() {
-      document.getElementById('menu').innerHTML = products.map(p => `
-        <div class="me-item">
-          <div><div class="me-item-name">${esc(p.name)}</div>
-            <div class="me-time">¥${yuan(p.price)}${p.unit ? ' / ' + esc(p.unit) : ''}</div></div>
-          <div class="me-qty">
-            <button onclick="changeQty('${esc(p.id)}', -1)" aria-label="-">−</button>
-            <span>${qty[p.id] || 0}</span>
-            <button onclick="changeQty('${esc(p.id)}', 1)" aria-label="+">+</button>
-          </div>
+      $('menu').innerHTML = products.map(p => `
+        <div class="mp-prod">
+          <div><div class="mp-item-name">${esc(p.name)}</div><div class="mp-time">¥${yuan(p.price)}${p.unit ? ' / ' + esc(p.unit) : ''}</div></div>
+          <div class="mp-qty"><button type="button" onclick="changeQty('${esc(p.id)}', -1)">-</button><span>${qty[p.id] || 0}</span>
+          <button type="button" onclick="changeQty('${esc(p.id)}', 1)">+</button></div>
         </div>`).join('');
-      const sub = products.reduce((sum, p) => sum + p.price * (qty[p.id] || 0), 0);
+      const sub = products.reduce((s, p) => s + p.price * (qty[p.id] || 0), 0);
       const fee = sub > 0 ? feeFor(sub) : 0;
-      document.getElementById('total').textContent = T.total(yuan(Math.round((sub + fee) * 100) / 100));
-      document.getElementById('fee-line').textContent = feeText(sub, fee);
+      $('total').textContent = T.total(yuan(Math.round((sub + fee) * 100) / 100));
+      const parts = [];
+      if (shopInfo.delivery_fee > 0) parts.push(fee > 0 ? T.fee(yuan(fee)) : T.feeFree);
+      if (shopInfo.free_over > 0 && fee > 0) parts.push(T.freeOver(yuan(shopInfo.free_over)));
+      if (shopInfo.min_order > 0 && sub < shopInfo.min_order) parts.push(T.minOrder(yuan(shopInfo.min_order)));
+      $('fee-line').textContent = parts.join(' · ');
     }
-    function changeQty(id, step) {
-      qty[id] = Math.max(0, Math.min(99, (qty[id] || 0) + step));
-      renderMenu();
-    }
-
+    function changeQty(id, step) { qty[id] = Math.max(0, Math.min(99, (qty[id] || 0) + step)); renderMenu(); }
     async function loadMenu() {
-      const res = await fetch('/api/products');
-      if (!res.ok) return;
-      products = await res.json();
-      try { shopInfo = await (await fetch('/api/me/shop')).json(); } catch (e) {}
-      document.getElementById('shop').hidden = !products.length;   // nothing to sell: no shop box
+      try {
+        const res = await fetch('/api/products');
+        if (!res.ok) return;
+        products = await res.json();
+        shopInfo = await (await fetch('/api/me/shop')).json();
+      } catch (e) { return; }
+      $('shop').hidden = !products.length;
       renderMenu();
     }
-
-    document.getElementById('t-shop').textContent = T.shop;
-    document.getElementById('t-where').textContent = T.where;
-    document.getElementById('addr').placeholder = T.addr;
-    document.getElementById('place').textContent = T.place;
-    try { document.getElementById('addr').value = localStorage.getItem('lastAddress') || ''; } catch (e) {}
-
-    document.getElementById('place').onclick = async () => {
-      const msg = document.getElementById('order-msg');
+    $('place').onclick = async () => {
+      const msg = $('order-msg');
+      const fail = text => { msg.textContent = text; msg.className = 'mp-msg bad'; };
       const items = Object.entries(qty).filter(([, n]) => n > 0).map(([id, n]) => ({ id, qty: n }));
-      const address = document.getElementById('addr').value.trim();
-      const fail = text => { msg.textContent = text; msg.className = 'me-msg bad'; };
+      const address = $('addr').value.trim();
       if (!items.length) return fail(T.needItems);
       const sub = products.reduce((s, p) => s + p.price * (qty[p.id] || 0), 0);
       if (shopInfo.min_order > 0 && sub < shopInfo.min_order) return fail(T.minOrder(yuan(shopInfo.min_order)));
       if (!pin) return fail(T.needPin);
       if (!address) return fail(T.needAddr);
       const at = pin.getLatLng();
-      const btn = document.getElementById('place');
-      btn.disabled = true;
+      $('place').disabled = true;
       try {
         const res = await fetch('/api/me/order', { method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ items, lat: at.lat, lng: at.lng, address }) });
@@ -217,62 +311,45 @@
         try { localStorage.setItem('lastAddress', address); } catch (e) {}
         Object.keys(qty).forEach(k => delete qty[k]);
         renderMenu();
-        msg.textContent = T.placed; msg.className = 'me-msg ok';
-        load();
-      } finally {
-        btn.disabled = false;
-      }
+        msg.textContent = T.placed; msg.className = 'mp-msg ok';
+        loadLive(); loadOrders();
+      } finally { $('place').disabled = false; }
     };
-
-    // Order again: same products, quantities, spot and address. The customer still
-    // presses "Place order", so they always see today's prices first.
-    function orderAgain(event, id) {
-      event.preventDefault();                  // the button sits inside the order link
-      event.stopPropagation();
+    function orderAgain(id) {
       const o = lastOrders.find(x => x.id === id);
       if (!o) return;
       Object.keys(qty).forEach(k => delete qty[k]);
       let missing = false;
-      o.items.forEach(it => {
+      (o.items || []).forEach(it => {
         if (products.some(p => p.id === it.id)) qty[it.id] = Math.min(99, (qty[it.id] || 0) + it.qty);
-        else missing = true;                   // hidden since then: skip it
+        else missing = true;
       });
       renderMenu();
       setPin(o.lat, o.lng);
       const addr = (o.note || '').split(' | ')[0];
-      if (addr) document.getElementById('addr').value = addr;
-      const msg = document.getElementById('order-msg');
-      msg.textContent = missing ? T.againGone : '';
-      msg.className = 'me-msg bad';
-      document.getElementById('shop').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      if (addr) $('addr').value = addr;
+      $('order-msg').textContent = missing ? T.againGone : '';
+      $('order-msg').className = 'mp-msg bad';
+      $('shop').scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
-
-    async function cancelOrder(event, id) {
-      event.preventDefault();                  // the button sits inside the order link
-      event.stopPropagation();
+    async function cancelOrder(id) {
       if (!confirm(T.cancelAsk)) return;
-      const res = await fetch(`/api/me/orders/${encodeURIComponent(id)}/cancel`, { method: 'POST' });
-      const d = await res.json();
+      const d = await (await fetch(`/api/me/orders/${encodeURIComponent(id)}/cancel`, { method: 'POST' })).json();
       if (!d.ok) { alert(d.error || 'Error'); return; }
-      load();
+      loadLive(); loadOrders();
     }
-
-    // Add an order by its tracking link (the signed key proves it belongs to you)
-    document.getElementById('claim').onclick = async () => {
-      const input = document.getElementById('link'), msg = document.getElementById('msg');
-      const res = await fetch('/api/me/claim', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-                                                 body: JSON.stringify({ link: input.value.trim() }) });
-      const d = await res.json();
+    $('claim').onclick = async () => {
+      const input = $('link'), msg = $('msg');
+      const d = await (await fetch('/api/me/claim', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                                     body: JSON.stringify({ link: input.value.trim() }) })).json();
       msg.textContent = d.ok ? T.added : T.bad;
-      msg.className = 'me-msg ' + (d.ok ? 'ok' : 'bad');
-      if (d.ok) { input.value = ''; load(); }
+      msg.className = 'mp-msg ' + (d.ok ? 'ok' : 'bad');
+      if (d.ok) { input.value = ''; loadLive(); loadOrders(); }
     };
-    load();
-    loadMenu();
-    setInterval(() => { if (!document.hidden) load(); }, 20000);   // see when the shop confirms
+
+    loadMenu(); loadOrders(); loadLive();
+    setInterval(() => { if (!document.hidden) loadLive(); }, 8000);
+    setInterval(() => { if (!document.hidden) loadOrders(); }, 30000);
   </script>
-  <script src="/static/i18n.js?v={{ asset_v }}"></script>
-  <script src="/static/pro.js?v={{ asset_v }}"></script>
-  <script src="/static/app.js?v={{ asset_v }}"></script>
 </body>
 </html>
