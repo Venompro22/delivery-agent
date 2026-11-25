@@ -136,6 +136,13 @@ VIEWER_SNIPPET = """
   #demo-toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
     z-index: 99999; background: #222; color: #fff; padding: 10px 16px; border-radius: 10px;
     font: 14px system-ui, sans-serif; display: none; }
+  /* Discreet badge instead of a full-width bar, so the demo never hides the app */
+  #demo-banner { top: auto !important; right: auto !important; left: 12px !important;
+    bottom: calc(12px + env(safe-area-inset-bottom)) !important; width: auto !important;
+    padding: 5px 11px !important; border-radius: 999px !important; font-size: 0 !important;
+    opacity: .9; pointer-events: none; box-shadow: 0 4px 14px rgba(0, 0, 0, .25); }
+  #demo-banner::after { content: '演示 DEMO'; font-size: 11px; font-weight: 700; letter-spacing: .04em; }
+  body { padding-top: 0 !important; }
   /* Hide every control a demo visitor can't use */
   #log,
   button[onclick*="retrain" i],

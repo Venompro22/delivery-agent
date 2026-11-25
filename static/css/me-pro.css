@@ -105,5 +105,3 @@ html, body { margin: 0; height: 100%; background: #0b1220; color: #e5e7eb;
   .mp-actions { gap: 6px; }
   .mp-chip { padding: 7px 10px; font-size: 12px; }
 }
-/* The demo banner sits on top of the page: keep the top bar below it */
-body:has(#demo-banner) .mp-top { top: 30px; }
