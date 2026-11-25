@@ -44,6 +44,7 @@ class OrderStore:
     def __init__(self, path: str = os.path.join(HERE, "orders.db")):
         self.path = path
         self.orders: List[Order] = []
+        self._saved: dict = {}                  # id -> row as last written; lets save() write only changes
         con = db.connect(self.path)
         try:
             con.execute(SCHEMA)
@@ -103,23 +104,36 @@ class OrderStore:
         """Read every order from the database."""
         rows = self._run(f"SELECT {', '.join(COLUMNS)} FROM orders ORDER BY created_at")
         self.orders = [Order.from_dict(dict(zip(COLUMNS, row))) for row in rows]
+        self._saved = {o.id: self._row(o) for o in self.orders}
 
-    def save(self) -> None:
-        """Write all orders (one atomic transaction — never half-written)."""
+    def save(self) -> int:
+        """Write only what changed since the last save: new, edited and removed orders.
+        One atomic transaction, never half-written. Returns how many rows it touched."""
+        current = {o.id: self._row(o) for o in self.orders}
+        gone = [oid for oid in self._saved if oid not in current]
+        changed = [row for oid, row in current.items() if self._saved.get(oid) != row]
+        if not gone and not changed:
+            return 0                                    # nothing to do: no database trip at all
         marks = ", ".join("?" for _ in COLUMNS)
         con = db.connect(self.path)
         try:
             with con:
-                con.execute("DELETE FROM orders")
-                con.executemany(f"INSERT INTO orders ({', '.join(COLUMNS)}) VALUES ({marks})",
-                                [self._row(o) for o in self.orders])
+                # Edited orders are replaced (delete + insert works the same on SQLite and Postgres)
+                ids = gone + [row[0] for row in changed]
+                con.executemany("DELETE FROM orders WHERE id = ?", [(i,) for i in ids])
+                if changed:
+                    con.executemany(f"INSERT INTO orders ({', '.join(COLUMNS)}) VALUES ({marks})", changed)
         finally:
             con.close()
+        self._saved = current
+        return len(gone) + len(changed)
 
     def add(self, order: Order) -> Order:
         marks = ", ".join("?" for _ in COLUMNS)
-        self._run(f"INSERT INTO orders ({', '.join(COLUMNS)}) VALUES ({marks})", [self._row(order)])
+        row = self._row(order)
+        self._run(f"INSERT INTO orders ({', '.join(COLUMNS)}) VALUES ({marks})", [row])
         self.orders.append(order)
+        self._saved[order.id] = row
         return order
 
     def all(self) -> List[Order]:
