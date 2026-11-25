@@ -612,6 +612,7 @@
       knownIds.add(data.id);
       await refresh();
       highlightNew(data.id);
+      if (data.snapped) showToast('Pin moved to where this customer really receives orders');
       if (data.reply) showReply(data.reply);
     }
         async function parseMessage() {

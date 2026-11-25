@@ -667,6 +667,7 @@ def customer_place_order():
     summary = ", ".join(f"{i['name']} x{i['qty']}" for i in items)
     if fee:
         summary += f", delivery {fee:g}"
+    lat, lng, _ = _snap_to_learned(me.get("phone", ""), lat, lng)
     order = Order(customer_name=me.get("name") or "Customer", lat=lat, lng=lng,
                   phone=me.get("phone", ""), note=f"{address} | {summary}"[:200],
                   price=round(total + fee, 2), status=OrderStatus.REQUESTED,
@@ -1099,6 +1100,7 @@ def add_order():
             return bad_request("promise must be positive")
         kw["promised_by"] = time.time() + minutes * 60
 
+    lat, lng, snapped = _snap_to_learned(phone, lat, lng)
     order = Order(customer_name=name, lat=lat, lng=lng, phone=phone, note=note, price=price, **kw)
     # Auto-assign to the nearest approved driver that has a GPS position.
     # If none is available, driver_id stays None and the order sits in the pool.
@@ -1108,7 +1110,7 @@ def add_order():
     _store_add(order)
     url = f"{request.host_url.rstrip('/')}/track/{order.id}?k={track_key(order.id)}"
     reply = f"好的，订单收到啦！点这里实时查看配送进度：{url}"
-    return jsonify({"ok": True, "id": order.id, "track_url": url, "reply": reply})
+    return jsonify({"ok": True, "id": order.id, "track_url": url, "reply": reply, "snapped": snapped})
 
 
 @app.route("/api/orders/<order_id>/deliver", methods=["POST"])
@@ -1123,6 +1125,7 @@ def deliver_order(order_id):
         order.status = OrderStatus.DELIVERED
         order.delivered_at = time.time()
         store.save()
+        _learn_place(order)
         print(f"✅ Delivered: {order.customer_name}", flush=True)
         return jsonify({"ok": True})
     return jsonify({"ok": False}), 404
@@ -2025,6 +2028,45 @@ def where_am_i():
     session["here"] = [lat, lng]
     _move_demo_near(lat, lng)
     return jsonify({"ok": True, "lat": lat, "lng": lng, "city": loc[2]})
+
+
+# ---------- Learned delivery spots: where each customer really receives orders ----------
+from places import PlaceStore  # noqa: E402
+
+LEARN_MAX_KM = 0.3     # driver GPS further than this from the pin: probably not at the door
+SNAP_MAX_KM = 0.5      # new pin further than this from the learned spot: a different address
+_places = None
+
+
+def place_store() -> PlaceStore:
+    """Learned spots in the same database as the orders (follows store.path for tests)."""
+    global _places
+    path = getattr(store, "path", os.path.join(HERE, "orders.db"))
+    if _places is None or _places.path != path:
+        _places = PlaceStore(path)
+    return _places
+
+
+def _learn_place(order) -> None:
+    """The driver just delivered: remember where they really were, for this customer's phone."""
+    from geo import haversine_km
+    if not order.phone or (order.note or "").startswith(DEMO_TAG) or not session.get("uid"):
+        return
+    u = users.get(session["uid"]) or {}
+    if u.get("lat") is None or time.time() - (u.get("located_at") or 0) > ARRIVED_FRESH_S:
+        return                                   # no fresh GPS: nothing reliable to learn
+    if haversine_km(u["lat"], u["lng"], order.lat, order.lng) > LEARN_MAX_KM:
+        return
+    place_store().learn(order.phone, u["lat"], u["lng"])
+
+
+def _snap_to_learned(phone, lat, lng):
+    """Move a sloppy pin onto the spot drivers really delivered to. Returns (lat, lng, snapped)."""
+    from geo import haversine_km
+    spot = place_store().get(phone) if phone else None
+    if spot and haversine_km(spot[0], spot[1], lat, lng) <= SNAP_MAX_KM:
+        return round(spot[0], 6), round(spot[1], 6), True
+    return lat, lng, False
 
 
 if __name__ == "__main__":
