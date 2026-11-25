@@ -844,7 +844,7 @@ def _viewer_may_write() -> bool:
     return False
 
 
-CUSTOMER_ALLOWED = ("/me", "/api/me/", "/api/products", "/track/", "/api/track/", "/static/", "/logout")
+CUSTOMER_ALLOWED = ("/me", "/api/me/", "/api/products", "/track/", "/api/track/", "/static/", "/logout", "/manifest.webmanifest", "/sw.js")
 
 
 @app.before_request
@@ -2152,6 +2152,37 @@ import sys as _sys  # noqa: E402
 if os.environ.get("GPS_WATCH", "1") == "1" and "pytest" not in _sys.modules:
     import threading as _threading  # noqa: E402
     _threading.Thread(target=_gps_watch_loop, daemon=True, name="gps-watch").start()
+
+
+# ---------- Installable app (PWA): manifest and service worker ----------
+@app.route("/manifest.webmanifest")
+def web_manifest():
+    """What the phone needs to install the app: name, colours, icons, start page."""
+    data = {
+        "name": "智送管家", "short_name": "智送管家",
+        "description": "Smart delivery: AI orders, routes and live tracking",
+        "start_url": "/", "scope": "/", "display": "standalone", "lang": "zh-CN",
+        "background_color": "#0b1220", "theme_color": "#1f5fd6",
+        "icons": [
+            {"src": "/static/icons/icon-192.png", "sizes": "192x192", "type": "image/png"},
+            {"src": "/static/icons/icon-512.png", "sizes": "512x512", "type": "image/png"},
+            {"src": "/static/icons/maskable-512.png", "sizes": "512x512", "type": "image/png",
+             "purpose": "maskable"},
+        ],
+    }
+    resp = app.response_class(json.dumps(data, ensure_ascii=False), mimetype="application/manifest+json")
+    resp.headers["Cache-Control"] = "no-cache"
+    return resp
+
+
+@app.route("/sw.js")
+def service_worker():
+    """Served from the root so it can look after every page of the app."""
+    resp = send_from_directory(os.path.join(HERE, "static"), "sw.js", max_age=0)
+    resp.headers["Content-Type"] = "application/javascript; charset=utf-8"
+    resp.headers["Service-Worker-Allowed"] = "/"
+    resp.headers["Cache-Control"] = "no-cache"
+    return resp
 
 
 if __name__ == "__main__":

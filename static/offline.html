@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>智送管家</title>
+  <style>
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #0b1220; color: #e5e7eb;
+           font-family: -apple-system, "PingFang SC", "Segoe UI", sans-serif; text-align: center; }
+    .box { padding: 24px; max-width: 320px; }
+    img { width: 72px; height: 72px; border-radius: 18px; }
+    h1 { font-size: 22px; margin: 18px 0 6px; }
+    p { color: #9ca3af; margin: 0 0 22px; line-height: 1.5; }
+    button { padding: 12px 26px; border: 0; border-radius: 12px; background: #3b82f6; color: #fff;
+             font-size: 16px; font-weight: 700; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <div class="box">
+    <img src="/static/icons/icon-192.png" alt=""/>
+    <h1>没有网络 · No connection</h1>
+    <p>网络恢复后会自动刷新<br/>The app reloads when you are back online.</p>
+    <button onclick="location.reload()">重试 · Retry</button>
+  </div>
+  <script>window.addEventListener('online', () => location.reload());</script>
+</body>
+</html>
