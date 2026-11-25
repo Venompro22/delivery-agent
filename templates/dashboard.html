@@ -359,6 +359,19 @@
     }
     const understood = () => (typeof current !== 'undefined' && current && current.r) ? current.r : {};
 
+    // Risk card: tap the title to open/close the details; the cross hides it until another order is at risk.
+    let riskIds = [];
+    document.addEventListener('click', e => {
+      if (e.target.closest('#risk-card .risk-title')) {
+        const root = document.documentElement;
+        root.dataset.riskOpen = root.dataset.riskOpen === '1' ? '0' : '1';
+      } else if (e.target.closest('#risk-card .risk-x')) {
+        try { sessionStorage.setItem('riskDismissed', riskIds.join(',')); } catch (err) {}
+        const box = document.getElementById('risk-card');
+        if (box) box.remove();
+      }
+    });
+
     // ⚠ Orders at risk of being late: warn the shop before the customer complains
     function apology(name, minutes) {
       return `您好${name}，路上有点堵，预计晚${minutes}分钟左右送到，真的抱歉～`;
@@ -370,6 +383,10 @@
         .filter(x => x.margin < 10)
         .sort((a, b) => a.margin - b.margin);
       if (!risky.length) { if (box) box.remove(); return; }
+      riskIds = risky.map(r => r.s.id);
+      let gone = [];
+      try { gone = (sessionStorage.getItem('riskDismissed') || '').split(','); } catch (e) {}
+      if (riskIds.every(id => gone.includes(id))) { if (box) box.remove(); return; }
       if (!box) {
         box = document.createElement('div');
         box.id = 'risk-card';
@@ -379,7 +396,7 @@
         };
         document.body.appendChild(box);
       }
-      box.innerHTML = `<div class="risk-title">${risky.length} order${risky.length > 1 ? 's' : ''} at risk</div>` +
+      box.innerHTML = `<button class="risk-x" type="button" aria-label="Dismiss">✕</button><div class="risk-title">${risky.length} order${risky.length > 1 ? 's' : ''} at risk</div>` +
         risky.slice(0, 4).map(({s, margin}) => `
           <div class="risk-row ${margin < 0 ? 'late' : 'tight'}">
             <div><b>${esc(s.name)}</b> · ${margin < 0 ? `about ${-margin} min late` : `only ${margin} min margin`}</div>
