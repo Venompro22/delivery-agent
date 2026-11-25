@@ -124,7 +124,9 @@
     window.addEventListener('resize', fitWorld);
     // 🍎 Map styles: 🌙 Dark (Apple-like) · ☀️ Light · 🛰️ Satellite — your choice is remembered
     const TILE_SCALE = window.devicePixelRatio > 1 ? 2 : 1;   // retina screens get sharp tiles
-    const gaodeUrl = 'https://webrd0{s}.is.autonavi.com/appmaptile?lang=' + MAP_LANG +
+    // Gaode's English map is incomplete (blank tiles, missing streets): always ask for the full
+    // Chinese map, like the Satellite style. The app's own buttons still follow the language.
+    const gaodeUrl = 'https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn' +
       '&size=1&scale=' + TILE_SCALE + '&style=8&x={x}&y={y}&z={z}';
     const tileOpts = {subdomains: ['1', '2', '3', '4'], maxZoom: 18, noWrap: true, attribution: '&copy; AutoNavi'};
     const chinaLayer = cls => L.tileLayer(gaodeUrl,
