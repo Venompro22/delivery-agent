@@ -5,53 +5,89 @@
   <meta charset="utf-8"/>
   <link rel="icon" type="image/svg+xml" href="/static/logo.svg?v={{ asset_v }}"/>
   <link rel="manifest" href="/manifest.webmanifest"/>
-  <meta name="theme-color" content="#1f5fd6"/>
+  <meta name="theme-color" content="#0b1220"/>
   <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png"/>
   <meta name="apple-mobile-web-app-capable" content="yes"/>
   <meta name="mobile-web-app-capable" content="yes"/>
   <meta name="apple-mobile-web-app-title" content="智送管家"/>
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
   <script src="/static/pwa.js?v={{ asset_v }}" defer></script>
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
-  <meta name="theme-color" content="#0f1115"/>
-  <title>Driver - 智送管家</title>
-  <link rel="stylesheet" href="/static/css/driver.css?v={{ asset_v }}"/>
-  <link rel="stylesheet" href="/static/vendor/inter/inter.css?v={{ asset_v }}" media="print"/>
-  <link rel="stylesheet" href="/static/pro.css?v={{ asset_v }}"/>
-  <link rel="stylesheet" href="/static/css/theme.css?v={{ asset_v }}"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover"/>
+  <title>Driver · 智送管家</title>
+  <link rel="stylesheet" href="/static/vendor/leaflet/leaflet.css?v={{ asset_v }}"/>
+  <link rel="stylesheet" href="/static/css/me-pro.css?v={{ asset_v }}"/>
+  <link rel="stylesheet" href="/static/css/driver-pro.css?v={{ asset_v }}"/>
 </head>
-<body class="app">
-  <div class="wrap">
-    <div class="top">
-      <h1>Driver</h1>
-      <span class="lang-slot" data-lang-slot></span>
+<body>
+  <div id="map"></div>
+
+  <header class="mp-top">
+    <div class="mp-brand"><img src="/static/logo.svg?v={{ asset_v }}" alt=""/><span>智送管家</span></div>
+    <div class="mp-actions">
+      <button id="gps-btn" class="mp-chip dp-gps" type="button"></button>
+      <button id="lang" class="mp-chip" type="button"></button>
       {% if role in ("owner", "viewer") %}
-      <a class="back" href="/">← Dashboard</a>
+      <a class="mp-chip" href="/" id="t-dash"></a>
       {% else %}
-      <a class="back" href="/account">Password</a>
-      <a class="back" href="/logout">Logout</a>
+      <a class="mp-chip" href="/account" id="t-pw"></a>
+      <form method="post" action="/logout"><button class="mp-chip" type="submit" id="t-out"></button></form>
       {% endif %}
     </div>
-    <div class="meta" id="stats">Loading…</div>
-    <div id="new-banner" onclick="seenOrders()" style="display:none;cursor:pointer;
-         background:#ff6b35;color:#fff;padding:10px 14px;border-radius:10px;
-         margin:8px 0;font-weight:600;text-align:center"><span id="new-count"></span></div>
-    <div class="progress"><div id="bar" style="width:0%"></div></div>
-    <div id="main"></div>
-    <button class="btn gps" id="gps-btn" onclick="toggleGps()">Start GPS</button>
-    <div class="gps-status" id="gps-status"></div>
-    <div class="next" id="next"></div>
-  </div>
-  <div class="toast" id="toast"></div>
+  </header>
 
-  <script src="/static/font-load.js?v={{ asset_v }}"></script>
+  <div class="mp-fabs">
+    <button id="overview" class="mp-fab" type="button" aria-label="Whole route"><svg viewBox="0 0 24 24"><path d="M3 9V5a2 2 0 0 1 2-2h4M21 9V5a2 2 0 0 0-2-2h-4M3 15v4a2 2 0 0 0 2 2h4M21 15v4a2 2 0 0 1-2 2h-4"/></svg></button>
+    <button id="focus" class="mp-fab" type="button" aria-label="Next stop"><svg viewBox="0 0 24 24"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg></button>
+  </div>
+
+  <section class="mp-sheet">
+    <div class="mp-grip"></div>
+    <div id="new-banner" class="dp-banner" hidden></div>
+    <div class="dp-day">
+      <div><b id="d-done">-</b><span id="l-done"></span></div>
+      <div><b id="d-left">-</b><span id="l-left"></span></div>
+      <div><b id="d-km">-</b><span id="l-km"></span></div>
+      <div><b id="d-cash">-</b><span id="l-cash"></span></div>
+    </div>
+    <div class="dp-progress"><div id="bar"></div></div>
+    <div id="main"></div>
+    <div id="next"></div>
+    <div class="dp-gps-status" id="gps-status"></div>
+  </section>
+  <div class="dp-toast" id="toast"></div>
+
+  <script src="/static/vendor/leaflet/leaflet.js?v={{ asset_v }}"></script>
   <script>
-    function esc(t) {
-      return String(t).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
-    }
+    let lang = 'zh';
+    try { lang = localStorage.getItem('lang') || (navigator.language.startsWith('zh') ? 'zh' : 'en'); } catch (e) {}
+    const T = {
+      en: { next: 'Next stop', delivered: 'Delivered', navigate: 'Navigate', call: 'Call', photo: 'Photo',
+            eta: 'ETA', promised: 'promised', late: 'LATE', arrived: "You've arrived", noStops: 'No more stops',
+            great: 'Great job!', upNext: 'Up next', newOrders: n => n === 1 ? '1 new order' : `${n} new orders`,
+            gpsOn: 'GPS on', gpsOff: 'Start GPS', gpsHttps: 'GPS needs a secure (HTTPS) connection',
+            gpsFail: 'Could not get your location', sent: a => `Location sent ±${a} m · ${new Date().toLocaleTimeString()}`,
+            done: 'Delivered', left: 'Left', km: 'km', cash: 'Cash', collect: 'Collect', paid: 'Paid',
+            payFail: 'Could not save the payment', deliveredToast: n => `${n} delivered`,
+            photoOk: n => `${n} delivered with photo`, photoFail: 'Delivered, but the photo failed to upload',
+            dash: 'Dashboard', pw: 'Password', out: 'Log out', other: '中文', you: 'You',
+            pay: { cash: 'Cash', wechat: 'WeChat', alipay: 'Alipay' } },
+      zh: { next: '下一站', delivered: '已送达', navigate: '导航', call: '打电话', photo: '拍照',
+            eta: '预计', promised: '承诺', late: '超时', arrived: '你到啦', noStops: '今天送完啦',
+            great: '辛苦啦！', upNext: '接下来', newOrders: n => `${n} 个新订单`,
+            gpsOn: '定位已开', gpsOff: '开启定位', gpsHttps: '定位需要 HTTPS 安全连接',
+            gpsFail: '获取位置失败', sent: a => `位置已发送 ±${a} 米 · ${new Date().toLocaleTimeString()}`,
+            done: '已送', left: '剩余', km: '公里', cash: '现金', collect: '收款', paid: '已收',
+            payFail: '收款记录失败', deliveredToast: n => `${n} 已送达`,
+            photoOk: n => `${n} 已送达并上传照片`, photoFail: '已送达，照片上传失败',
+            dash: '管理台', pw: '密码', out: '退出', other: 'EN', you: '你',
+            pay: { cash: '现金', wechat: '微信', alipay: '支付宝' } },
+    }[lang === 'en' ? 'en' : 'zh'];
+
+    const $ = id => document.getElementById(id);
+    const esc = t => String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const yuan = n => '¥' + (Number.isInteger(n) ? n : n.toFixed(2));
     function toast(msg) {
-      const t = document.getElementById('toast');
-      t.textContent = msg; t.classList.add('show');
+      const t = $('toast'); t.textContent = msg; t.classList.add('show');
       clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), 2500);
     }
     async function api(url, options) {
@@ -59,119 +95,7 @@
       if (res.status === 401) { location.href = '/login'; throw new Error('login required'); }
       return res;
     }
-    function navUrl(s) {
-      return `https://uri.amap.com/navigation?to=${s.lng},${s.lat},${encodeURIComponent(s.name)}&mode=car&callnative=1`;
-    }
-
-    let current = null;
-    async function load() {
-      const data = await (await api('/api/route')).json();
-      const done = data.summary.delivered, left = data.stops.length, total = done + left;
-      document.getElementById('stats').textContent =
-        `${done} delivered · ${left} left · ${data.summary.total_km} km · finish ${data.summary.finish}`;
-      document.getElementById('bar').style.width = total ? `${Math.round(done / total * 100)}%` : '0%';
-
-      const banner = document.getElementById('new-banner');
-      const nc = data.summary.new_count || 0;
-      if (nc > 0) {
-        document.getElementById('new-count').textContent =
-          nc === 1 ? '1 new order' : `${nc} new orders`;
-        banner.style.display = 'block';
-      } else {
-        banner.style.display = 'none';
-      }
-
-      const main = document.getElementById('main');
-      if (!left) {
-        current = null;
-        main.innerHTML = '<div class="card empty">No more stops<br><span class="meta">Great job!</span></div>';
-        document.getElementById('next').innerHTML = '';
-        return;
-      }
-      const s = data.stops[0];
-      current = s;
-      const here = arrivedAt(data.driver, s);
-      main.innerHTML = `<div class="card ${s.late ? 'late' : ''}">
-        <div class="label">Next stop <span class="seq">${s.sequence}</span></div>
-        <div class="name">${esc(s.name)}${s.late ? '<span class="badge">LATE</span>' : ''}</div>
-        ${s.note ? `<div class="note">${esc(s.note)}</div>` : ''}
-        <div class="info">ETA ${s.eta} · ${s.leg_km} km${s.promise ? ` · promised ${s.promise}` : ''}</div>
-        ${collectBox(s)}
-        ${here ? `<div class="arrived-box">You've arrived<button class="btn done" onclick="deliver()">Delivered</button></div>` : ''}
-        <a class="btn nav" href="${navUrl(s)}" target="_blank" rel="noopener">${ICON.nav}Navigate</a>
-        <div class="row">
-          ${s.phone ? `<a class="btn call" href="tel:${esc(s.phone)}">${ICON.phone}Call</a>` : ''}
-          <button class="btn done" onclick="deliver()">${ICON.check}Delivered</button>
-          <input type="file" id="proof-input" accept="image/*" capture="environment"
-                 style="display:none" onchange="deliverWithPhoto(this)">
-          <button class="btn photo" onclick="document.getElementById('proof-input').click()">${ICON.camera}Photo</button>
-        </div>
-      </div>`;
-      document.getElementById('next').innerHTML = data.stops.length > 1 ? '<h3>Up next</h3>' +
-        data.stops.slice(1).map(o => `<div class="item ${o.late ? 'late' : ''}"><span class="n">${o.sequence}</span>
-          <span>${esc(o.name)}</span><span class="eta">ETA ${o.eta}</span></div>`).join('') : '';
-    }
-
-    // Within ~80 m of the next stop: show the arrived box (same rule as the server).
-    function arrivedAt(me, stop) {
-      if (!me || me.lat == null) return false;
-      const R = 6371000, toRad = d => d * Math.PI / 180;
-      const dLat = toRad(stop.lat - me.lat), dLng = toRad(stop.lng - me.lng);
-      const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(me.lat)) * Math.cos(toRad(stop.lat)) * Math.sin(dLng / 2) ** 2;
-      return 2 * R * Math.asin(Math.sqrt(a)) <= 80;
-    }
-
-    async function seenOrders() {
-      await api('/api/driver/mark-seen', { method: 'POST' });
-      document.getElementById('new-banner').style.display = 'none';
-    }
-
-    async function deliverWithPhoto(input) {
-      if (!current || !input.files[0]) return;
-      const s = current, photo = input.files[0];
-      input.value = '';                          // let the same file be picked again later
-      // 1) mark delivered first (the upload endpoint needs a delivered order)
-      await api(`/api/orders/${s.id}/deliver`, { method: 'POST' });
-      // 2) then upload the photo
-      const form = new FormData();
-      form.append('photo', photo);
-      const res = await fetch(`/api/orders/${s.id}/proof`, { method: 'POST', body: form });
-      const d = await res.json();
-      if (navigator.vibrate) navigator.vibrate(80);
-      toast(d.ok ? `${s.name} delivered with photo` : `Delivered, but the photo failed to upload`);
-      load();
-    }
-
-    // Money to collect at the door: tap how the customer paid (tap again to undo)
-    const PAY_LABEL = {cash: 'Cash', wechat: 'WeChat', alipay: 'Alipay'};
-    function yuan(n) { return '¥' + (Number.isInteger(n) ? n : n.toFixed(2)); }
-    function collectBox(s) {
-      if (s.price === null || s.price === undefined) return '';
-      const chips = ['cash', 'wechat', 'alipay'].map(m => `<button class="pay-chip ${s.pay_method === m ? 'on' : ''}"
-          onclick="markPaid('${s.id}', '${s.pay_method === m ? 'none' : m}')">${PAY_LABEL[m]}</button>`).join('');
-      return `<div class="collect ${s.paid ? 'paid' : ''}">
-          <div class="collect-amount">${s.paid ? 'Paid' : 'Collect'} ${yuan(s.price)}</div>
-          <div class="pay-chips">${chips}</div></div>`;
-    }
-    async function markPaid(id, method) {
-      const res = await api(`/api/orders/${id}/paid`, {
-        method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({method}),
-      });
-      if (!res.ok) { toast('Could not save the payment'); return; }
-      if (navigator.vibrate) navigator.vibrate(40);
-      load();
-    }
-
-    async function deliver() {
-      if (!current) return;
-      const s = current;
-      await api(`/api/orders/${s.id}/deliver`, {method: 'POST'});
-      if (navigator.vibrate) navigator.vibrate(80);
-      toast(`${s.name} delivered`);
-      load();
-    }
-
-    // Clean line icons for the action buttons (same look on every phone)
+    const navUrl = s => `https://uri.amap.com/navigation?to=${s.lng},${s.lat},${encodeURIComponent(s.name)}&mode=car&callnative=1`;
     const SVG = p => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
     const ICON = {
       nav: SVG('<polygon points="3 11 22 2 13 21 11 13 3 11"/>'),
@@ -180,7 +104,202 @@
       camera: SVG('<path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/>'),
     };
 
-    // 📍 GPS (WGS-84) → Chinese map coordinates (GCJ-02)
+    // ---------- Labels ----------
+    $('lang').textContent = T.other;
+    $('lang').onclick = () => { try { localStorage.setItem('lang', lang === 'en' ? 'zh' : 'en'); } catch (e) {} location.reload(); };
+    [['t-dash', T.dash], ['t-pw', T.pw], ['t-out', T.out], ['l-done', T.done], ['l-left', T.left],
+     ['l-km', T.km], ['l-cash', T.cash]].forEach(([id, text]) => { if ($(id)) $(id).textContent = text; });
+    $('gps-btn').textContent = T.gpsOff;
+
+    // ---------- Map: Esri underneath everywhere, Gaode (complete Chinese map) on top in China ----------
+    const CHINA = L.latLngBounds([18, 73], [54, 135.5]);
+    const map = L.map('map', { zoomControl: false, attributionControl: false, zoomSnap: 0.25 }).setView([30.257, 119.727], 14);
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}',
+                { maxZoom: 18, maxNativeZoom: 16 }).addTo(map);
+    L.tileLayer('https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=2&style=8&x={x}&y={y}&z={z}',
+                { subdomains: '1234', maxZoom: 18, bounds: CHINA, minZoom: 6 }).addTo(map);
+    let userMoved = false, framed = '';
+    map.on('dragstart', () => { userMoved = true; });
+
+    // ---------- Road lines (cached), stop pins, the driver puck ----------
+    const roadCache = new Map();
+    const key = pts => pts.map(p => `${(+p[0]).toFixed(5)},${(+p[1]).toFixed(5)}`).join(';');
+    async function road(pts) {
+      const k = key(pts);
+      if (roadCache.has(k)) return roadCache.get(k);
+      let path = pts;
+      try {
+        const d = await (await api('/api/road?pts=' + encodeURIComponent(k))).json();
+        if (d.ok && d.path) path = d.path;
+      } catch (e) {}
+      roadCache.set(k, path);
+      return path;
+    }
+    const pins = L.layerGroup().addTo(map);
+    let allLine = null, legLine = null, puck = null, heading = null, here = null, lastData = null;
+
+    function bearing(a, b) {
+      const r = x => x * Math.PI / 180;
+      const y = Math.sin(r(b[1] - a[1])) * Math.cos(r(b[0]));
+      const x = Math.cos(r(a[0])) * Math.sin(r(b[0])) - Math.sin(r(a[0])) * Math.cos(r(b[0])) * Math.cos(r(b[1] - a[1]));
+      return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+    }
+    function movePuck(p) {
+      if (!puck) {
+        puck = L.marker(p, { zIndexOffset: 1000, interactive: false, icon: L.divIcon({ className: '', iconSize: [42, 42], iconAnchor: [21, 21],
+          html: '<div class="dp-puck"><svg viewBox="0 0 40 40"><path d="M20 9 L28 29 L20 24 L12 29 Z" fill="#fff"/></svg></div>' }) }).addTo(map);
+      } else {
+        const from = puck.getLatLng();
+        if (map.distance(from, p) > 3) heading = bearing([from.lat, from.lng], p);
+        const t0 = performance.now();
+        (function step(now) {
+          const k = Math.min(1, (now - t0) / 700), e = 1 - Math.pow(1 - k, 3);
+          puck.setLatLng([from.lat + (p[0] - from.lat) * e, from.lng + (p[1] - from.lng) * e]);
+          if (k < 1) requestAnimationFrame(step);
+        })(t0);
+      }
+      const svg = puck.getElement() && puck.getElement().querySelector('svg');
+      if (svg && heading !== null) svg.style.transform = `rotate(${heading}deg)`;
+      here = p;
+    }
+    async function drawMap(data) {
+      const drv = [data.driver.lat, data.driver.lng];
+      movePuck(drv);
+      pins.clearLayers();
+      data.stops.forEach((s, i) => {
+        const cls = i === 0 ? 'next' : (s.late ? 'late' : '');
+        L.marker([s.lat, s.lng], { icon: L.divIcon({ className: '', iconSize: [30, 30], iconAnchor: [15, 15],
+          html: `<div class="dp-pin ${cls}">${s.sequence}</div>` }) }).addTo(pins);
+      });
+      if (!data.stops.length) {
+        [allLine, legLine].forEach(l => { if (l) map.removeLayer(l); });
+        allLine = legLine = null;
+        return;
+      }
+      const stops = data.stops.map(s => [s.lat, s.lng]);
+      const [all, leg] = await Promise.all([road([drv, ...stops].slice(0, 25)), road([drv, stops[0]])]);
+      if (!allLine) allLine = L.polyline(all, { color: '#93c5fd', weight: 5, opacity: .55, lineCap: 'round', interactive: false }).addTo(map);
+      else allLine.setLatLngs(all);
+      if (!legLine) legLine = L.polyline(leg, { className: 'mp-road', color: '#2563eb', weight: 7, lineCap: 'round', lineJoin: 'round', interactive: false }).addTo(map);
+      else legLine.setLatLngs(leg);
+      const frame = data.stops[0].id;
+      if (!userMoved && frame !== framed) { framed = frame; fitNext(); }
+    }
+    function fitNext() {
+      if (!lastData || !lastData.stops.length) return;
+      const s = lastData.stops[0];
+      map.fitBounds(L.latLngBounds([[lastData.driver.lat, lastData.driver.lng], [s.lat, s.lng]]).pad(0.35), { maxZoom: 17 });
+    }
+    $('focus').onclick = () => { userMoved = false; fitNext(); };
+    $('overview').onclick = () => {
+      userMoved = true;
+      if (!lastData) return;
+      const pts = [[lastData.driver.lat, lastData.driver.lng], ...lastData.stops.map(s => [s.lat, s.lng])];
+      map.fitBounds(L.latLngBounds(pts).pad(0.2), { maxZoom: 16 });
+    };
+
+    // ---------- The sheet: my day, next stop, up next ----------
+    function arrivedAt(me, stop) {
+      if (!me || me.lat == null) return false;
+      const R = 6371000, toRad = d => d * Math.PI / 180;
+      const dLat = toRad(stop.lat - me.lat), dLng = toRad(stop.lng - me.lng);
+      const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(me.lat)) * Math.cos(toRad(stop.lat)) * Math.sin(dLng / 2) ** 2;
+      return 2 * R * Math.asin(Math.sqrt(a)) <= 80;
+    }
+    function collectBox(s) {
+      if (s.price === null || s.price === undefined) return '';
+      const chips = ['cash', 'wechat', 'alipay'].map(m => `<button class="dp-pay ${s.pay_method === m ? 'on' : ''}" type="button"
+          onclick="markPaid('${esc(s.id)}', '${s.pay_method === m ? 'none' : m}')">${T.pay[m]}</button>`).join('');
+      return `<div class="dp-collect ${s.paid ? 'paid' : ''}">
+          <div class="dp-collect-amount">${s.paid ? T.paid : T.collect} ${yuan(s.price)}</div>
+          <div class="dp-pays">${chips}</div></div>`;
+    }
+    let current = null;
+    async function load() {
+      let data;
+      try { data = await (await api('/api/route')).json(); } catch (e) { return; }
+      lastData = data;
+      const done = data.summary.delivered, left = data.stops.length, total = done + left;
+      $('d-left').textContent = left;
+      $('d-km').textContent = data.summary.total_km;
+      $('bar').style.width = total ? `${Math.round(done / total * 100)}%` : '0%';
+      const nc = data.summary.new_count || 0;
+      $('new-banner').hidden = !nc;
+      $('new-banner').textContent = nc ? T.newOrders(nc) : '';
+      drawMap(data);
+
+      if (!left) {
+        current = null;
+        $('main').innerHTML = `<div class="dp-empty"><b>${T.noStops}</b><span>${T.great}</span></div>`;
+        $('next').innerHTML = '';
+        return;
+      }
+      const s = data.stops[0];
+      current = s;
+      const atDoor = arrivedAt(data.driver, s);
+      $('main').innerHTML = `<div class="dp-stop ${s.late ? 'late' : ''} ${atDoor ? 'here' : ''}">
+        <div class="dp-stop-top"><span class="dp-seq">${s.sequence}</span><span>${T.next}</span>
+          ${s.late ? `<span class="dp-late">${T.late}</span>` : ''}<span class="dp-eta">${T.eta} ${esc(s.eta)}</span></div>
+        <div class="dp-name">${esc(s.name)}</div>
+        ${s.note ? `<div class="dp-note">${esc(s.note)}</div>` : ''}
+        <div class="dp-info">${s.leg_km} ${T.km}${s.promise ? ` · ${T.promised} ${esc(s.promise)}` : ''}</div>
+        ${collectBox(s)}
+        ${atDoor ? `<div class="dp-arrived">${T.arrived}</div>` : ''}
+        <a class="dp-btn nav" href="${navUrl(s)}" target="_blank" rel="noopener">${ICON.nav}${T.navigate}</a>
+        <div class="dp-row">
+          ${s.phone ? `<a class="dp-btn call" href="tel:${esc(s.phone)}">${ICON.phone}${T.call}</a>` : ''}
+          <button class="dp-btn photo" type="button" onclick="$('proof-input').click()">${ICON.camera}${T.photo}</button>
+        </div>
+        <button class="dp-btn done" type="button" onclick="deliver()">${ICON.check}${T.delivered}</button>
+        <input type="file" id="proof-input" accept="image/*" capture="environment" hidden onchange="deliverWithPhoto(this)">
+      </div>`;
+      $('next').innerHTML = data.stops.length > 1 ? `<h3 class="dp-h3">${T.upNext}</h3>` +
+        data.stops.slice(1).map(o => `<div class="dp-item ${o.late ? 'late' : ''}"><span class="dp-n">${o.sequence}</span>
+          <span class="dp-item-name">${esc(o.name)}</span><span class="dp-item-eta">${esc(o.eta)}</span></div>`).join('') : '';
+    }
+    async function loadDay() {
+      try {
+        const d = await (await api('/api/driver/today')).json();
+        if (!d.ok) return;
+        $('d-done').textContent = d.delivered;
+        $('d-cash').textContent = yuan(d.cash);
+      } catch (e) {}
+    }
+    $('new-banner').onclick = async () => {
+      await api('/api/driver/mark-seen', { method: 'POST' });
+      $('new-banner').hidden = true;
+    };
+
+    async function deliver() {
+      if (!current) return;
+      const s = current;
+      await api(`/api/orders/${s.id}/deliver`, { method: 'POST' });
+      if (navigator.vibrate) navigator.vibrate(80);
+      toast(T.deliveredToast(s.name));
+      load(); loadDay();
+    }
+    async function deliverWithPhoto(input) {
+      if (!current || !input.files[0]) return;
+      const s = current, photo = input.files[0];
+      input.value = '';
+      await api(`/api/orders/${s.id}/deliver`, { method: 'POST' });     // the photo needs a delivered order
+      const form = new FormData();
+      form.append('photo', photo);
+      let ok = false;
+      try { ok = (await (await fetch(`/api/orders/${s.id}/proof`, { method: 'POST', body: form })).json()).ok; } catch (e) {}
+      if (navigator.vibrate) navigator.vibrate(80);
+      toast(ok ? T.photoOk(s.name) : T.photoFail);
+      load(); loadDay();
+    }
+    async function markPaid(id, method) {
+      const res = await api(`/api/orders/${id}/paid`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                                         body: JSON.stringify({ method }) });
+      if (!res.ok) { toast(T.payFail); return; }
+      if (navigator.vibrate) navigator.vibrate(40);
+      load(); loadDay();
+    }
+
+    // ---------- Live GPS (phones give WGS-84; Chinese maps use GCJ-02) ----------
     function wgs2gcj(lat, lng) {
       if (lng < 72.004 || lng > 137.8347 || lat < 0.8293 || lat > 55.8271) return [lat, lng];
       const a = 6378245.0, ee = 0.00669342162296594323, PI = Math.PI;
@@ -200,36 +319,32 @@
       dLng = (dLng * 180) / (a / sm * Math.cos(rad) * PI);
       return [lat + dLat, lng + dLng];
     }
-
     let watchId = null, lastSent = 0;
-    function gpsStatus(t) { document.getElementById('gps-status').textContent = t; }
-    function toggleGps() {
-      const btn = document.getElementById('gps-btn');
+    const gpsStatus = t => { $('gps-status').textContent = t; };
+    $('gps-btn').onclick = () => {
+      const btn = $('gps-btn');
       if (watchId !== null) {
         navigator.geolocation.clearWatch(watchId); watchId = null;
-        btn.classList.remove('on'); btn.textContent = 'Start GPS'; gpsStatus('GPS stopped');
+        btn.classList.remove('on'); btn.textContent = T.gpsOff; gpsStatus('');
         return;
       }
-      if (!navigator.geolocation || !window.isSecureContext) {
-        gpsStatus('GPS needs a secure (HTTPS) connection'); return;
-      }
-      btn.classList.add('on'); btn.textContent = 'GPS on — tap to stop';
+      if (!navigator.geolocation || !window.isSecureContext) { gpsStatus(T.gpsHttps); return; }
+      btn.classList.add('on'); btn.textContent = T.gpsOn;
       watchId = navigator.geolocation.watchPosition(async pos => {
-        if (Date.now() - lastSent < 15000) return;
-        lastSent = Date.now();
         const [lat, lng] = wgs2gcj(pos.coords.latitude, pos.coords.longitude);
-        await api('/api/driver/location', {method: 'POST', headers: {'Content-Type': 'application/json'},
-                                          body: JSON.stringify({lat, lng})});
-        gpsStatus(`Location sent ±${Math.round(pos.coords.accuracy)} m · ${new Date().toLocaleTimeString()}`);
+        movePuck([lat, lng]);                                   // the puck follows you at once
+        if (Date.now() - lastSent < 15000) return;               // the server hears every 15 s
+        lastSent = Date.now();
+        await api('/api/driver/location', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({ lat, lng }) });
+        gpsStatus(T.sent(Math.round(pos.coords.accuracy)));
         load();
-      }, () => gpsStatus('Could not get your location'), {enableHighAccuracy: true, maximumAge: 10000});
-    }
+      }, () => gpsStatus(T.gpsFail), { enableHighAccuracy: true, maximumAge: 10000 });
+    };
 
-    load();
+    load(); loadDay();
     setInterval(() => { if (!document.hidden) load(); }, 10000);
+    setInterval(() => { if (!document.hidden) loadDay(); }, 30000);
   </script>
-  <script src="/static/i18n.js?v={{ asset_v }}"></script>
-  <script src="/static/pro.js?v={{ asset_v }}"></script>
-  <script src="/static/app.js?v={{ asset_v }}"></script>
 </body>
 </html>

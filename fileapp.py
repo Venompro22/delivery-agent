@@ -155,7 +155,7 @@ VIEWER_SNIPPET = """
   window.fetch = function (url, opts) {
     var method = ((opts && opts.method) || 'GET').toUpperCase();
     var path = String(url).split('?')[0];
-    var ok = ['/api/agent', '/api/parse', '/api/orders', '/api/demo', '/api/demo/clear', '/api/driver/location'].indexOf(path) !== -1 || (path.indexOf('/api/orders/') === 0 && path.slice(-8) === '/deliver')
+    var ok = ['/api/agent', '/api/parse', '/api/orders', '/api/demo', '/api/demo/clear', '/api/driver/location'].indexOf(path) !== -1 || (path.indexOf('/api/orders/') === 0 && (path.slice(-8) === '/deliver' || path.slice(-5) === '/paid'))
              || path.indexOf('/api/orders/') === 0;
     if (method !== 'GET' && !ok && path.indexOf('/logout') === -1) {
       toast();
@@ -838,7 +838,7 @@ def _viewer_may_write() -> bool:
     if request.path in VIEWER_WRITES:
         return True
     parts = request.path.strip("/").split("/")      # api / orders / <id> [/ deliver|cancel]
-    if parts[:2] == ["api", "orders"] and (len(parts) == 3 or (len(parts) == 4 and parts[3] in ("deliver", "cancel"))):
+    if parts[:2] == ["api", "orders"] and (len(parts) == 3 or (len(parts) == 4 and parts[3] in ("deliver", "cancel", "paid"))):
         order = store.get(parts[2])
         return bool(order and (order.note or "").startswith(DEMO_TAG))
     return False
@@ -1953,6 +1953,22 @@ def panic_switch(mode):
 @app.route("/track/<order_id>")
 def track_page(order_id):
     return render_template("track.html", order_id=order_id, shop_name=os.environ.get("SHOP_NAME", "智送管家"))
+
+
+@app.route("/api/driver/today")
+@login_required
+def driver_today():
+    """The driver's own day: deliveries done and money collected (never another driver's)."""
+    today = datetime.now().date()
+    uid = session.get("uid")
+    done = [o for o in my_orders()
+            if o.status == OrderStatus.DELIVERED and o.delivered_at
+            and datetime.fromtimestamp(o.delivered_at).date() == today
+            and (not uid or o.driver_id == uid)]
+    paid = lambda kinds: round(sum(o.price or 0 for o in done if o.paid_at and o.pay_method in kinds), 2)
+    return jsonify({"ok": True, "delivered": len(done), "cash": paid(("cash",)),
+                    "online": paid(("wechat", "alipay")),
+                    "to_collect": round(sum(o.price or 0 for o in done if o.price and not o.paid_at), 2)})
 
 
 @app.route("/driver")
