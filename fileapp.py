@@ -2185,5 +2185,41 @@ def service_worker():
     return resp
 
 
+# ---------- Separate demos: the driver's side and the customer's side ----------
+def _open_demo_session() -> None:
+    """A fresh demo visitor (viewer): sandboxed, only ever touches demo orders."""
+    session.clear()
+    session["auth"] = True
+    session["role"] = "viewer"
+    session["v"] = session_version()
+    ensure_demo_data()
+
+
+@app.route("/try/driver")
+def try_demo_driver():
+    """Public demo of the driver's phone: next stop, Navigate, Delivered, live GPS."""
+    if os.environ.get("PUBLIC_DEMO", "1") != "1":
+        return redirect(url_for("login"))
+    _open_demo_session()
+    audit.add("demo_open", client_ip(), "viewer", "driver")
+    return redirect("/driver")
+
+
+@app.route("/try/customer")
+def try_demo_customer():
+    """Public demo of the customer's side: the tracking page they get on WeChat. No login."""
+    if os.environ.get("PUBLIC_DEMO", "1") != "1":
+        return redirect(url_for("login"))
+    ensure_demo_data()
+    live = sorted((o for o in store.all()
+                   if (o.note or "").startswith(DEMO_TAG) and o.status == OrderStatus.PENDING),
+                  key=lambda o: o.created_at or 0)
+    if not live:
+        return redirect(url_for("login"))
+    order = live[min(2, len(live) - 1)]           # a few stops before it: the queue is interesting
+    audit.add("demo_open", client_ip(), "visitor", "customer")
+    return redirect(f"/track/{order.id}?k={track_key(order.id)}")
+
+
 if __name__ == "__main__":
     app.run(debug=True, port=5000)

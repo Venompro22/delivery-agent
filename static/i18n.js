@@ -14,6 +14,7 @@
     "Unit (optional) — e.g. bucket, box": "单位（选填）— 如 桶、箱", "Hidden": "已隐藏", "Hide": "隐藏",
     "Show": "上架", "No products yet.": "还没有商品。",
     "Requests": "新订单请求", "Accept": "接单", "Decline": "拒绝",
+    "Try as driver": "体验骑手端", "Try as customer": "体验顾客端",
     "Delivery": "配送", "Delivery fee ¥": "配送费 ¥", "Free over ¥ (0 = never)": "满多少免配送费 ¥（0 = 不免）",
     "Minimum order ¥": "起送价 ¥", "Save delivery settings": "保存配送设置", "Saved": "已保存",
     "ETA brain": "智能预计时间", "Learned from": "学习样本", "delivery legs": "段配送", "Slowest time": "最慢时段",
