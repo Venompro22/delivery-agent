@@ -85,6 +85,7 @@
 
     const $ = id => document.getElementById(id);
     const esc = t => String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const cleanNote = n => (n || '').replace(/^\u{1F3AC}\s*/u, '');   // the demo's internal tag is not for drivers
     const yuan = n => '¥' + (Number.isInteger(n) ? n : n.toFixed(2));
     function toast(msg) {
       const t = $('toast'); t.textContent = msg; t.classList.add('show');
@@ -241,7 +242,7 @@
         <div class="dp-stop-top"><span class="dp-seq">${s.sequence}</span><span>${T.next}</span>
           ${s.late ? `<span class="dp-late">${T.late}</span>` : ''}<span class="dp-eta">${T.eta} ${esc(s.eta)}</span></div>
         <div class="dp-name">${esc(s.name)}</div>
-        ${s.note ? `<div class="dp-note">${esc(s.note)}</div>` : ''}
+        ${cleanNote(s.note) ? `<div class="dp-note">${esc(cleanNote(s.note))}</div>` : ''}
         <div class="dp-info">${s.leg_km} ${T.km}${s.promise ? ` · ${T.promised} ${esc(s.promise)}` : ''}</div>
         ${collectBox(s)}
         ${atDoor ? `<div class="dp-arrived">${T.arrived}</div>` : ''}

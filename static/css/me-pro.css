@@ -96,3 +96,14 @@ html, body { margin: 0; height: 100%; background: #0b1220; color: #e5e7eb;
 @keyframes mp-car { 50% { box-shadow: 0 0 0 10px rgba(37, 99, 235, .18), 0 6px 18px rgba(37, 99, 235, .55); } }
 .mp-road { filter: drop-shadow(0 0 6px rgba(37, 99, 235, .55)); }
 @media (prefers-reduced-motion: reduce) { .mp-dot, .mp-car { animation: none; } }
+
+/* Narrow phones: one tidy row in the top bar (logo only, chips never wrap) */
+.mp-chip { white-space: nowrap; }
+@media (max-width: 480px) {
+  .mp-brand span { display: none; }
+  .mp-brand { padding: 6px; }
+  .mp-actions { gap: 6px; }
+  .mp-chip { padding: 7px 10px; font-size: 12px; }
+}
+/* The demo banner sits on top of the page: keep the top bar below it */
+body:has(#demo-banner) .mp-top { top: 30px; }
