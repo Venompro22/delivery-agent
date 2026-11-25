@@ -14,6 +14,11 @@ import secrets
 import statistics
 import time
 from datetime import datetime, timedelta
+
+# The shop runs on China time, whatever the server's own clock zone is (Render uses UTC).
+os.environ["TZ"] = os.environ.get("SHOP_TZ", "Asia/Shanghai")
+if hasattr(time, "tzset"):
+    time.tzset()
 from functools import wraps
 
 from flask import (Flask, request, jsonify, render_template,
@@ -778,6 +783,9 @@ def list_drivers():
         row = public(u)
         if session.get("role") == "viewer" and row.get("phone"):
             row["phone"] = row["phone"][:3] + "****" + row["phone"][-4:]
+        if session.get("role") == "viewer":
+            for k in ("lat", "lng", "located_at"):   # the public demo never shows a real driver's position
+                row.pop(k, None)
         rs = ratings.get(u["id"], [])
         row["rated_count"] = len(rs)
         row["avg_rating"] = round(sum(rs) / len(rs), 1) if rs else None

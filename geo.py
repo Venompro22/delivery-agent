@@ -55,9 +55,7 @@ class GeoService:
         if self.use_ors:
             result = self._ors_distance(lat1, lng1, lat2, lng2)
             if result is not None:
-                print("✅ ORS (real distance)")
                 return result
-        print("⚠️  estimate (fallback)")
         return self._fallback_distance(lat1, lng1, lat2, lng2)
 
     def _fallback_distance(
