@@ -2069,5 +2069,82 @@ def _snap_to_learned(phone, lat, lng):
     return lat, lng, False
 
 
+# ---------- GPS watch: Telegram alerts for lost GPS, stopped drivers, late orders ----------
+WATCH_STALE_S = 300        # open orders but no GPS for 5 min
+WATCH_STILL_S = 600        # not moved for 10 min
+WATCH_STILL_M = 50         # "not moved" = stayed within 50 m
+WATCH_DOOR_KM = 0.15       # standing this close to a customer = handing over, not stuck
+_watch = {"still": {}, "sent": set()}   # driver id -> (lat, lng, since); alerts already sent
+
+
+def gps_watch(now=None) -> list:
+    """One check of every working driver. Returns new alert texts (each sent once per problem)."""
+    from geo import haversine_km
+    now = now or time.time()
+    sent, out = _watch["sent"], []
+    open_orders = [o for o in store.all()
+                   if o.status == OrderStatus.PENDING and not (o.note or "").startswith(DEMO_TAG)]
+    for u in users.all():
+        if u.get("role", "driver") != "driver" or u.get("status") != "approved":
+            continue
+        uid, name = u["id"], u["name"]
+        mine = [o for o in open_orders if o.driver_id == uid]
+        if not mine or u.get("lat") is None:            # not working: forget old state
+            _watch["still"].pop(uid, None)
+            sent.discard(f"stale:{uid}")
+            sent.discard(f"still:{uid}")
+            continue
+
+        # 1) GPS lost (but not "never had GPS today")
+        age = now - (u.get("located_at") or 0)
+        if WATCH_STALE_S < age < 7200:
+            if f"stale:{uid}" not in sent:
+                sent.add(f"stale:{uid}")
+                out.append(f"GPS lost: {name} sent no position for {int(age // 60)} min "
+                           f"({len(mine)} orders open)")
+        else:
+            sent.discard(f"stale:{uid}")
+
+        # 2) Stopped for a long time, away from any customer
+        if age <= WATCH_STALE_S:
+            here = (u["lat"], u["lng"])
+            prev = _watch["still"].get(uid)
+            if not prev or haversine_km(prev[0], prev[1], here[0], here[1]) * 1000 > WATCH_STILL_M:
+                _watch["still"][uid] = (here[0], here[1], now)
+                sent.discard(f"still:{uid}")
+            else:
+                at_door = any(haversine_km(o.lat, o.lng, here[0], here[1]) <= WATCH_DOOR_KM for o in mine)
+                if now - prev[2] > WATCH_STILL_S and not at_door and f"still:{uid}" not in sent:
+                    sent.add(f"still:{uid}")
+                    out.append(f"Driver stopped: {name} has not moved for {int((now - prev[2]) // 60)} min "
+                               f"({len(mine)} orders open)")
+
+        # 3) An order that will arrive after its promise
+        for o in optimize_route(driver_for(uid), mine, geo, start_time=now):
+            if o.promised_by and o.eta_epoch and o.eta_epoch > o.promised_by and f"late:{o.id}" not in sent:
+                sent.add(f"late:{o.id}")
+                out.append(f"Running late: {o.customer_name} expected {fmt(o.eta_epoch)}, "
+                           f"promised {fmt(o.promised_by)}")
+    return out
+
+
+def _gps_watch_loop():
+    """Every minute, in the background: check drivers and send new alerts to Telegram."""
+    import alerts
+    while True:
+        time.sleep(60)
+        try:
+            for msg in gps_watch():
+                alerts._telegram(msg)
+        except Exception as e:                    # never let the watch crash the app
+            print(f"GPS watch failed: {e}", flush=True)
+
+
+import sys as _sys  # noqa: E402
+if os.environ.get("GPS_WATCH", "1") == "1" and "pytest" not in _sys.modules:
+    import threading as _threading  # noqa: E402
+    _threading.Thread(target=_gps_watch_loop, daemon=True, name="gps-watch").start()
+
+
 if __name__ == "__main__":
     app.run(debug=True, port=5000)
