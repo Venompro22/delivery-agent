@@ -16,14 +16,53 @@ def test_driver_demo_can_deliver_demo_orders(client):
     assert client.post(f"/api/orders/{stop['id']}/deliver").get_json()["ok"]
 
 
-def test_customer_demo_opens_a_tracking_page_without_login(client):
+def test_customer_demo_lands_on_the_customer_screen(client):
     r = client.get("/try/customer")
-    assert r.status_code == 302
-    loc = r.headers["Location"]
-    assert "/track/" in loc and "?k=" in loc
-    order_id, key = loc.split("/track/")[1].split("?k=")
-    d = client.get(f"/api/track/{order_id}?k={key}").get_json()
-    assert d["ok"] and d["status"] == "on_the_way"
+    assert r.status_code == 302 and r.headers["Location"].endswith("/me")
+    assert client.get("/me").status_code == 200
+
+
+def test_customer_demo_sees_its_order_on_the_way(client):
+    client.get("/try/customer")
+    orders = client.get("/api/me/live").get_json()["orders"]
+    assert len(orders) == 1
+    o = orders[0]
+    assert o["status"] == "pending" and o["next"] is True     # next stop → road to the door shows
+    assert fileapp.store.get(o["id"]).note.startswith(fileapp.DEMO_TAG)
+
+
+def test_each_demo_visitor_gets_their_own_account(client):
+    client.get("/try/customer")
+    first = client.get("/api/me/live").get_json()["orders"]
+    other = fileapp.app.test_client()
+    other.get("/try/customer")
+    with client.session_transaction() as a, other.session_transaction() as b:
+        assert a["uid"] != b["uid"]
+    assert first
+
+
+def test_demo_customer_order_stays_demo_and_silent(client, monkeypatch):
+    from test_customer_ordering import owner_adds_products, place
+    water, _, _ = owner_adds_products(client)
+    sent = []
+    monkeypatch.setattr(fileapp, "_notify_new_request", lambda *a, **k: sent.append(a))
+    client.get("/try/customer")
+    d = place(client, [{"id": water["id"], "qty": 1}]).get_json()
+    assert d["ok"]
+    o = fileapp.store.get(d["id"])
+    assert o.note.startswith(fileapp.DEMO_TAG) and o.status.value == "pending"
+    assert sent == []
+
+
+def test_old_demo_customers_are_cleaned_up(client, monkeypatch):
+    client.get("/try/customer")
+    with client.session_transaction() as sess:
+        uid = sess["uid"]
+    real = fileapp.time.time()
+    monkeypatch.setattr(fileapp.time, "time", lambda: real + fileapp.DEMO_CUSTOMER_TTL + 60)
+    fileapp._cleanup_demo_customers()
+    assert fileapp.users.get(uid) is None
+    assert fileapp.users.customer_order_ids(uid) == []
 
 
 def test_login_page_offers_the_three_demos(client):

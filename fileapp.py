@@ -676,17 +676,19 @@ def customer_place_order():
     if sum(1 for o in mine if (o.created_at or 0) > now - 3600) >= MAX_REQUESTS_PER_HOUR:
         return jsonify({"ok": False, "error": "too many orders, please try again later"}), 429
 
+    demo = bool(session.get("demo"))     # demo customer: the order stays in the demo sandbox
     summary = ", ".join(f"{i['name']} x{i['qty']}" for i in items)
     if fee:
         summary += f", delivery {fee:g}"
     lat, lng, _ = _snap_to_learned(me.get("phone", ""), lat, lng)
     order = Order(customer_name=me.get("name") or "Customer", lat=lat, lng=lng,
-                  phone=me.get("phone", ""), note=f"{address} | {summary}"[:200],
-                  price=round(total + fee, 2), status=OrderStatus.REQUESTED,
+                  phone=me.get("phone", ""), note=((DEMO_TAG if demo else "") + f"{address} | {summary}")[:200],
+                  price=round(total + fee, 2), status=OrderStatus.PENDING if demo else OrderStatus.REQUESTED,
                   items=json.dumps(items, ensure_ascii=False))
     _store_add(order)
     users.link_order(uid, order.id)
-    _notify_new_request(order, summary)
+    if not demo:
+        _notify_new_request(order, summary)   # demo orders never ping the shop
     return jsonify({"ok": True, "id": order.id, "total": order.price, "fee": fee,
                     "track_url": f"/track/{order.id}?k={track_key(order.id)}"})
 
@@ -2230,20 +2232,62 @@ def try_demo_driver():
     return redirect("/driver")
 
 
+DEMO_CUSTOMER_NAME = "体验用户 · demo"    # marks throwaway demo customer accounts
+DEMO_CUSTOMER_TTL = 24 * 3600
+
+
+def _cleanup_demo_customers() -> None:
+    """Throwaway demo customer accounts live one day, then go (with their order links)."""
+    con = users._connect()
+    try:
+        users._customer_orders_table(con)      # make sure it exists (a failed query aborts a PG transaction)
+        old = [r[0] for r in con.execute("SELECT id FROM users WHERE name = ? AND created_at < ?",
+                                         (DEMO_CUSTOMER_NAME, time.time() - DEMO_CUSTOMER_TTL)).fetchall()]
+        for uid in old:
+            con.execute("DELETE FROM customer_orders WHERE user_id = ?", (uid,))
+            con.execute("DELETE FROM users WHERE id = ?", (uid,))
+        con.commit()
+    finally:
+        con.close()
+
+
+def _new_demo_customer() -> dict:
+    """A fresh customer account for one demo visitor (nobody sees another visitor's orders)."""
+    for _ in range(5):
+        phone = "199" + "".join(secrets.choice("0123456789") for _ in range(8))
+        if users.by_phone(phone):
+            continue
+        try:
+            return users.create(phone, DEMO_CUSTOMER_NAME, "Demo!" + secrets.token_hex(10) + "Zz9",
+                                role="customer")
+        except ValueError:
+            continue
+    raise RuntimeError("could not create a demo customer")
+
+
 @app.route("/try/customer")
 def try_demo_customer():
-    """Public demo of the customer's side: the tracking page they get on WeChat. No login."""
+    """Public demo of the customer's side: the full customer screen, with an order on its way."""
     if os.environ.get("PUBLIC_DEMO", "1") != "1":
         return redirect(url_for("login"))
+    session.clear()
     ensure_demo_data()
-    live = sorted((o for o in store.all()
-                   if (o.note or "").startswith(DEMO_TAG) and o.status == OrderStatus.PENDING),
-                  key=lambda o: o.created_at or 0)
-    if not live:
-        return redirect(url_for("login"))
-    order = live[min(2, len(live) - 1)]           # a few stops before it: the queue is interesting
-    audit.add("demo_open", client_ip(), "visitor", "customer")
-    return redirect(f"/track/{order.id}?k={track_key(order.id)}")
+    _cleanup_demo_customers()
+    me = _new_demo_customer()
+    # Their order: the demo driver's next stop, so the road to their door shows at once
+    live = [o for o in store.all() if (o.note or "").startswith(DEMO_TAG)
+            and o.status == OrderStatus.PENDING and o.driver_id is None]
+    route = optimize_route(driver_for(None), live, geo) if live else []
+    if route:
+        users.link_order(me["id"], route[0].id)
+    session["auth"] = True
+    session["role"] = "customer"
+    session["uid"] = me["id"]
+    session["pv"] = me.get("pw_version", 0)
+    session["v"] = session_version()
+    session["demo"] = True
+    audit.add("demo_open", client_ip(), "viewer", "customer")
+    return redirect("/me")
 
 
 # ---------- Customer live view: the driver coming, the road once they are next ----------
