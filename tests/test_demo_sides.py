@@ -68,3 +68,25 @@ def test_old_demo_customers_are_cleaned_up(client, monkeypatch):
 def test_login_page_offers_the_three_demos(client):
     html = client.get("/login").get_data(as_text=True)
     assert 'href="/try"' in html and "/try/driver" in html and "/try/customer" in html
+
+
+def test_demo_pages_offer_an_exit(client):
+    client.get("/try/customer")
+    assert 'href="/try/exit"' in client.get("/me").get_data(as_text=True)
+    client.get("/try/driver")
+    assert 'href="/try/exit"' in client.get("/driver").get_data(as_text=True)
+
+
+def test_exit_leaves_the_demo_for_the_login_page(client):
+    client.get("/try/customer")
+    r = client.get("/try/exit")
+    assert r.status_code == 302 and "/login" in r.headers["Location"]
+    assert client.get("/api/me/live").status_code in (401, 302)
+
+
+def test_exit_link_never_logs_a_real_owner_out(client):
+    from conftest import login
+    login(client, "owner-pass")
+    assert 'href="/try/exit"' not in client.get("/").get_data(as_text=True)
+    client.get("/try/exit")
+    assert client.get("/api/orders").status_code == 200

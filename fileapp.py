@@ -140,15 +140,17 @@ VIEWER_SNIPPET = """
   #demo-banner { top: auto !important; right: auto !important; left: 12px !important;
     bottom: calc(12px + env(safe-area-inset-bottom)) !important; width: auto !important;
     padding: 5px 11px !important; border-radius: 999px !important; font-size: 0 !important;
-    opacity: .9; pointer-events: none; box-shadow: 0 4px 14px rgba(0, 0, 0, .25); }
-  #demo-banner::after { content: '演示 DEMO'; font-size: 11px; font-weight: 700; letter-spacing: .04em; }
+    opacity: .92; pointer-events: auto; cursor: pointer; text-decoration: none;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, .25); }
+  #demo-banner::after { content: '演示 DEMO · 退出 Exit ✕'; font-size: 11px; font-weight: 700; letter-spacing: .04em; }
+  #demo-banner:active { transform: scale(.96); }
   body { padding-top: 0 !important; }
   /* Hide every control a demo visitor can't use */
   #log,
   button[onclick*="retrain" i],
   button[onclick*="logoutAll"], body:has(#log) #list button { display: none !important; }
 </style>
-<div id="demo-banner">Demo · sample data · 演示数据</div>
+<a id="demo-banner" href="/try/exit" title="Leave the demo">Demo · sample data · 演示数据</a>
 <div id="demo-toast">Not available in the demo</div>
 <script>
 (function () {
@@ -195,13 +197,24 @@ VIEWER_SNIPPET = """
 """
 
 
+DEMO_EXIT_SNIPPET = VIEWER_SNIPPET.split("<div id=\"demo-toast\">")[0] \
+    .split("/* Hide every control")[0] + "</style>\n" \
+    + '<a id="demo-banner" href="/try/exit" title="Leave the demo">Demo</a>\n'
+
+
 @app.after_request
 def viewer_overlay(resp):
-    if (session.get("role") == "viewer" and resp.mimetype == "text/html"
-            and not resp.direct_passthrough):
-        html = resp.get_data(as_text=True)
-        if "</body>" in html and "demo-banner" not in html:
-            resp.set_data(html.replace("</body>", VIEWER_SNIPPET + "</body>", 1))
+    if resp.mimetype != "text/html" or resp.direct_passthrough:
+        return resp
+    if session.get("role") == "viewer":
+        snippet = VIEWER_SNIPPET
+    elif session.get("demo"):
+        snippet = DEMO_EXIT_SNIPPET          # demo customer: exit pill only
+    else:
+        return resp
+    html = resp.get_data(as_text=True)
+    if "</body>" in html and "demo-banner" not in html:
+        resp.set_data(html.replace("</body>", snippet + "</body>", 1))
     return resp
 
 
@@ -853,7 +866,7 @@ def _viewer_may_write() -> bool:
     return False
 
 
-CUSTOMER_ALLOWED = ("/me", "/api/me/", "/api/products", "/track/", "/api/track/", "/static/", "/logout", "/manifest.webmanifest", "/sw.js")
+CUSTOMER_ALLOWED = ("/me", "/try/", "/api/me/", "/api/products", "/track/", "/api/track/", "/static/", "/logout", "/manifest.webmanifest", "/sw.js")
 
 
 @app.before_request
@@ -2220,6 +2233,15 @@ def _open_demo_session() -> None:
     session["role"] = "viewer"
     session["v"] = session_version()
     ensure_demo_data()
+
+
+@app.route("/try/exit")
+def try_exit():
+    """Leave the demo and land on the real login page. Only demo sessions are cleared,
+    so a link to this page can never log a real owner, driver or customer out."""
+    if session.get("role") == "viewer" or session.get("demo"):
+        session.clear()
+    return redirect(url_for("login"))
 
 
 @app.route("/try/driver")
