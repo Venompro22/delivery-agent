@@ -40,6 +40,11 @@
 
     <div class="mp-card" id="shop" hidden>
       <h2 id="t-shop"></h2>
+      <div class="mp-claim">
+        <input id="ai-text" class="mp-input" maxlength="300" autocomplete="off"/>
+        <button id="ai-read" class="mp-btn" type="button"></button>
+      </div>
+      <div class="mp-msg" id="ai-msg"></div>
       <div id="menu" class="mp-menu"></div>
       <p class="mp-hint" id="t-where"></p>
       <input id="addr" class="mp-input" maxlength="120" autocomplete="off"/>
@@ -82,6 +87,9 @@
             next: 'You are next: the driver is heading to you', before: n => `${n} stop${n === 1 ? '' : 's'} before you`,
             arrived: 'Your driver is here! Please come down', arrivedShort: 'Here!', soon: 'Any moment', mins: m => `${m} min`,
             track: 'Track', me: 'You are here', other: '中文',
+            aiPh: 'Or just type it: 2 water to bldg 5 room 302', aiBtn: 'Read',
+            aiGot: list => `Understood: ${list}. Check the cart below, then press Place order.`,
+            aiNone: 'Sorry, I could not find these products. Pick them below.', aiSkip: t => ` Not found: ${t}.`,
             st: { requested: 'Waiting', pending: 'On the way', delivered: 'Delivered', cancelled: 'Cancelled' } },
       zh: { hello: n => `你好，${n}`, out: '退出', orders: '我的订单', add: '用追踪链接添加订单', btn: '添加',
             empty: '还没有历史订单～', added: '订单已添加', bad: '追踪链接无效',
@@ -95,6 +103,9 @@
             next: '下一站就是你，骑手正在赶来', before: n => `前面还有 ${n} 站`,
             arrived: '司机到啦，下楼取一下～', arrivedShort: '到啦！', soon: '马上到', mins: m => `${m} 分钟`,
             track: '查看进度', me: '你在这', other: 'EN',
+            aiPh: '或者直接打字：两桶水送到5号楼302', aiBtn: '识别',
+            aiGot: list => `识别到：${list}。请核对下面的购物车，再点下单。`,
+            aiNone: '没找到这些商品，请在下面选择～', aiSkip: t => ` 没找到：${t}。`,
             st: { requested: '等商家确认', pending: '配送中', delivered: '已送达', cancelled: '已取消' } },
     }[lang === 'en' ? 'en' : 'zh'];
 
@@ -111,6 +122,8 @@
     $('t-where').textContent = T.where;
     $('addr').placeholder = T.addr;
     $('place').textContent = T.place;
+    $('ai-text').placeholder = T.aiPh;
+    $('ai-read').textContent = T.aiBtn;
     $('lang').textContent = T.other;
     $('lang').onclick = () => { try { localStorage.setItem('lang', lang === 'en' ? 'zh' : 'en'); } catch (e) {} location.reload(); };
     try { $('addr').value = localStorage.getItem('lastAddress') || ''; } catch (e) {}
@@ -314,6 +327,22 @@
         msg.textContent = T.placed; msg.className = 'mp-msg ok';
         loadLive(); loadOrders();
       } finally { $('place').disabled = false; }
+    };
+    // AI: free text → cart + address. Only fills the form; the customer still checks and sends it.
+    $('ai-read').onclick = async () => {
+      const text = $('ai-text').value.trim(), msg = $('ai-msg');
+      if (!text) return;
+      const d = await (await fetch('/api/me/ai-order', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                                        body: JSON.stringify({ text }) })).json();
+      if (!d.ok) { msg.textContent = d.error || 'Error'; msg.className = 'mp-msg bad'; return; }
+      const skipped = d.unmatched.length ? T.aiSkip(d.unmatched.join(', ')) : '';
+      if (!d.items.length) { msg.textContent = T.aiNone + skipped; msg.className = 'mp-msg bad'; return; }
+      Object.keys(qty).forEach(k => delete qty[k]);
+      d.items.forEach(it => { qty[it.id] = it.qty; });
+      if (d.address) $('addr').value = d.address;
+      renderMenu();
+      msg.textContent = T.aiGot(d.items.map(it => `${it.name} ×${it.qty}`).join(', ')) + skipped;
+      msg.className = 'mp-msg ok';
     };
     function orderAgain(id) {
       const o = lastOrders.find(x => x.id === id);

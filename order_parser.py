@@ -106,6 +106,43 @@ def parse_many(text: str) -> List[dict]:
     return orders if len(orders) > 1 else [parse_message(text)]
 
 
+ITEM_SPLIT = re.compile(r"[，,、;；+\n]|和|还有|另外|再来|以及|\band\b", re.I)
+LEAD_QTY = re.compile(r"\s*(\d{1,2}|[一二两三四五六七八九十])(?!\d)")
+TIMES_QTY = re.compile(r"[x×*]\s*(\d{1,2})(?!\d)", re.I)
+
+
+def _product_score(segment: str, product: dict) -> int:
+    """How well a piece of the message names a product: the full name wins, else the
+    characters / words they share (+1 when the unit matches, e.g. 两桶水 → 桶装水)."""
+    seg, name = segment.lower(), product["name"].lower()
+    if name in seg:
+        return 100 + len(name)
+    shared = len({c for c in name if "\u4e00" <= c <= "\u9fff"} & set(seg))
+    shared += sum(1 for w in re.findall(r"[a-z]{3,}", name) if w in seg)
+    unit = (product.get("unit") or "").lower()
+    return shared + (1 if shared and unit and unit in seg else 0)
+
+
+def match_products(text: str, products: List[dict]) -> dict:
+    """A customer's free text against the catalog: "两桶水送到5号楼302" →
+    {"items": [{"id", "qty"}], "address": "5号楼302", "unmatched": [...]}.
+    Only a suggestion: the customer sees it in the cart before sending."""
+    found, unmatched = {}, []
+    for seg in ITEM_SPLIT.split(text or ""):
+        if not seg.strip():
+            continue
+        best = max(products, key=lambda p: _product_score(seg, p), default=None)
+        if not best or _product_score(seg, best) < 2:
+            if not ADDR_MARK.search(seg):
+                unmatched.append(seg.strip())
+            continue
+        m = QTY.search(seg) or LEAD_QTY.match(seg) or TIMES_QTY.search(seg)
+        qty = _num(m.group(1)) if m else 1
+        found[best["id"]] = min(99, found.get(best["id"], 0) + (qty or 1))
+    return {"items": [{"id": k, "qty": v} for k, v in found.items()],
+            "address": parse_message(text)["address"], "unmatched": unmatched}
+
+
 # The old helpers, still used around the app
 def find_phone(text): return parse_message(text)["phone"]
 def find_address(text): return parse_message(text)["address"]

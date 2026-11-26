@@ -41,18 +41,25 @@ def _write(line: str) -> None:
         pass
 
 
-def _telegram(text: str) -> None:
-    """Best-effort push. Silently skipped if unset or unreachable (blocked, offline)."""
+def telegram_api(method: str, payload: dict) -> bool:
+    """Call one Bot API method. Never raises; False when unset or unreachable."""
     token = os.environ.get("TELEGRAM_TOKEN")
-    chat_id = os.environ.get("TELEGRAM_CHAT_ID")
-    if not token or not chat_id:
-        return
+    if not token:
+        return False
     try:
         import requests
-        requests.post(f"https://api.telegram.org/bot{token}/sendMessage",
-                      json={"chat_id": chat_id, "text": text}, timeout=5)
+        requests.post(f"https://api.telegram.org/bot{token}/{method}", json=payload, timeout=5)
+        return True
     except Exception:
-        _write(f"{datetime.now():%Y-%m-%d %H:%M:%S}  [!] telegram send failed")
+        _write(f"{datetime.now():%Y-%m-%d %H:%M:%S}  [!] telegram {method} failed")
+        return False
+
+
+def _telegram(text: str) -> None:
+    """Best-effort push to the owner. Silently skipped if unset or unreachable (blocked, offline)."""
+    chat_id = os.environ.get("TELEGRAM_CHAT_ID")
+    if chat_id:
+        telegram_api("sendMessage", {"chat_id": chat_id, "text": text})
 
 
 def notify(event: str, ip: str = "", who: str = "", detail: str = "") -> None:

@@ -717,6 +717,19 @@ const INTENT_NAMES = {new_order: 'New order', cancel: 'Cancel', question: 'Quest
 
     function renderCard() {
       const {text, r} = current;
+      if (r.action === 'answer') {                 // owner question → plain answer from the stats
+        document.getElementById('fb').innerHTML = `<div class="ai-card">
+          <div class="ai-msg">${esc(text)}</div><div class="ai-answer">${esc(r.reply)}</div></div>`;
+        return;
+      }
+      if (r.action === 'preview') {                // owner command → nothing changes until Confirm
+        document.getElementById('fb').innerHTML = `<div class="ai-card">
+          <div class="ai-msg">${esc(text)}</div>
+          <div class="ai-preview"><b>${esc(r.summary)}</b><div class="ai-conf">${esc(r.hint)}</div>
+            <div class="ai-actions"><button class="ok" onclick="confirmAction()">Confirm</button>
+              <button onclick="dropAction()">Cancel</button></div></div></div>`;
+        return;
+      }
       const pct = Math.round((r.confidence || 0) * 100);
       const who = r.sender === 'driver' ? 'Driver' : 'Customer';
       document.getElementById('fb').innerHTML = `<div class="ai-card">
@@ -755,6 +768,26 @@ const INTENT_NAMES = {new_order: 'New order', cancel: 'Cancel', question: 'Quest
       renderHistory();
     }
 
+    async function confirmAction() {
+      const res = await api('/api/agent/confirm', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({token: current.r.token}),
+      });
+      const d = await res.json();
+      const box = document.querySelector('#fb .ai-actions');
+      if (!res.ok) { box.innerHTML = `<span>${esc(d.error || 'Action failed')}</span>`; return; }
+      box.innerHTML = `<span>${esc(d.reply)}</span>`;
+      current.status = '✓';
+      renderHistory();
+      await refresh();
+    }
+
+    function dropAction() {
+      document.querySelector('#fb .ai-actions').innerHTML = '<span>Cancelled, nothing changed</span>';
+      current.status = '✕';
+      renderHistory();
+    }
+
     async function doAction(kind) {
       const {r} = current;
       const res = await api(`/api/orders/${r.order_id}/${kind}`, {method: 'POST'});
@@ -774,9 +807,9 @@ const INTENT_NAMES = {new_order: 'New order', cancel: 'Cancel', question: 'Quest
 
     function renderHistory() {
       const rows = aiHistory.slice(0, 8).map(h => {
-        const who = h.r.sender === 'driver' ? 'Driver' : 'Customer';
+        const who = h.r.sender === 'driver' ? 'Driver' : h.r.sender ? 'Customer' : 'You';
         return `<div class="hist-row"><span class="t">${h.time}</span><span>${who}</span>
-          <span>${INTENT_NAMES[h.r.intent] || h.r.intent}</span><span>${h.status || ''}</span>
+          <span>${INTENT_NAMES[h.r.intent] || h.r.intent || h.r.topic || h.r.kind || ''}</span><span>${h.status || ''}</span>
           <span class="m">${esc(h.text)}</span></div>`;
       }).join('');
       document.getElementById('ai-history').innerHTML = `<div class="hist-head">AI inbox

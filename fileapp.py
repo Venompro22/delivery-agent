@@ -33,6 +33,7 @@ from limiter import LoginLimiter
 from audit import AuditLog
 from order_parser import parse_message
 from agent import handle_message
+import owner_ai
 import numpy as np
 from intent_nn import INTENTS, DATA, MODEL_PATH, predict_intent, train, load_feedback
 
@@ -706,6 +707,28 @@ def customer_place_order():
                     "track_url": f"/track/{order.id}?k={track_key(order.id)}"})
 
 
+@app.route("/api/me/ai-order", methods=["POST"])
+@login_required
+def customer_ai_order():
+    """Read a customer's message ("两桶水送到5号楼302") into a cart suggestion.
+    Nothing is ordered here: the page shows the cart and the customer sends it as usual."""
+    if current_role() != "customer":
+        return jsonify({"ok": False, "error": "customers only"}), 403
+    text = str((request.get_json(silent=True) or {}).get("text", "")).strip()
+    if not text:
+        return bad_request("text is required")
+    if len(text) > 300:
+        return bad_request("text is too long")
+    from order_parser import match_products
+    catalog = product_store().all()
+    found = match_products(text, catalog)
+    by_id = {p["id"]: p for p in catalog}
+    items = [{**{k: by_id[i["id"]][k] for k in ("id", "name", "unit", "price")}, "qty": i["qty"]}
+             for i in found["items"]]
+    address = (found["address"] or "")[:MAX_ADDRESS]
+    return jsonify({"ok": True, "items": items, "address": address, "unmatched": found["unmatched"]})
+
+
 @app.route("/api/me/orders/<order_id>/cancel", methods=["POST"])
 @login_required
 def customer_cancel_order(order_id):
@@ -1313,6 +1336,19 @@ def agent_message():
     if len(text) > 500:
         return bad_request("text is too long")
 
+    # 💬 An owner question about the numbers ("今天收入多少?") is answered from the stats
+    question = owner_ai.answer(text, stats_data())
+    if question:
+        return jsonify(question)
+
+    # 🛠️ An owner command ("李明 已付款 微信") → preview card; nothing changes before Confirm.
+    # Deliver/cancel found by phone is a pasted WeChat message: the intent card below handles it.
+    if current_role() == "owner":
+        preview = owner_preview(text)
+        if preview and not (preview.get("error") or
+                            (preview["kind"] in ("deliver", "cancel") and preview["by"] == "phone")):
+            return jsonify(preview)
+
     orders = [{"id": o.id, "name": o.customer_name, "phone": o.phone,
                "status": o.status.value} for o in orders_for_request()]
     result = handle_message(text, orders)
@@ -1346,6 +1382,173 @@ def agent_message():
             "qty": customers.quantity(text) or known["usual_qty"],
         }
     return jsonify(result)
+_pending = None
+
+
+def pending_actions() -> owner_ai.PendingActions:
+    """Previewed owner actions, in the same database as the orders (follows store.path for tests)."""
+    global _pending
+    path = getattr(store, "path", os.path.join(HERE, "orders.db"))
+    if _pending is None or _pending.path != path:
+        _pending = owner_ai.PendingActions(path)
+    return _pending
+
+
+def owner_preview(text: str) -> dict | None:
+    """Parse an owner command and store it for Confirm. Returns the preview card data,
+    {"kind", "error"} when the command is incomplete, or None when it is not a command."""
+    open_drivers = [u for u in users.all() if u["status"] == "approved"]
+    a = owner_ai.parse_action(text, [o for o in orders_for_request()
+                                     if o.status != OrderStatus.CANCELLED], open_drivers)
+    if not a or a.get("error"):
+        return a
+    order = store.get(a["order_id"]) if a.get("order_id") else None
+    names = {}
+    if order:
+        names["order"] = order.customer_name + (f" ({order.phone})" if order.phone else "")
+        names["old"] = f"{order.price:g}" if order.price is not None else "-"
+    if a["kind"] == "assign":
+        names["driver"] = (users.get(a["driver_id"]) or {}).get("name", "?")
+    if a["kind"] == "fee":
+        names["old"] = f"{settings_store().all()['delivery_fee']:g}"
+    summary = owner_ai.describe(a, **names)
+    return {"action": "preview", "kind": a["kind"], "lang": a["lang"], "by": a.get("by"),
+            "summary": summary, "hint": owner_ai.CONFIRM_HINT[a["lang"]],
+            "token": pending_actions().put({**a, "summary": summary})}
+
+
+def run_owner_action(a: dict) -> tuple[bool, str]:
+    """Carry out a confirmed action. Everything is checked again: the order may have
+    changed between the preview and the Confirm press."""
+    kind = a.get("kind")
+    if kind == "add_product":
+        fields, error = clean_product(a.get("name"), a.get("price"), a.get("unit", ""))
+        if error:
+            return False, error
+        product_store().create(fields["name"], fields["price"], fields["unit"])
+    elif kind == "fee":
+        values, error = clean_settings({"delivery_fee": a.get("fee")})
+        if error:
+            return False, error
+        settings_store().update(**values)
+    else:
+        order = store.get(str(a.get("order_id", "")))
+        if not order:
+            return False, "order not found"
+        if kind == "assign":
+            u = users.get(str(a.get("driver_id", "")))
+            if not u or u["status"] != "approved":
+                return False, "unknown or not approved driver"
+            order.driver_id = u["id"]
+        elif kind == "deliver":
+            if order.status != OrderStatus.PENDING:
+                return False, "order is not open"
+            order.status, order.delivered_at = OrderStatus.DELIVERED, time.time()
+        elif kind == "paid":
+            if a.get("method") not in PAY_METHODS:
+                return False, "unknown payment method"
+            order.pay_method, order.paid_at = a["method"], time.time()
+        elif kind == "cancel":
+            if order.status == OrderStatus.DELIVERED:
+                return False, "order is already delivered"
+            order.status = OrderStatus.CANCELLED
+        elif kind == "price":
+            try:
+                price = round(float(a.get("price")), 2)
+            except (TypeError, ValueError):
+                return False, "price must be a number"
+            if not 0 <= price <= 100000:
+                return False, "price is out of range"
+            order.price = price
+        else:
+            return False, "unknown action"
+        store.save()
+        if kind == "deliver":
+            _learn_place(order)
+    return True, owner_ai.DONE.get(a.get("lang"), owner_ai.DONE["en"]) + a.get("summary", "")
+
+
+def confirm_owner_action(token: str, who: str) -> tuple[bool, str]:
+    """Confirm button (web or Telegram): run the stored action once, and log it."""
+    a = pending_actions().take(token)
+    if not a:
+        return False, "this preview expired or was already used"
+    ok, message = run_owner_action(a)
+    if ok:
+        audit.add("ai_action", client_ip() if has_request_context() else "", who, a.get("summary", "")[:200])
+    return ok, message
+
+
+@app.route("/api/agent/confirm", methods=["POST"])
+@owner_required
+def agent_confirm():
+    if current_role() != "owner":
+        return jsonify({"ok": False, "error": "owner only"}), 403
+    ok, message = confirm_owner_action((request.get_json(silent=True) or {}).get("token", ""), "owner")
+    return (jsonify({"ok": True, "reply": message}) if ok
+            else bad_request(message))
+
+
+@app.route("/api/telegram/webhook", methods=["POST"])
+def telegram_webhook():
+    """The owner asks and acts from Telegram. Two locks: Telegram's secret-token header
+    (proves the update really comes from Telegram) and TELEGRAM_CHAT_ID (only the owner's chat)."""
+    import alerts
+    secret = os.environ.get("TELEGRAM_WEBHOOK_SECRET", "")
+    owner_chat = os.environ.get("TELEGRAM_CHAT_ID", "")
+    if not secret or not owner_chat:
+        return jsonify({"ok": False}), 404                 # not set up: the route does not exist
+    sent = request.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
+    if not hmac.compare_digest(sent.encode(), secret.encode()):
+        return jsonify({"ok": False}), 403
+    update = request.get_json(silent=True) or {}
+
+    def send(text, buttons=None):
+        payload = {"chat_id": owner_chat, "text": text[:4000]}
+        if buttons:
+            payload["reply_markup"] = {"inline_keyboard": [buttons]}
+        alerts.telegram_api("sendMessage", payload)
+
+    # 🔘 A Confirm / Cancel button under a preview
+    cb = update.get("callback_query")
+    if isinstance(cb, dict):
+        if str(((cb.get("message") or {}).get("chat") or {}).get("id", "")) != owner_chat:
+            return jsonify({"ok": True})                   # someone else's chat: ignored
+        alerts.telegram_api("answerCallbackQuery", {"callback_query_id": cb.get("id")})
+        choice, _, token = str(cb.get("data", "")).partition(":")
+        if choice == "ok":
+            ok, message = confirm_owner_action(token, "telegram")
+            send(message if ok else "⚠️ " + message)
+        elif choice == "no":
+            a = pending_actions().take(token)
+            send(owner_ai.DROPPED[(a or {}).get("lang", "en")])
+        return jsonify({"ok": True})
+
+    # 💬 A text message: question → answer, command → preview with buttons, else help
+    msg = update.get("message")
+    if not isinstance(msg, dict) or str((msg.get("chat") or {}).get("id", "")) != owner_chat:
+        return jsonify({"ok": True})
+    text = str(msg.get("text") or "").strip()[:500]
+    if not text:
+        return jsonify({"ok": True})
+    lang = owner_ai.detect_lang(text)
+    question = owner_ai.answer(text, stats_data())
+    if question:
+        send(question["reply"])
+        return jsonify({"ok": True})
+    preview = owner_preview(text)
+    if preview and preview.get("error"):
+        send(f"⚠️ {preview['error']}\n\n{owner_ai.HELP[lang]}")
+    elif preview:
+        yes, no = owner_ai.BUTTONS[preview["lang"]]
+        send(f"{preview['summary']}\n{preview['hint']}",
+             [{"text": yes, "callback_data": f"ok:{preview['token']}"},
+              {"text": no, "callback_data": f"no:{preview['token']}"}])
+    else:
+        send(owner_ai.HELP[lang])
+    return jsonify({"ok": True})
+
+
 FEEDBACK_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "feedback.jsonl")
 
 
@@ -1446,6 +1649,11 @@ def clear_demo():
 @owner_required
 def api_stats():
     """📊 Numbers for the stats page."""
+    return jsonify(stats_data())
+
+
+def stats_data() -> dict:
+    """The stats numbers, shared by /api/stats and the owner AI so both always agree."""
     today = datetime.now().date()
     days = [today - timedelta(days=i) for i in range(6, -1, -1)]
     per_day = {d: 0 for d in days}
@@ -1496,7 +1704,7 @@ def api_stats():
                         if p["on_time"] + p["late"] else None,
          "late": p["late"]}
         for d, p in per_driver.items()), key=lambda r: -r["week"])
-    return jsonify({
+    return {
         "drivers": drivers,
         "days": [d.strftime("%m-%d") for d in days],
         "delivered": [per_day[d] for d in days],
@@ -1509,7 +1717,7 @@ def api_stats():
         "revenue_week": round(sum(revenue.values()), 2),
         "to_collect": round(to_collect, 2),
         "top_products": _top_products(products_sold),
-    })
+    }
 
 
 TOP_PRODUCTS = 8
