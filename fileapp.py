@@ -1455,6 +1455,7 @@ def api_stats():
     revenue = {d: 0.0 for d in days}               # yuan earned per day (delivered orders)
     to_collect = 0.0                              # delivered but not paid yet
     per_driver = {}                               # driver id → their numbers (same rules as above)
+    products_sold = {}                            # product → qty, orders, revenue (delivered, last 7 days)
 
     for o in orders_for_request():
         if o.status != OrderStatus.DELIVERED or not o.delivered_at:
@@ -1474,6 +1475,7 @@ def api_stats():
             p["on_time" if o.delivered_at <= o.promised_by else "late"] += 1
         if done.date() in per_day:
             per_day[done.date()] += 1
+            _count_items(o, products_sold)
         by_hour[done.hour] += 1
         if o.created_at:
             minutes.append((o.delivered_at - o.created_at) / 60)
@@ -1506,7 +1508,41 @@ def api_stats():
         "revenue_today": round(revenue[today], 2),
         "revenue_week": round(sum(revenue.values()), 2),
         "to_collect": round(to_collect, 2),
+        "top_products": _top_products(products_sold),
     })
+
+
+TOP_PRODUCTS = 8
+
+
+def _count_items(order, sold: dict) -> None:
+    """Add one delivered order's items to the running totals. Bad or old data is skipped."""
+    try:
+        items = json.loads(order.items) if order.items else []
+    except (ValueError, TypeError):
+        return
+    for it in items if isinstance(items, list) else []:
+        if not isinstance(it, dict) or not it.get("name"):
+            continue
+        try:
+            qty, price = int(it.get("qty", 0)), float(it.get("price", 0) or 0)
+        except (ValueError, TypeError):
+            continue
+        if qty <= 0:
+            continue
+        key = str(it.get("id") or it["name"])          # same product, even if renamed later
+        p = sold.setdefault(key, {"name": str(it["name"])[:40], "unit": str(it.get("unit", ""))[:10],
+                                  "qty": 0, "orders": 0, "revenue": 0.0})
+        p["qty"] += qty
+        p["orders"] += 1
+        p["revenue"] += qty * price
+
+
+def _top_products(sold: dict) -> list:
+    """Best sellers first (by quantity, then revenue), with each one's share of the total."""
+    total = sum(p["qty"] for p in sold.values()) or 1
+    top = sorted(sold.values(), key=lambda p: (-p["qty"], -p["revenue"]))[:TOP_PRODUCTS]
+    return [{**p, "revenue": round(p["revenue"], 2), "share": round(p["qty"] / total * 100)} for p in top]
 
 @app.route("/api/logout-all", methods=["POST"])
 @owner_required

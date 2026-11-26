@@ -55,9 +55,40 @@
       });
 
       renderDrivers(d.drivers);
+      renderProducts(d.top_products);
     }
 
     load();
+
+    // Best sellers: what to always keep in stock
+    function renderProducts(products) {
+      const box = document.getElementById('product-stats');
+      box.textContent = '';
+      if (!products || !products.length) { box.textContent = 'No products sold yet.'; return; }
+      const table = document.createElement('table');
+      table.className = 'driver-table product-table';
+      const head = table.createTHead().insertRow();
+      for (const h of ['Product', 'Sold', 'Orders', 'Revenue']) {
+        const th = document.createElement('th');
+        th.textContent = h;
+        head.append(th);
+      }
+      const body = table.createTBody();
+      for (const p of products) {
+        const row = body.insertRow();
+        const name = row.insertCell();
+        const label = document.createElement('div');
+        label.textContent = p.name;
+        const bar = document.createElement('div');
+        bar.className = 'share-bar';
+        bar.style.width = Math.max(4, p.share) + '%';     // share of everything sold
+        name.append(label, bar);
+        row.insertCell().textContent = p.qty + (p.unit ? ' ' + p.unit : '');
+        row.insertCell().textContent = p.orders;
+        row.insertCell().textContent = '¥' + p.revenue.toFixed(2);
+      }
+      box.append(table);
+    }
 
     function renderDrivers(drivers) {
       const box = document.getElementById('driver-stats');
