@@ -41,18 +41,24 @@ def _write(line: str) -> None:
         pass
 
 
-def telegram_api(method: str, payload: dict) -> bool:
-    """Call one Bot API method. Never raises; False when unset or unreachable."""
+def telegram_call(method: str, payload: dict, timeout: float = 5):
+    """Call one Bot API method and return Telegram's JSON reply. Never raises; None when unset
+    or unreachable. The token is only in the URL: never logged (the error text can contain it)."""
     token = os.environ.get("TELEGRAM_TOKEN")
     if not token:
-        return False
+        return None
     try:
         import requests
-        requests.post(f"https://api.telegram.org/bot{token}/{method}", json=payload, timeout=5)
-        return True
+        reply = requests.post(f"https://api.telegram.org/bot{token}/{method}", json=payload, timeout=timeout).json()
+        return reply if isinstance(reply, dict) else None
     except Exception:
         _write(f"{datetime.now():%Y-%m-%d %H:%M:%S}  [!] telegram {method} failed")
-        return False
+        return None
+
+
+def telegram_api(method: str, payload: dict) -> bool:
+    """Call one Bot API method. Never raises; False when unset or unreachable."""
+    return telegram_call(method, payload) is not None
 
 
 def _telegram(text: str) -> None:

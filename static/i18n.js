@@ -119,6 +119,9 @@
     "Every phone and computer must log in again.": "所有手机和电脑都需要重新登录。",
     "password is too easy to guess": "密码太简单，容易被猜到",
     "Too many new accounts from this network today. Try again tomorrow.": "该网络今天注册的账号过多，请明天再试。",
+    "Connect Telegram bot": "连接 Telegram 机器人", "Settings": "设置", "Connecting…": "连接中…",
+    "Connected: @": "已连接：@", "Pending updates: ": "待处理消息：", "Last error: ": "最近错误：",
+    "Could not connect.": "连接失败。",
     "Search products": "搜索商品", "No matching products": "没有匹配的商品", "Total ¥": "合计 ¥",
   };
   const PAIRS = Object.entries(ZH).sort((a, b) => b[0].length - a[0].length);

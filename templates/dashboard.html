@@ -87,6 +87,13 @@
     <input id="price" placeholder="Price ¥ (optional)" inputmode="decimal" autocomplete="off"/>
     <button onclick="addOrder()">Add order</button>
     </details>
+    {% if is_owner %}
+    <details class="manual-order" id="settings">
+      <summary>Settings</summary>
+      <button type="button" id="tg-connect" onclick="connectTelegram()">Connect Telegram bot</button>
+      <div id="tg-result" class="hint"></div>
+    </details>
+    {% endif %}
     <div id="error" class="error"></div>
     <div id="toast" class="toast"></div>
     <a id="req-banner" class="req-banner" href="/orders#requested" hidden></a>
@@ -656,6 +663,21 @@
       renderPicker();
     });
     document.getElementById('manual-order').addEventListener('toggle', e => { if (e.target.open) loadPicker(); });
+
+    // 🤖 Owner only: the server registers its own webhook with Telegram (token stays on the server)
+    async function connectTelegram() {
+      const btn = document.getElementById('tg-connect'), out = document.getElementById('tg-result');
+      btn.disabled = true;
+      out.textContent = 'Connecting…';
+      try {
+        const res = await api('/api/telegram/register', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}'});
+        const d = await res.json();
+        out.textContent = !d.ok ? (d.error || 'Could not connect.')
+          : `Connected: @${d.bot} · ${d.webhook_url} · Pending updates: ${d.pending_update_count}` +
+            (d.last_error_message ? ` · Last error: ${d.last_error_message}` : '');
+      } catch (e) { out.textContent = 'Could not connect.'; }
+      finally { btn.disabled = false; }
+    }
 
     async function addOrder() {
       clearError();

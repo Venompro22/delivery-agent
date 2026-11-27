@@ -1043,7 +1043,7 @@ def logout():
 @app.route("/")
 @owner_required
 def home():
-    return render_template("dashboard.html")
+    return render_template("dashboard.html", is_owner=current_role() == "owner")
 
 
 @app.route("/api/route")
@@ -1510,6 +1510,51 @@ def agent_confirm():
     ok, message = confirm_owner_action((request.get_json(silent=True) or {}).get("token", ""), "owner")
     return (jsonify({"ok": True, "reply": message}) if ok
             else bad_request(message))
+
+
+TELEGRAM_ENV = ("TELEGRAM_TOKEN", "TELEGRAM_WEBHOOK_SECRET", "TELEGRAM_CHAT_ID")
+
+
+@app.route("/api/telegram/register", methods=["POST"])
+@login_required
+def telegram_register():
+    """Owner button "Connect Telegram bot": point the bot's webhook at this server.
+    Only safe info comes back; the token and the secret never leave the server."""
+    import alerts
+    if current_role() != "owner":                     # viewers and drivers too
+        return jsonify({"ok": False, "error": "owner only"}), 403
+    # CSRF: the session cookie is SameSite=Lax, and a cross-site form cannot send a JSON body
+    # (that needs a CORS preflight, which this server never allows).
+    if not request.is_json:
+        return bad_request("send JSON")
+    missing = [k for k in TELEGRAM_ENV if not os.environ.get(k)]
+    if missing:
+        return bad_request("Set these env vars on the server first: " + ", ".join(missing))
+    token, secret = os.environ["TELEGRAM_TOKEN"], os.environ["TELEGRAM_WEBHOOK_SECRET"]
+
+    def safe(text) -> str:
+        """Telegram's own text, with the token and the secret blanked out just in case."""
+        return str(text or "").replace(token, "***").replace(secret, "***")[:300]
+
+    host = request.host                               # behind Render: X-Forwarded-Host via ProxyFix
+    if not re.fullmatch(r"[A-Za-z0-9.-]+(:\d{1,5})?", host):
+        return bad_request("unexpected host name")
+    url = f"https://{host}/api/telegram/webhook"
+    r = alerts.telegram_call("setWebhook", {"url": url, "secret_token": secret,
+                                            "allowed_updates": ["message", "callback_query"],
+                                            "drop_pending_updates": True}, timeout=10)
+    if not r:
+        return jsonify({"ok": False, "error": "Telegram could not be reached"}), 502
+    if not r.get("ok"):
+        return jsonify({"ok": False, "error": "Telegram refused: " + safe(r.get("description"))}), 502
+    info = (alerts.telegram_call("getWebhookInfo", {}) or {}).get("result") or {}
+    me = (alerts.telegram_call("getMe", {}) or {}).get("result") or {}
+    audit.add("telegram_webhook_registered", client_ip(), "owner")
+    return jsonify({"ok": True,
+                    "bot": safe(me.get("username")),
+                    "webhook_url": safe(info.get("url")),
+                    "pending_update_count": int(info.get("pending_update_count") or 0),
+                    "last_error_message": safe(info.get("last_error_message"))})
 
 
 @app.route("/api/telegram/webhook", methods=["POST"])
