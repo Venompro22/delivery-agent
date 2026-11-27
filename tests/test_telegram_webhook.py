@@ -87,3 +87,29 @@ def test_webhook_is_off_until_configured(client, monkeypatch):
 def test_unknown_text_gets_help(client, tg):
     say(client, "hello")
     assert "revenue" in sent_texts(tg)[-1]
+
+
+HELLO = {"message": {"chat": {"id": int(CHAT)}, "text": "今天收入多少?"}}
+
+
+def test_missing_header_is_refused(client, tg):
+    assert client.post("/api/telegram/webhook", json=HELLO).status_code == 403
+    assert tg == []
+
+
+def test_wrong_secret_is_refused(client, tg):
+    assert post(client, HELLO, secret="hook-secreX").status_code == 403
+    assert post(client, HELLO, secret="").status_code == 403
+    assert tg == []
+
+
+def test_right_secret_is_accepted(client, tg):
+    assert post(client, HELLO).status_code == 200
+    assert len(sent_texts(tg)) == 1
+
+
+def test_unset_secret_disables_even_with_a_header(client, tg, monkeypatch):
+    monkeypatch.delenv("TELEGRAM_WEBHOOK_SECRET")
+    assert post(client, HELLO, secret="").status_code == 404
+    assert post(client, HELLO).status_code == 404
+    assert tg == []
