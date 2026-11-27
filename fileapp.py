@@ -1337,7 +1337,7 @@ def agent_message():
         return bad_request("text is too long")
 
     # 💬 An owner question about the numbers ("今天收入多少?") is answered from the stats
-    question = owner_ai.answer(text, stats_data())
+    question = owner_ai.answer(text, stats_data, late_now)
     if question:
         return jsonify(question)
 
@@ -1532,7 +1532,7 @@ def telegram_webhook():
     if not text:
         return jsonify({"ok": True})
     lang = owner_ai.detect_lang(text)
-    question = owner_ai.answer(text, stats_data())
+    question = owner_ai.answer(text, stats_data, late_now)
     if question:
         send(question["reply"])
         return jsonify({"ok": True})
@@ -2411,13 +2411,37 @@ def gps_watch(now=None) -> list:
                     out.append(f"Driver stopped: {name} has not moved for {int((now - prev[2]) // 60)} min "
                                f"({len(mine)} orders open)")
 
-        # 3) An order that will arrive after its promise
-        for o in optimize_route(driver_for(uid), mine, geo, start_time=now):
-            if o.promised_by and o.eta_epoch and o.eta_epoch > o.promised_by and f"late:{o.id}" not in sent:
-                sent.add(f"late:{o.id}")
-                out.append(f"Running late: {o.customer_name} expected {fmt(o.eta_epoch)}, "
-                           f"promised {fmt(o.promised_by)}")
+    # 3) An open order that will arrive after its promise: one alert per order, ever
+    for late in late_now(open_orders, now):
+        if f"late:{late['id']}" not in sent:
+            sent.add(f"late:{late['id']}")
+            out.append(f"Running late: {late['customer']} ({late['driver'] or 'no driver'}) "
+                       f"~{late['minutes_late']} min late, expected {fmt(late['eta'])}, "
+                       f"promised {fmt(late['promised'])}, order {late['id']}")
     return out
+
+
+def late_now(orders=None, now=None) -> list:
+    """Open orders whose predicted ETA is after their promise (or the promise already passed),
+    worst first. Same routing as each driver's screen: a driver's open orders from their GPS
+    position (or the default start), unassigned orders from the default start."""
+    import math
+    now = now or time.time()
+    by_driver = {}
+    for o in (orders_for_request() if orders is None else orders):
+        if o.is_open:
+            by_driver.setdefault(o.driver_id, []).append(o)
+    out = []
+    for uid, mine in by_driver.items():
+        user = users.get(uid) if uid else None
+        # Orders without a promise still ride along: they push the others' ETAs back.
+        for o in optimize_route(driver_for(uid), mine, geo, start_time=now):
+            if o.promised_by and o.eta_epoch and o.eta_epoch > o.promised_by:
+                out.append({"id": o.id, "customer": o.customer_name,
+                            "driver": user["name"] if user else None,
+                            "minutes_late": math.ceil((o.eta_epoch - o.promised_by) / 60),
+                            "eta": o.eta_epoch, "promised": o.promised_by})
+    return sorted(out, key=lambda x: -x["minutes_late"])
 
 
 def _gps_watch_loop():

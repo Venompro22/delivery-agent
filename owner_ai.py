@@ -34,6 +34,9 @@ DRIVER = r"司机|配送员|骑手|driver|livreur|chauffeur|موزع|سائق|ل
 BEST = r"最好|最棒|送得最多|送最多|最多单|第一|best|\btop\b|a7san|ahsan|احسن|أحسن|meilleur|lwl|lowel|الأول"
 PRODUCT = (r"产品|商品|卖得|卖的|畅销|热销|卖最多|product|item|sell|sold|selling|popular|sel3a|sl3a|produit|"
            r"kaytba3|kayba3|سلعة|السلعة|منتوج|منتج|كيتباع|تباع")
+# "Late right now" (open orders), not "late deliveries" (finished ones)
+NOW = (r"现在|目前|此刻|要迟到|会迟到|快迟到|将要|\bnow\b|currently|at risk|going to be late|"
+       r"\bdaba\b|\bdba\b|دابا|دبا|دروك|هاد الساعة")
 LATE = r"迟到|晚到|超时|延误|晚了|\blate\b|delay|m3atl|m3tl|t3atl|t2khr|retard|معطل|متأخر|تعطل|تأخير|تعطلات|روطار"
 REVENUE = (r"收入|营业额|销售额|赚了|挣了|进账|流水|revenue|earn|made|money|sales|income|turnover|"
            r"flous|flouss|dkhl|dakhl|dkhlna|ch7al|chhal|فلوس|الفلوس|دخل|دخلنا|مدخول|شحال|بشحال")
@@ -56,7 +59,7 @@ def question_topic(text: str) -> str | None:
             (_has(BEST, text) or _has(r"畅销|热销|卖最多|popular|bzaf|bzzaf|بزاف|كتر|أكثر|اكثر", text)):
         return "top_products"
     if _has(LATE, text) and asks:
-        return "late"
+        return "late_now" if _has(NOW, text) else "late"
     if _has(REVENUE, text) and loose:
         return "revenue_week" if _has(WEEK, text) else "revenue_today"
     return None
@@ -90,6 +93,16 @@ T = {
         "darija": "السلعة اللي تباعت بزاف هاد 7 أيام: {list}.",
     },
 }
+LATE_NOW = {
+    "head": {"zh": "现在有 {n} 单会迟到：", "en": "{n} open orders will be late:",
+             "darija": "دابا كاين {n} طلبات غادي يتعطلو:"},
+    "line": {"zh": "• {customer}（司机：{driver}）晚 {minutes_late} 分钟 · 订单 {id}",
+             "en": "• {customer} (driver: {driver}) {minutes_late} min late · order {id}",
+             "darija": "• {customer} (الليفرور: {driver}) معطل ب {minutes_late} دقيقة · طلب {id}"},
+    "none": {"zh": "现在没有会迟到的订单。", "en": "No open order is running late right now.",
+             "darija": "دابا حتى طلب ما معطل."},
+    "no_driver": {"zh": "未分配", "en": "unassigned", "darija": "بلا ليفرور"},
+}
 NO_DATA = {
     "best_driver": {"zh": "最近7天还没有司机送达订单。", "en": "No driver delivered an order in the last 7 days.",
                     "darija": "حتى ليفرور ما وصل شي طلب هاد 7 أيام."},
@@ -99,12 +112,23 @@ NO_DATA = {
 UNKNOWN = {"zh": "未知", "en": "n/a", "darija": "ما معروفش"}
 
 
-def answer(text: str, stats: dict) -> dict | None:
-    """{"action": "answer", "topic", "lang", "reply"} for a stats question, else None."""
+def answer(text: str, get_stats, get_late_now) -> dict | None:
+    """{"action": "answer", "topic", "lang", "reply"} for a stats question, else None.
+    get_stats() → fileapp.stats_data(), get_late_now() → fileapp.late_now(); both are
+    only called once the text is known to be a question, so other messages cost nothing."""
     topic = question_topic(text)
     if not topic:
         return None
     lang = detect_lang(text)
+    if topic == "late_now":
+        late = get_late_now()
+        if not late:
+            return {"action": "answer", "topic": topic, "lang": lang, "reply": LATE_NOW["none"][lang]}
+        lines = [LATE_NOW["head"][lang].format(n=len(late))]
+        lines += [LATE_NOW["line"][lang].format(**{**x, "driver": x["driver"] or LATE_NOW["no_driver"][lang]})
+                  for x in late]
+        return {"action": "answer", "topic": topic, "lang": lang, "reply": "\n".join(lines)}
+    stats = get_stats()
 
     def pct(v):
         return f"{v}%" if v is not None else UNKNOWN[lang]
