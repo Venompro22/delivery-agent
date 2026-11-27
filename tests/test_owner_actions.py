@@ -53,7 +53,7 @@ def test_assign_deliver_cancel_price(client):
     assert fileapp.store.get(b.id).status == OrderStatus.DELIVERED
 
     r = preview(client, "lghi talab dyal 王芳")
-    assert r["lang"] == "darija"
+    assert r["lang"] == "zh"                    # Darija command, but it has Chinese characters
     confirm(client, r["token"])
     assert fileapp.store.get(a.id).status == OrderStatus.CANCELLED
 

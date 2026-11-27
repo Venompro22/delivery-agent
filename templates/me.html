@@ -73,7 +73,7 @@
     const NAME = {{ name|tojson }};
     let lang = 'zh';
     try { lang = localStorage.getItem('lang') || (navigator.language.startsWith('zh') ? 'zh' : 'en'); } catch (e) {}
-    const T = {
+    const TEXTS = {
       en: { hello: n => `Hi, ${n}`, out: 'Log out', orders: 'My orders', add: 'Add an order with its tracking link', btn: 'Add',
             empty: 'No past orders yet.', added: 'Order added', bad: 'This tracking link is not valid',
             shop: 'Order now', where: 'Tap the map to set where we deliver, then add your building and room.',
@@ -107,7 +107,8 @@
             aiGot: list => `识别到：${list}。请核对下面的购物车，再点下单。`,
             aiNone: '没找到这些商品，请在下面选择～', aiSkip: t => ` 没找到：${t}。`,
             st: { requested: '等商家确认', pending: '配送中', delivered: '已送达', cancelled: '已取消' } },
-    }[lang === 'en' ? 'en' : 'zh'];
+    };
+    const T = TEXTS[lang === 'en' ? 'en' : 'zh'];
 
     const esc = t => String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     const yuan = n => Number.isInteger(n) ? String(n) : n.toFixed(2);
@@ -335,13 +336,14 @@
       const d = await (await fetch('/api/me/ai-order', { method: 'POST', headers: { 'Content-Type': 'application/json' },
                                                         body: JSON.stringify({ text }) })).json();
       if (!d.ok) { msg.textContent = d.error || 'Error'; msg.className = 'mp-msg bad'; return; }
-      const skipped = d.unmatched.length ? T.aiSkip(d.unmatched.join(', ')) : '';
-      if (!d.items.length) { msg.textContent = T.aiNone + skipped; msg.className = 'mp-msg bad'; return; }
+      const A = TEXTS[d.lang] || T;            // reply in the message's language (zh or en), not the page's
+      const skipped = d.unmatched.length ? A.aiSkip(d.unmatched.join(', ')) : '';
+      if (!d.items.length) { msg.textContent = A.aiNone + skipped; msg.className = 'mp-msg bad'; return; }
       Object.keys(qty).forEach(k => delete qty[k]);
       d.items.forEach(it => { qty[it.id] = it.qty; });
       if (d.address) $('addr').value = d.address;
       renderMenu();
-      msg.textContent = T.aiGot(d.items.map(it => `${it.name} ×${it.qty}`).join(', ')) + skipped;
+      msg.textContent = A.aiGot(d.items.map(it => `${it.name} ×${it.qty}`).join(', ')) + skipped;
       msg.className = 'mp-msg ok';
     };
     function orderAgain(id) {

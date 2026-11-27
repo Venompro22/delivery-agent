@@ -290,3 +290,14 @@ button:hover { background: var(--accent-hover); }
 .ai-answer { margin-top: 10px; font-size: 15px; line-height: 1.6; color: var(--text); }
 .ai-preview { margin-top: 10px; padding: 10px 12px; border: 1px dashed var(--accent); border-radius: 8px; }
 .ai-preview .ai-actions { margin-top: 8px; display: flex; gap: 8px; }
+
+/* Product picker in the manual order form */
+.pick-list { max-height: 220px; overflow-y: auto; }
+.pick-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+.pick-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pick-price { color: var(--muted); font-size: 12px; }
+.pick-row button { width: 32px; height: 32px; margin: 0; padding: 0; font-size: 16px; line-height: 1; }
+.pick-qty { min-width: 18px; text-align: center; font-weight: 600; }
+.pick-empty { color: var(--muted); font-size: 12px; padding: 6px 0; }
+.pick-total { font-size: 13px; font-weight: 600; color: var(--accent); margin: 6px 0; }
+input:disabled { opacity: .5; }

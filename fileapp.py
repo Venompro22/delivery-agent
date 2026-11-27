@@ -633,6 +633,29 @@ def _notify_new_request(order, summary: str) -> None:
     threading.Thread(target=alerts._telegram, args=(text,), daemon=True).start()
 
 
+def catalog_items(raw_items):
+    """(items, subtotal, error) for a cart from the browser. Only active products, whole
+    quantities; name, unit and price come from the catalog, never from the browser.
+    Items are saved as JSON [{id, name, unit, price, qty}], the format stats read."""
+    if not isinstance(raw_items, list) or not 1 <= len(raw_items) <= 20:
+        return None, 0.0, "choose between 1 and 20 products"
+    catalog = {p["id"]: p for p in product_store().all()}      # active products only
+    items, total = [], 0.0
+    for it in raw_items:
+        p = catalog.get(str(it.get("id", ""))) if isinstance(it, dict) else None
+        if not p:
+            return None, 0.0, "a product is not available any more"
+        try:
+            qty = int(it.get("qty", 0))
+        except (TypeError, ValueError):
+            return None, 0.0, "quantity must be a whole number"
+        if not 1 <= qty <= 99:
+            return None, 0.0, "quantity must be between 1 and 99"
+        items.append({"id": p["id"], "name": p["name"], "unit": p["unit"], "price": p["price"], "qty": qty})
+        total += p["price"] * qty
+    return items, total, None
+
+
 @app.route("/api/me/order", methods=["POST"])
 @login_required
 def customer_place_order():
@@ -643,25 +666,10 @@ def customer_place_order():
     me = users.get(uid) or {}
     body = request.get_json(silent=True) or {}
 
-    # 1) Items: visible products and whole quantities. Prices come from the catalog,
-    #    never from the browser, so a customer cannot change what they pay.
-    raw_items = body.get("items")
-    if not isinstance(raw_items, list) or not 1 <= len(raw_items) <= 20:
-        return bad_request("choose between 1 and 20 products")
-    catalog = {p["id"]: p for p in product_store().all()}
-    items, total = [], 0.0
-    for it in raw_items:
-        p = catalog.get(str(it.get("id", ""))) if isinstance(it, dict) else None
-        if not p:
-            return bad_request("a product is not available any more")
-        try:
-            qty = int(it.get("qty", 0))
-        except (TypeError, ValueError):
-            return bad_request("quantity must be a whole number")
-        if not 1 <= qty <= 99:
-            return bad_request("quantity must be between 1 and 99")
-        items.append({"id": p["id"], "name": p["name"], "unit": p["unit"], "price": p["price"], "qty": qty})
-        total += p["price"] * qty
+    # 1) Items: visible products and whole quantities, priced from the catalog.
+    items, total, error = catalog_items(body.get("items"))
+    if error:
+        return bad_request(error)
 
     # 1b) Shop rules: minimum order and delivery fee (never trusted from the browser).
     shop = settings_store().all()
@@ -726,7 +734,9 @@ def customer_ai_order():
     items = [{**{k: by_id[i["id"]][k] for k in ("id", "name", "unit", "price")}, "qty": i["qty"]}
              for i in found["items"]]
     address = (found["address"] or "")[:MAX_ADDRESS]
-    return jsonify({"ok": True, "items": items, "address": address, "unmatched": found["unmatched"]})
+    # Reply language follows the message: Chinese characters → Chinese, anything else → English
+    return jsonify({"ok": True, "items": items, "address": address, "unmatched": found["unmatched"],
+                    "lang": owner_ai.reply_lang(text)})
 
 
 @app.route("/api/me/orders/<order_id>/cancel", methods=["POST"])
@@ -1153,6 +1163,19 @@ def add_order():
             return bad_request("promise must be positive")
         kw["promised_by"] = time.time() + minutes * 60
 
+    # 6) Products are optional. When picked, the server prices them from the catalog plus the
+    #    shop's delivery fee, and any price typed in the browser is ignored.
+    raw_items = body.get("items")
+    if raw_items not in (None, []):
+        items, subtotal, error = catalog_items(raw_items)
+        if error:
+            return bad_request(error)
+        fee = delivery_fee_for(subtotal, settings_store().all())
+        price = round(subtotal + fee, 2)
+        summary = ", ".join(f"{i['name']} x{i['qty']}" for i in items) + (f", delivery {fee:g}" if fee else "")
+        note = (f"{note} | {summary}" if note else summary)[:200]
+        kw["items"] = json.dumps(items, ensure_ascii=False)
+
     lat, lng, snapped = _snap_to_learned(phone, lat, lng)
     order = Order(customer_name=name, lat=lat, lng=lng, phone=phone, note=note, price=price, **kw)
     # Auto-assign to the nearest approved driver that has a GPS position.
@@ -1521,7 +1544,7 @@ def telegram_webhook():
             send(message if ok else "⚠️ " + message)
         elif choice == "no":
             a = pending_actions().take(token)
-            send(owner_ai.DROPPED[(a or {}).get("lang", "en")])
+            send(owner_ai.DROPPED.get((a or {}).get("lang"), owner_ai.DROPPED["en"]))   # old "darija" tokens → English
         return jsonify({"ok": True})
 
     # 💬 A text message: question → answer, command → preview with buttons, else help
@@ -1531,7 +1554,7 @@ def telegram_webhook():
     text = str(msg.get("text") or "").strip()[:500]
     if not text:
         return jsonify({"ok": True})
-    lang = owner_ai.detect_lang(text)
+    lang = owner_ai.reply_lang(text)
     question = owner_ai.answer(text, stats_data, late_now)
     if question:
         send(question["reply"])

@@ -73,6 +73,11 @@
     <input id="name" placeholder="Customer name" autocomplete="off"/>
     <input id="phone" placeholder="Phone (optional)" inputmode="tel" autocomplete="off"/>
     <input id="note" placeholder="Address / notes (optional) — e.g. Bldg 5, floor 3" maxlength="200" autocomplete="off"/>
+    <div class="picker">
+      <input id="pick-search" placeholder="Search products" autocomplete="off" oninput="renderPicker()"/>
+      <div id="pick-list" class="pick-list"></div>
+      <div id="pick-total" class="pick-total"></div>
+    </div>
     <div class="hint">Tap the map to set the location</div>
     <div class="coords">
       <input id="lat" placeholder="Latitude" inputmode="decimal" autocomplete="off"/>
@@ -606,6 +611,52 @@
         document.getElementById(id).classList.remove('invalid'));
     }
 
+    // 🛒 Product picker: active catalog products, + / − per product, live total with the delivery fee.
+    // The total is only a preview: the server prices the items again from the catalog.
+    const pick = {products: [], qty: {}, shop: null, loaded: false};
+    async function loadPicker() {
+      if (pick.loaded) return;
+      pick.loaded = true;
+      const [p, s] = await Promise.all([api('/api/products'), api('/api/settings/shop')]);
+      pick.products = p.ok ? await p.json() : [];              // active products only (no ?all=1)
+      pick.shop = s.ok ? await s.json() : null;
+      renderPicker();
+    }
+    function pickedItems() {
+      return Object.entries(pick.qty).filter(([, q]) => q > 0).map(([id, qty]) => ({id, qty}));
+    }
+    function renderPicker() {
+      const q = document.getElementById('pick-search').value.trim().toLowerCase();
+      const shown = pick.products.filter(p => !q || p.name.toLowerCase().includes(q) || pick.qty[p.id]);
+      document.getElementById('pick-list').innerHTML = !pick.products.length ? '<div class="pick-empty">No products yet.</div>'
+        : !shown.length ? '<div class="pick-empty">No matching products</div>'
+        : shown.map(p => `<div class="pick-row">
+            <span class="pick-name">${esc(p.name)}</span>
+            <span class="pick-price">¥${p.price}${p.unit ? '/' + esc(p.unit) : ''}</span>
+            <button type="button" data-id="${esc(p.id)}" data-d="-1" aria-label="−">−</button>
+            <span class="pick-qty">${pick.qty[p.id] || 0}</span>
+            <button type="button" data-id="${esc(p.id)}" data-d="1" aria-label="+">+</button>
+          </div>`).join('');
+      const byId = Object.fromEntries(pick.products.map(p => [p.id, p]));
+      const sub = pickedItems().reduce((t, it) => t + byId[it.id].price * it.qty, 0);
+      const price = document.getElementById('price');
+      const box = document.getElementById('pick-total');
+      if (!sub) { box.textContent = ''; price.disabled = false; return; }
+      const shop = pick.shop || {delivery_fee: 0, free_over: 0};
+      const fee = shop.free_over > 0 && sub >= shop.free_over ? 0 : shop.delivery_fee;
+      const r = n => Math.round(n * 100) / 100;
+      box.textContent = `Products ¥${r(sub)} · Delivery fee ¥${r(fee)} · Total ¥${r(sub + fee)}`;
+      price.value = '';
+      price.disabled = true;                                     // the products set the price
+    }
+    document.getElementById('pick-list').addEventListener('click', e => {
+      const b = e.target.closest('button[data-id]');
+      if (!b) return;
+      pick.qty[b.dataset.id] = Math.max(0, Math.min(99, (pick.qty[b.dataset.id] || 0) + Number(b.dataset.d)));
+      renderPicker();
+    });
+    document.getElementById('manual-order').addEventListener('toggle', e => { if (e.target.open) loadPicker(); });
+
     async function addOrder() {
       clearError();
       const body = {
@@ -616,6 +667,7 @@
         lng: document.getElementById('lng').value.trim(),
         promise_minutes: document.getElementById('promise').value.trim(),
         price: document.getElementById('price').value.trim(),
+        items: pickedItems(),
       };
 
       const missing = ['name','lat','lng'].filter(k => !body[k]);
@@ -634,7 +686,9 @@
       const data = await res.json();
       if (!res.ok) { showError(data.error || 'Could not add order.'); return; }
 
-      ['name','phone','note','lat','lng','promise','price'].forEach(id => document.getElementById(id).value = '');
+      ['name','phone','note','lat','lng','promise','price','pick-search'].forEach(id => document.getElementById(id).value = '');
+      pick.qty = {};
+      renderPicker();
       if (pickMarker) { map.removeLayer(pickMarker); pickMarker = null; }
       knownIds.add(data.id);
       await refresh();

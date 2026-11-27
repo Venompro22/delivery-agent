@@ -25,6 +25,12 @@ def detect_lang(text: str) -> str:
     return "zh" if CJK.search(text) else "en"
 
 
+def reply_lang(text: str) -> str:
+    """The language every reply uses: 'zh' if the message has Chinese characters, else 'en'.
+    Darija/Arabic input is still understood (keywords below), but always answered in English."""
+    return "zh" if CJK.search(text) else "en"
+
+
 def _has(pattern: str, text: str) -> bool:
     return re.search(pattern, text, re.I) is not None
 
@@ -70,46 +76,36 @@ T = {
     "revenue_today": {
         "zh": "今天收入 {revenue_today:g} 元（已送达的订单）。待收款 {to_collect:g} 元。",
         "en": "Revenue today: {revenue_today:g} yuan (delivered orders). Still to collect: {to_collect:g} yuan.",
-        "darija": "دخلتي اليوم {revenue_today:g} يوان (الطلبات اللي توصلات). باقي ما تخلصش: {to_collect:g} يوان.",
     },
     "revenue_week": {
         "zh": "最近7天收入 {revenue_week:g} 元，其中今天 {revenue_today:g} 元。待收款 {to_collect:g} 元。",
         "en": "Revenue over the last 7 days: {revenue_week:g} yuan, {revenue_today:g} of it today. Still to collect: {to_collect:g} yuan.",
-        "darija": "دخلتي هاد 7 أيام {revenue_week:g} يوان، منهم {revenue_today:g} اليوم. باقي ما تخلصش: {to_collect:g} يوان.",
     },
     "late": {
         "zh": "迟到送达的订单：{late} 单。准时率 {on_time}。",
         "en": "Late deliveries: {late}. On-time rate: {on_time}.",
-        "darija": "الطلبات اللي توصلات معطلة: {late}. نسبة فالوقت: {on_time}.",
     },
     "best_driver": {
         "zh": "本周最好的司机是 {name}：7天送了 {week} 单，今天 {today} 单，准时率 {on_time}。",
         "en": "Best driver this week: {name} with {week} deliveries in 7 days ({today} today), on time {on_time}.",
-        "darija": "أحسن ليفرور هاد السيمانة هو {name}: وصل {week} طلبات ف 7 أيام ({today} اليوم)، فالوقت {on_time}.",
     },
     "top_products": {
         "zh": "最近7天卖得最好的：{list}。",
         "en": "Best sellers over the last 7 days: {list}.",
-        "darija": "السلعة اللي تباعت بزاف هاد 7 أيام: {list}.",
     },
 }
 LATE_NOW = {
-    "head": {"zh": "现在有 {n} 单会迟到：", "en": "{n} open orders will be late:",
-             "darija": "دابا كاين {n} طلبات غادي يتعطلو:"},
+    "head": {"zh": "现在有 {n} 单会迟到：", "en": "{n} open orders will be late:"},
     "line": {"zh": "• {customer}（司机：{driver}）晚 {minutes_late} 分钟 · 订单 {id}",
-             "en": "• {customer} (driver: {driver}) {minutes_late} min late · order {id}",
-             "darija": "• {customer} (الليفرور: {driver}) معطل ب {minutes_late} دقيقة · طلب {id}"},
-    "none": {"zh": "现在没有会迟到的订单。", "en": "No open order is running late right now.",
-             "darija": "دابا حتى طلب ما معطل."},
-    "no_driver": {"zh": "未分配", "en": "unassigned", "darija": "بلا ليفرور"},
+             "en": "• {customer} (driver: {driver}) {minutes_late} min late · order {id}"},
+    "none": {"zh": "现在没有会迟到的订单。", "en": "No open order is running late right now."},
+    "no_driver": {"zh": "未分配", "en": "unassigned"},
 }
 NO_DATA = {
-    "best_driver": {"zh": "最近7天还没有司机送达订单。", "en": "No driver delivered an order in the last 7 days.",
-                    "darija": "حتى ليفرور ما وصل شي طلب هاد 7 أيام."},
-    "top_products": {"zh": "最近7天还没有卖出产品。", "en": "No products sold in the last 7 days.",
-                     "darija": "ما تباعت حتى سلعة هاد 7 أيام."},
+    "best_driver": {"zh": "最近7天还没有司机送达订单。", "en": "No driver delivered an order in the last 7 days."},
+    "top_products": {"zh": "最近7天还没有卖出产品。", "en": "No products sold in the last 7 days."},
 }
-UNKNOWN = {"zh": "未知", "en": "n/a", "darija": "ما معروفش"}
+UNKNOWN = {"zh": "未知", "en": "n/a"}
 
 
 def answer(text: str, get_stats, get_late_now) -> dict | None:
@@ -119,7 +115,7 @@ def answer(text: str, get_stats, get_late_now) -> dict | None:
     topic = question_topic(text)
     if not topic:
         return None
-    lang = detect_lang(text)
+    lang = reply_lang(text)
     if topic == "late_now":
         late = get_late_now()
         if not late:
@@ -217,7 +213,7 @@ def _pay_method(text: str) -> str:
 def parse_action(text: str, orders: list, drivers: list) -> dict | None:
     """The action the owner asks for, as plain data ({"kind", …, "lang"}), or None.
     A recognised action that cannot be built gets {"kind", "error"} instead."""
-    lang = detect_lang(text)
+    lang = reply_lang(text)
     if _has(FEE, text):
         nums = _numbers(text)
         return ({"kind": "fee", "fee": nums[-1], "lang": lang} if nums
@@ -252,24 +248,17 @@ def parse_action(text: str, orders: list, drivers: list) -> dict | None:
 
 
 PREVIEW = {
-    "assign": {"zh": "把 {order} 的订单分配给 {driver}", "en": "Assign {order}'s order to {driver}",
-               "darija": "نعطي الطلب ديال {order} ل {driver}"},
-    "deliver": {"zh": "把 {order} 的订单标记为已送达", "en": "Mark {order}'s order as delivered",
-                "darija": "نحط الطلب ديال {order} توصل"},
-    "paid": {"zh": "{order} 的订单已付款（{method}）", "en": "Mark {order}'s order as paid ({method})",
-             "darija": "نحط الطلب ديال {order} تخلص ({method})"},
-    "cancel": {"zh": "取消 {order} 的订单", "en": "Cancel {order}'s order", "darija": "نلغي الطلب ديال {order}"},
+    "assign": {"zh": "把 {order} 的订单分配给 {driver}", "en": "Assign {order}'s order to {driver}"},
+    "deliver": {"zh": "把 {order} 的订单标记为已送达", "en": "Mark {order}'s order as delivered"},
+    "paid": {"zh": "{order} 的订单已付款（{method}）", "en": "Mark {order}'s order as paid ({method})"},
+    "cancel": {"zh": "取消 {order} 的订单", "en": "Cancel {order}'s order"},
     "price": {"zh": "把 {order} 的订单价格从 {old} 改成 {price:g} 元",
-              "en": "Change {order}'s order price from {old} to {price:g} yuan",
-              "darija": "نبدل الثمن ديال {order} من {old} ل {price:g} يوان"},
-    "add_product": {"zh": "添加产品：{name}，{price:g} 元/{unit}", "en": "Add product: {name}, {price:g} yuan / {unit}",
-                    "darija": "نزيد سلعة: {name}، {price:g} يوان / {unit}"},
-    "fee": {"zh": "把配送费从 {old} 改成 {fee:g} 元", "en": "Change the delivery fee from {old} to {fee:g} yuan",
-            "darija": "نبدل ثمن التوصيل من {old} ل {fee:g} يوان"},
+              "en": "Change {order}'s order price from {old} to {price:g} yuan"},
+    "add_product": {"zh": "添加产品：{name}，{price:g} 元/{unit}", "en": "Add product: {name}, {price:g} yuan / {unit}"},
+    "fee": {"zh": "把配送费从 {old} 改成 {fee:g} 元", "en": "Change the delivery fee from {old} to {fee:g} yuan"},
 }
-DONE = {"zh": "✅ 已完成：", "en": "✅ Done: ", "darija": "✅ تم: "}
-CONFIRM_HINT = {"zh": "按确认执行，什么都还没改。", "en": "Nothing has changed yet. Press Confirm to do it.",
-                "darija": "مازال ما تبدل والو. ورك على تأكيد."}
+DONE = {"zh": "✅ 已完成：", "en": "✅ Done: "}
+CONFIRM_HINT = {"zh": "按确认执行，什么都还没改。", "en": "Nothing has changed yet. Press Confirm to do it."}
 
 
 def describe(action: dict, **names) -> str:
@@ -334,9 +323,6 @@ HELP = {
     "en": "Ask me: revenue today? this week? late orders? best driver? top products?\n"
           "Or give a command: mark Karim paid wechat · cancel Karim · assign Karim to Ahmed · "
           "Karim price 30 · add product Water 2 yuan bottle · delivery fee 5",
-    "darija": "سولني: شحال دخلنا اليوم؟ هاد السيمانة؟ شحال من طلب معطل؟ شكون أحسن ليفرور؟ شنو كيتباع بزاف؟\n"
-              "ولا عطيني أمر: Karim khlas wechat · lghi Karim · 3ti Karim l Ahmed · Karim taman 30 · "
-              "zid sel3a Water 2 bottle · taman tawsil 5",
 }
-BUTTONS = {"zh": ("确认", "取消"), "en": ("Confirm", "Cancel"), "darija": ("تأكيد", "لا")}
-DROPPED = {"zh": "已取消，什么都没改。", "en": "Cancelled, nothing changed.", "darija": "تلغى، ما تبدل والو."}
+BUTTONS = {"zh": ("确认", "取消"), "en": ("Confirm", "Cancel")}
+DROPPED = {"zh": "已取消，什么都没改。", "en": "Cancelled, nothing changed."}

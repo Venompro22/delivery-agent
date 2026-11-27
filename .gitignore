@@ -24,3 +24,4 @@ certs/
 .env
 .env.*
 .ipv6_last
+graphify-out/

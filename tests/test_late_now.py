@@ -65,7 +65,7 @@ def test_telegram_answers_late_now(client, monkeypatch):
     o = order(-5, driver())
     client.post("/api/telegram/webhook", headers={"X-Telegram-Bot-Api-Secret-Token": "s"},
                 json={"message": {"chat": {"id": 4242}, "text": "شكون المعطلين دابا؟"}})
-    assert o.id in calls[-1]["text"] and "معطل" in calls[-1]["text"]
+    assert o.id in calls[-1]["text"] and "min late" in calls[-1]["text"]   # Darija in, English out
 
 
 def test_alert_is_sent_only_once(client, monkeypatch):
