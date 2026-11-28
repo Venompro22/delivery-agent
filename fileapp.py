@@ -493,84 +493,6 @@ def track_key(order_id: str) -> str:
     return base64.urlsafe_b64encode(mac[:16]).decode().rstrip("=")
 
 
-@app.route("/login", methods=["GET", "POST"])
-def login():
-    if is_logged_in():
-        return redirect(url_for("home"))
-    error = None
-    if request.method == "POST":
-        ip = _visitor_ip()
-        phone = request.form.get("phone", "").strip()
-        if limiter.blocked(ip, phone):
-            error = "Too many attempts. Wait 10 minutes."
-            audit.add("login_blocked", ip, phone or "owner")
-        else:
-            given = request.form.get("password", "")
-            role, uid = None, None
-            if phone:                                 # 👤 driver account
-                user = users.check_login(phone, given)
-                if user and user["status"] == "approved":
-                    role, uid = user["role"], user["id"]
-                elif user and user["status"] == "pending":
-                    error = "Your account is waiting for approval."
-                elif user:
-                    error = "This account is blocked."
-            elif hmac.compare_digest(given.encode(), DASHBOARD_PASSWORD.encode()):
-                # 🔐 Right password, but the owner may still need a 2FA code.
-                if twofa_enabled() and not twofa_check(request.form.get("code", "")):
-                    limiter.fail(ip, phone)
-                    audit.add("2fa_failed", ip, "owner")
-                    return render_template("login.html",
-                                           error="Enter the 6-digit code from your authenticator.",
-                                           need_code=True)
-                role = "owner"
-            if role:
-                limiter.success(phone)
-                session.clear()
-                session["auth"] = True
-                session["role"] = role
-                session["v"] = session_version()
-                if uid:
-                    session["uid"] = uid
-                    session["pv"] = users.get(uid)["pw_version"]
-                session.permanent = True
-                print(f"Login from {ip} as {role}", flush=True)
-                # Owner logins are alert-worthy; driver logins are everyday noise.
-                audit.add("login_owner" if role == "owner" else "login",
-                          ip, phone or "owner", role)
-                return redirect(url_for("home") if role == "owner" else url_for("my_page") if role == "customer" else url_for("driver_page"))
-            if error is None:                  # pending/blocked = right password, not a guess
-                limiter.fail(ip, phone)
-                audit.add("login_failed", ip, phone or "owner")
-                print(f"Wrong password from {ip}" + (f" for {phone}" if phone else ""), flush=True)
-            error = error or "Wrong password."
-    return render_template("login.html", error=error)
-
-
-@app.route("/signup", methods=["GET", "POST"])
-def signup():
-    """👤 Drivers create an account; it waits until the owner approves it."""
-    error = done = None
-    if request.method == "POST":
-        ip = _visitor_ip()
-        if limiter.signup_blocked(ip):
-            error = "Too many new accounts from this network today. Try again tomorrow."
-            audit.add("signup_blocked", ip)
-        else:
-            try:
-                user = users.create(request.form.get("phone", ""), request.form.get("name", ""),
-                                    request.form.get("password", ""),
-                                    role=request.form.get("role", "driver"))
-                limiter.signup_done(ip)
-                audit.add("signup", ip, user["phone"], user["name"])
-                print(f"👤 New driver signup: {user['name']} ({user['phone']}) from {ip} — pending",
-                      flush=True)
-                done = True
-            except ValueError as e:
-                error = str(e)
-    return render_template("signup.html", error=error, done=done, role=request.form.get("role", "driver"))
-
-
 @app.route("/me")
 @login_required
 def my_page():
@@ -1004,36 +926,6 @@ def force_password_change():
     return None
 
 
-@app.route("/account", methods=["GET", "POST"])
-@login_required
-def account():
-    """🔑 A driver changes their own password."""
-    uid = session.get("uid")
-    if not uid:                                   # the owner has no account here
-        return redirect(url_for("home"))
-    user = users.get(uid)
-    ip = client_ip()
-    error = done = None
-    if request.method == "POST":
-        if limiter.blocked(ip, user["phone"]):
-            error = "Too many attempts. Wait 10 minutes."
-        elif not users.check_login(user["phone"], request.form.get("current", "")):
-            limiter.fail(ip, user["phone"])
-            audit.add("password_change_failed", ip, user["phone"])
-            error = "Current password is wrong."
-        else:
-            try:
-                users.set_password(uid, request.form.get("new", ""))
-                session["pv"] = users.get(uid)["pw_version"]      # this device stays logged in
-                audit.add("password_changed", ip, user["phone"])
-                done = True
-            except ValueError as e:
-                error = str(e)
-    user = users.get(uid)
-    return render_template("account.html", user=public(user), error=error, done=done,
-                           must_change=bool(user["must_change"]))
-
-
 @app.route("/api/drivers/<user_id>/reset-password", methods=["POST"])
 @owner_required
 def reset_driver_password(user_id):
@@ -1046,19 +938,6 @@ def reset_driver_password(user_id):
     res = jsonify({"ok": True, "password": temp})
     res.headers["Cache-Control"] = "no-store"     # never keep a password in any cache
     return res
-
-
-@app.route("/api/security-log")
-@owner_required
-def security_log():
-    """📜 The last 50 security events, newest first."""
-    return jsonify(audit.recent(50))
-
-
-@app.route("/logout", methods=["POST"])
-def logout():
-    session.clear()
-    return redirect(url_for("login"))
 
 
 @app.route("/")
@@ -1736,18 +1615,6 @@ def _top_products(sold: dict) -> list:
     top = sorted(sold.values(), key=lambda p: (-p["qty"], -p["revenue"]))[:TOP_PRODUCTS]
     return [{**p, "revenue": round(p["revenue"], 2), "share": round(p["qty"] / total * 100)} for p in top]
 
-@app.route("/api/logout-all", methods=["POST"])
-@owner_required
-def logout_all():
-    """🚪 Log out everyone (owner + all drivers) right now."""
-    audit.add("logout_all", client_ip(), "owner")
-    new = session_version() + 1
-    with open(SESSION_VERSION_PATH, "w") as f:
-        f.write(str(new))
-    filesync.persist(SESSION_VERSION_PATH)
-    session.clear()
-    print(f"🚪 Logged everyone out (session version {new})", flush=True)
-    return jsonify({"ok": True})
 
 def _clean_gps_point(p, now):
     """(lat, lng, at) for one batch point, or None when it is unusable.
@@ -2066,53 +1933,6 @@ def track_proof(order_id):
     return proof_response(order.proof)
 
 
-@app.route("/security/2fa", methods=["GET", "POST"])
-@owner_required
-def setup_2fa():
-    """🔐 Turn two-factor on or off for the owner account."""
-    if request.method == "POST" and request.form.get("action") == "disable":
-        if os.path.exists(TWOFA_PATH):
-            os.remove(TWOFA_PATH)
-            filesync.persist(TWOFA_PATH)
-        audit.add("2fa_disabled", client_ip(), "owner")
-        return render_template("twofa.html", enabled=False, message="Two-factor is now off.")
-
-    if request.method == "POST" and request.form.get("action") == "enable":
-        secret = session.get("pending_2fa_secret")
-        if not secret:
-            return redirect(url_for("setup_2fa"))
-        if not pyotp.TOTP(secret).verify(request.form.get("code", "").strip(), valid_window=1):
-            return render_template("twofa.html", enabled=False, secret=secret,
-                                   qr=_twofa_qr(secret),
-                                   message="That code didn't match — try the current one.")
-        # Eight one-time recovery codes, shown once and stored only as hashes.
-        plain = [secrets.token_hex(4) for _ in range(8)]
-        twofa_save({"secret": secret,
-                    "recovery": [generate_password_hash(c) for c in plain]})
-        session.pop("pending_2fa_secret", None)
-        audit.add("2fa_enabled", client_ip(), "owner")
-        return render_template("twofa.html", enabled=True, recovery=plain,
-                               message="Two-factor is on. Save these recovery codes now.")
-
-    if twofa_enabled():
-        return render_template("twofa.html", enabled=True)
-
-    # Fresh secret, held in the session until the first code proves it works.
-    secret = pyotp.random_base32()
-    session["pending_2fa_secret"] = secret
-    return render_template("twofa.html", enabled=False, secret=secret, qr=_twofa_qr(secret))
-
-
-def _twofa_qr(secret: str) -> str:
-    """The setup QR as an inline data URI, so no image file is ever written."""
-    import io
-    import qrcode
-    uri = pyotp.TOTP(secret).provisioning_uri(name="owner", issuer_name="智送管家")
-    buf = io.BytesIO()
-    qrcode.make(uri).save(buf, format="PNG")
-    return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
-
-
 DEMO_MAX_AGE = 24 * 3600          # demo orders are rebuilt once a day
 
 
@@ -2213,31 +2033,6 @@ def demo_login():
     audit.add("demo_open", client_ip(), "viewer")
     ensure_demo_data()
     return redirect(url_for("home"))
-
-
-@app.route("/panic/<mode>")
-def panic_switch(mode):
-    """🔴 Emergency switch, opened from a signed bookmark on your phone.
-
-    No login: a stolen session must never be able to undo a lockdown, and you
-    must be able to trigger it from any device. The HMAC key is the only proof.
-    """
-    if mode not in PANIC_MODES:
-        return jsonify({"ok": False, "error": "unknown mode"}), 404
-    given = request.args.get("k", "").encode()
-    if not hmac.compare_digest(given, panic_key(mode).encode()):
-        return jsonify({"ok": False, "error": "not found"}), 404   # same answer: no hints
-
-    set_panic_mode(mode)
-    audit.add("panic_" + mode, client_ip(), "owner")
-    if mode != "normal":
-        # Kick every existing session out as well.
-        new = session_version() + 1
-        with open(SESSION_VERSION_PATH, "w") as f:
-            f.write(str(new))
-        filesync.persist(SESSION_VERSION_PATH)
-    print(f"\U0001f534 PANIC MODE: {mode}", flush=True)
-    return f"<h1>Mode: {mode}</h1><p>Saved.</p>"
 
 
 @app.route("/track/<order_id>")
@@ -2731,6 +2526,9 @@ from routes import pwa  # noqa: E402,F401
 
 
 from routes import telegram  # noqa: E402,F401
+
+
+from routes import auth  # noqa: E402,F401
 
 
 if __name__ == "__main__":
