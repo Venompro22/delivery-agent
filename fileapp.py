@@ -673,66 +673,9 @@ def customer_cancel_order(order_id):
     return jsonify({"ok": True})
 
 
-@app.route("/api/orders/<order_id>/confirm", methods=["POST"])
-@owner_required
-def confirm_order(order_id):
-    """The shop accepts a customer's order: it joins the route like any other order."""
-    order = store.get(order_id)
-    if not order:
-        return jsonify({"ok": False}), 404
-    if order.status != OrderStatus.REQUESTED:
-        return bad_request("this order is not waiting for confirmation")
-    order.status = OrderStatus.PENDING
-    nearest = find_nearest_driver(users, order.lat, order.lng)
-    if nearest and not order.driver_id:
-        order.driver_id = nearest["id"]
-    store.save()
-    return jsonify({"ok": True})
-
-
 import requests  # noqa: E402
 from collections import OrderedDict  # noqa: E402
 from geo import wgs84_to_gcj02, gcj02_to_wgs84  # noqa: E402
-
-_ROAD_CACHE: "OrderedDict[str, list]" = OrderedDict()
-
-
-@app.route("/api/road")
-@login_required
-def road_path():
-    """🛣️ The road between points, so routes follow streets instead of straight lines.
-    Points come and go in GCJ-02 (Gaode); OSRM works in WGS-84. Cached. If OSRM is slow
-    or down we answer the straight line, so the map never breaks."""
-    try:
-        pts = [tuple(float(v) for v in p.split(",")) for p in request.args.get("pts", "").split(";") if p]
-    except ValueError:
-        return bad_request("pts must look like lat,lng;lat,lng")
-    if not 2 <= len(pts) <= 25 or any(len(p) != 2 or not (-90 <= p[0] <= 90 and -180 <= p[1] <= 180) for p in pts):
-        return bad_request("send 2 to 25 valid points")
-    key = ";".join(f"{a:.5f},{b:.5f}" for a, b in pts)
-    if key in _ROAD_CACHE:
-        _ROAD_CACHE.move_to_end(key)
-        return jsonify({"ok": True, "path": _ROAD_CACHE[key], "road": True})
-    coords = ";".join("{1:.6f},{0:.6f}".format(*gcj02_to_wgs84(a, b)) for a, b in pts)
-    try:
-        r = requests.get(f"https://router.project-osrm.org/route/v1/driving/{coords}",
-                         params={"overview": "full", "geometries": "geojson"}, timeout=4)
-        line = r.json()["routes"][0]["geometry"]["coordinates"]       # [[lng, lat], ...] in WGS-84
-        path = [[round(v, 6) for v in wgs84_to_gcj02(lat, lng)] for lng, lat in line]
-    except Exception:
-        return jsonify({"ok": True, "path": [list(p) for p in pts], "road": False})
-    _ROAD_CACHE[key] = path
-    if len(_ROAD_CACHE) > 500:
-        _ROAD_CACHE.popitem(last=False)
-    return jsonify({"ok": True, "path": path, "road": True})
-
-
-@app.route("/api/customers/quiet")
-@owner_required
-def quiet_customers():
-    """🧠 Regulars who went quiet (usually every ~7 days, nothing for 14): bring them back."""
-    import customers
-    return jsonify({"ok": True, "customers": customers.quiet(orders_for_request(), time.time())[:10]})
 
 
 # 👀 "Viewer" sessions for demos: a sandbox where visitors can try the AI and play
@@ -855,304 +798,6 @@ def force_password_change():
     return None
 
 
-@app.route("/")
-@owner_required
-def home():
-    return render_template("dashboard.html", is_owner=current_role() == "owner")
-
-
-@app.route("/api/route")
-@login_required
-def api_route():
-    mine = my_orders()
-    me = driver_for(session.get("uid"))
-    route = optimize_route(me, mine, geo)
-    summary = route_summary(route)
-    late_ids = set(summary.get("late_orders", []))
-    delivered = sum(1 for o in mine if o.status == OrderStatus.DELIVERED)
-    # Badge: orders assigned to me that arrived after I last looked.
-    new_count = 0
-    uid = session.get("uid")
-    if uid and current_role() != "owner":
-        seen = users.get_seen_at(uid)
-        new_count = sum(1 for o in mine
-                        if o.driver_id == uid
-                        and (o.created_at or 0) > seen
-                        and o.status == OrderStatus.PENDING)
-    data = {
-        "driver": {"lat": me.lat, "lng": me.lng, "name": me.name},
-        "summary": {
-            "stops": summary["stops"],
-            "total_km": summary["total_km"],
-            "finish": fmt(summary.get("finish_epoch")),
-            "late_count": len(late_ids),
-            "delivered": delivered,
-            "new_count": new_count,
-            "requested_count": sum(1 for o in orders_for_request() if o.status == OrderStatus.REQUESTED)
-                               if current_role() == "owner" else 0,
-        },
-        "stops": [
-            {
-                "sequence": o.sequence,
-                "id": o.id,
-                "track_key": track_key(o.id),
-                "driver_id": o.driver_id,
-                "name": o.customer_name,
-                "phone": o.phone,
-                "note": o.note,
-                "lat": o.lat,
-                "lng": o.lng,
-                "eta": fmt(o.eta_epoch),
-                "leg_km": o.leg_distance_km,
-                "promise": fmt(o.promised_by) if o.promised_by else None,
-                "late": o.id in late_ids,
-                "eta_epoch": o.eta_epoch,
-                "promised_epoch": o.promised_by,
-                "price": o.price,                     # yuan to collect (None = not set)
-                "paid": o.paid_at is not None,
-                "pay_method": o.pay_method or "",
-            }
-            for o in route
-        ],
-    }
-    if current_role() == "owner":                 # 🗺️ every driver on the owner's map
-        now = time.time()
-        data["drivers"] = [
-            {"id": u["id"], "name": u["name"], "lat": u["lat"], "lng": u["lng"],
-             "age": round(now - (u["located_at"] or 0))}
-            for u in users.all() if u["status"] == "approved" and u.get("lat") is not None]
-    return jsonify(data)
-
-
-@app.route("/api/orders", methods=["POST"])
-@owner_required
-def add_order():
-    body = request.get_json(silent=True) or {}
-
-    # 1) Required fields must not be empty.
-    name = str(body.get("name", "")).strip()
-    lat_raw = str(body.get("lat", "")).strip()
-    lng_raw = str(body.get("lng", "")).strip()
-    if not name or not lat_raw or not lng_raw:
-        return bad_request("name, lat and lng are required")
-
-    # 2) lat/lng must be real numbers in a valid range.
-    try:
-        lat = float(lat_raw)
-        lng = float(lng_raw)
-    except ValueError:
-        return bad_request("lat and lng must be numbers")
-    if not (-90 <= lat <= 90 and -180 <= lng <= 180):
-        return bad_request("lat/lng out of range")
-
-    # 3) Phone is optional, but if given it must look like a phone number.
-    phone = str(body.get("phone", "")).strip()
-    if phone and not re.fullmatch(r"[0-9+\-\s()]{6,20}", phone):
-        return bad_request("phone looks invalid")
-
-    # 4) Note (address details) is optional, max 200 characters.
-    note = str(body.get("note", "")).strip()
-    if len(note) > 200:
-        return bad_request("note is too long (max 200 characters)")
-
-    # 4b) Price is optional: the order total in yuan.
-    price = None
-    price_raw = str(body.get("price", "")).strip()
-    if price_raw:
-        try:
-            price = round(float(price_raw), 2)
-        except ValueError:
-            return bad_request("price must be a number")
-        if not (0 <= price <= 100000):            # also rejects nan and inf
-            return bad_request("price is out of range")
-
-    # 5) Promise is optional, but if given it must be a positive number.
-    kw = {}
-    promise_raw = str(body.get("promise_minutes", "")).strip()
-    if promise_raw:
-        try:
-            minutes = float(promise_raw)
-        except ValueError:
-            return bad_request("promise must be a number of minutes")
-        if minutes <= 0:
-            return bad_request("promise must be positive")
-        kw["promised_by"] = time.time() + minutes * 60
-
-    # 6) Products are optional. When picked, the server prices them from the catalog plus the
-    #    shop's delivery fee, and any price typed in the browser is ignored.
-    raw_items = body.get("items")
-    if raw_items not in (None, []):
-        items, subtotal, error = catalog_items(raw_items)
-        if error:
-            return bad_request(error)
-        fee = delivery_fee_for(subtotal, settings_store().all())
-        price = round(subtotal + fee, 2)
-        summary = ", ".join(f"{i['name']} x{i['qty']}" for i in items) + (f", delivery {fee:g}" if fee else "")
-        note = (f"{note} | {summary}" if note else summary)[:200]
-        kw["items"] = json.dumps(items, ensure_ascii=False)
-
-    lat, lng, snapped = _snap_to_learned(phone, lat, lng)
-    order = Order(customer_name=name, lat=lat, lng=lng, phone=phone, note=note, price=price, **kw)
-    # Auto-assign to the nearest approved driver that has a GPS position.
-    # If none is available, driver_id stays None and the order sits in the pool.
-    nearest = find_nearest_driver(users, order.lat, order.lng)
-    if nearest:
-        order.driver_id = nearest["id"]
-    _store_add(order)
-    url = f"{request.host_url.rstrip('/')}/track/{order.id}?k={track_key(order.id)}"
-    reply = f"好的，订单收到啦！点这里实时查看配送进度：{url}"
-    return jsonify({"ok": True, "id": order.id, "track_url": url, "reply": reply, "snapped": snapped})
-
-
-@app.route("/api/orders/<order_id>/deliver", methods=["POST"])
-@login_required
-def deliver_order(order_id):
-    order = store.get(order_id)
-    if order and visible_to_me(order):            # 🛡️ never someone else's order (IDOR)
-        if order.status != OrderStatus.PENDING:
-            return bad_request("order is not open")
-        if order.driver_id is None and session.get("uid"):
-            order.driver_id = session["uid"]      # a pool order belongs to whoever delivers it
-        _mark_delivered(order)
-        store.save()
-        _learn_place(order)
-        print(f"✅ Delivered: {order.customer_name}", flush=True)
-        return jsonify({"ok": True})
-    return jsonify({"ok": False}), 404
-
-PAY_METHODS = ("cash", "wechat", "alipay")
-
-
-@app.route("/api/orders/<order_id>/paid", methods=["POST"])
-@login_required
-def mark_paid(order_id):
-    """Record that the customer paid (cash / wechat / alipay), or undo it with "none"."""
-    order = store.get(order_id)
-    if not order or not visible_to_me(order):      # never someone else's order (IDOR)
-        return jsonify({"ok": False}), 404
-    method = str((request.get_json(silent=True) or {}).get("method", "")).strip().lower()
-    if method == "none":
-        order.pay_method, order.paid_at = "", None
-    elif method in PAY_METHODS:
-        order.pay_method, order.paid_at = method, time.time()
-    else:
-        return bad_request("method must be cash, wechat, alipay or none")
-    store.save()
-    return jsonify({"ok": True, "paid": order.paid_at is not None, "method": order.pay_method})
-
-
-@app.route("/api/orders/<order_id>/proof", methods=["POST"])
-@login_required
-def upload_proof(order_id):
-    """📷 The driver uploads a delivery photo. Stored outside static/, login-only."""
-    order = store.get(order_id)
-    if not order or not visible_to_me(order):     # 🛡️ never someone else's order (IDOR)
-        return jsonify({"ok": False}), 404
-    if order.status != OrderStatus.DELIVERED:
-        return bad_request("photo is only for a delivered order")
-
-    file = request.files.get("photo")
-    if not file or not file.filename:
-        return bad_request("no photo uploaded")
-
-    ext = ALLOWED_PROOF_TYPES.get(file.mimetype)
-    if not ext:
-        return bad_request("photo must be JPEG, PNG or WebP")
-
-    # Read with a hard size cap, so a huge file can't fill the disk.
-    data = file.read(MAX_PROOF_BYTES + 1)
-    if len(data) > MAX_PROOF_BYTES:
-        return bad_request("photo is too large (max 5 MB)")
-
-    filename = f"{order_id}{ext}"                 # order_id is a random uuid; never the user's name
-    with open(os.path.join(PROOF_DIR, filename), "wb") as f:
-        f.write(data)
-    photo_store().put(filename, data, file.mimetype)
-    order.proof = filename
-    store.save()
-    print(f"📷 Proof saved: {order.customer_name} ({len(data)} bytes)", flush=True)
-    return jsonify({"ok": True})
-
-
-@app.route("/api/orders/<order_id>/proof", methods=["GET"])
-@login_required
-def get_proof(order_id):
-    """📷 Serve a delivery photo — login-only, and never someone else's order."""
-    order = store.get(order_id)
-    if not order or not visible_to_me(order):     # 🛡️ IDOR protection
-        return jsonify({"ok": False}), 404
-    if not order.proof:
-        return jsonify({"ok": False, "error": "no photo"}), 404
-    # send_from_directory is safe: it refuses paths that escape PROOF_DIR.
-    return proof_response(order.proof)
-
-
-@app.route("/api/orders/<order_id>/assign", methods=["POST"])
-@owner_required
-def assign_order(order_id):
-    """👤 Give an order to a driver, or back to the pool (driver_id = null)."""
-    order = store.get(order_id)
-    if not order:
-        return jsonify({"ok": False}), 404
-    driver_id = (request.get_json(silent=True) or {}).get("driver_id")
-    if driver_id is not None:
-        u = users.get(str(driver_id))
-        if not u or u["status"] != "approved":
-            return bad_request("unknown or not approved driver")
-        driver_id = u["id"]
-    order.driver_id = driver_id
-    store.save()
-    print(f"👤 Assigned: {order.customer_name} → {driver_id or 'pool'}", flush=True)
-    return jsonify({"ok": True})
-
-
-@app.route("/api/orders/<order_id>/cancel", methods=["POST"])
-@owner_required
-def cancel_order(order_id):
-    order = store.get(order_id)
-    if not order:
-        return jsonify({"ok": False}), 404
-    if order.status == OrderStatus.DELIVERED:
-        return bad_request("order is already delivered")
-    order.status = OrderStatus.CANCELLED
-    store.save()
-    print(f"❌ Cancelled: {order.customer_name}", flush=True)
-    return jsonify({"ok": True})
-
-@app.route("/api/orders/<order_id>", methods=["PUT"])
-@owner_required
-def edit_order(order_id):
-  order = store.get(order_id)
-  if not order:
-    return jsonify({"ok": False}), 404
-  body = request.get_json(silent=True) or {}
-  name = str(body.get("name", order.customer_name)).strip()
-  phone = str(body.get("phone", order.phone)).strip()
-  note = str(body.get("note", order.note)).strip()
-  if not name:
-    return bad_request("name is required")
-  if phone and not re.fullmatch(r"[0-9+\-\s()]{6,20}", phone):
-    return bad_request("phone looks invalid")
-  if len(note) > 200:
-    return bad_request("note is too long (max 200 characters)")
-  if "price" in body:                         # empty value clears the price
-    raw = str(body.get("price") or "").strip()
-    if raw:
-      try:
-        new_price = round(float(raw), 2)
-      except ValueError:
-        return bad_request("price must be a number")
-      if not (0 <= new_price <= 100000):
-        return bad_request("price is out of range")
-      order.price = new_price
-    else:
-      order.price = None
-  order.customer_name = name
-  order.phone = phone
-  order.note = note
-  store.save()
-  print(f"✏️ Edited: {order.customer_name}", flush=True)
-  return jsonify({"ok": True})
 _pending = None
 
 
@@ -1199,104 +844,11 @@ def settings_store() -> SettingsStore:
     return _settings
 
 
-@app.route("/api/settings/shop")
-@owner_required
-def get_shop_settings():
-    return jsonify(settings_store().all())
-
-
-@app.route("/api/settings/shop", methods=["PUT"])
-@owner_required
-def update_shop_settings():
-    values, error = clean_settings(request.get_json(silent=True) or {})
-    if error:
-        return bad_request(error)
-    return jsonify({"ok": True, "settings": settings_store().update(**values)})
-
-
 @app.route("/api/me/shop")
 @login_required
 def shop_info():
     """What customers need to know before ordering: delivery fee and minimum order."""
     return jsonify(settings_store().all())
-
-
-@app.route("/products")
-@owner_required
-def products_page():
-    return render_template("products.html")
-
-
-@app.route("/api/products")
-@login_required
-def list_products():
-    """The catalog. The owner also sees hidden products (?all=1)."""
-    show_hidden = current_role() == "owner" and request.args.get("all") == "1"
-    return jsonify(product_store().all(include_hidden=show_hidden))
-
-
-@app.route("/api/products", methods=["POST"])
-@owner_required
-def add_product():
-    body = request.get_json(silent=True) or {}
-    fields, error = clean_product(body.get("name", ""), body.get("price", ""), body.get("unit", ""))
-    if error:
-        return bad_request(error)
-    product = product_store().create(fields["name"], fields["price"], fields["unit"])
-    return jsonify({"ok": True, "product": product})
-
-
-@app.route("/api/products/<product_id>", methods=["PUT"])
-@owner_required
-def edit_product(product_id):
-    if not product_store().get(product_id):
-        return jsonify({"ok": False}), 404
-    body = request.get_json(silent=True) or {}
-    fields, error = clean_product(body.get("name"), body.get("price"), body.get("unit"))
-    if error:
-        return bad_request(error)
-    if "active" in body:
-        fields["active"] = bool(body["active"])
-    return jsonify({"ok": True, "product": product_store().update(product_id, **fields)})
-
-
-@app.route("/orders")
-@owner_required
-def orders_page():
-    return render_template("orders.html")
-
-
-@app.route("/api/orders")
-@owner_required
-def list_orders():
-    """Every order, newest first — delivered ones included."""
-    today = datetime.now().date()
-    items = []
-    for o in sorted(orders_for_request(), key=lambda x: x.created_at or 0, reverse=True):
-        created = datetime.fromtimestamp(o.created_at) if o.created_at else None
-        items.append({
-            "id": o.id,
-            "track_key": track_key(o.id),
-            "driver_id": o.driver_id,
-            "name": o.customer_name,
-            "phone": o.phone,
-            "note": o.note,
-            "lat": o.lat,
-            "lng": o.lng,
-            "status": o.status.value,
-            "created": created.strftime("%m-%d %H:%M") if created else "--",
-            "today": bool(created and created.date() == today),
-            "promise": fmt(o.promised_by) if o.promised_by else None,
-            "delivered": fmt(o.delivered_at) if o.delivered_at else None,
-            "minutes": round((o.delivered_at - o.created_at) / 60)
-                       if o.delivered_at and o.created_at else None,
-            "has_proof": bool(o.proof),       # 📷 is there a delivery photo?
-            "rating": o.rating,               # ⭐ customer rating, if any
-            "price": o.price,                 # order total in yuan (None = not set)
-            "pay_method": o.pay_method or "",
-            "paid": o.paid_at is not None,
-        })
-    return jsonify(items)
 
 
 def public_note(order) -> str:
@@ -1420,8 +972,6 @@ from eta_model import EtaModel, legs_from_orders  # noqa: E402
 # ---------- Learned delivery spots: where each customer really receives orders ----------
 from places import PlaceStore  # noqa: E402
 
-LEARN_MAX_KM = 0.3     # driver GPS further than this from the pin: probably not at the door
-SNAP_MAX_KM = 0.5      # new pin further than this from the learned spot: a different address
 _places = None
 
 
@@ -1432,28 +982,6 @@ def place_store() -> PlaceStore:
     if _places is None or _places.path != path:
         _places = PlaceStore(path)
     return _places
-
-
-def _learn_place(order) -> None:
-    """The driver just delivered: remember where they really were, for this customer's phone."""
-    from geo import haversine_km
-    if not order.phone or (order.note or "").startswith(DEMO_TAG) or not session.get("uid"):
-        return
-    u = users.get(session["uid"]) or {}
-    if u.get("lat") is None or time.time() - (u.get("located_at") or 0) > ARRIVED_FRESH_S:
-        return                                   # no fresh GPS: nothing reliable to learn
-    if haversine_km(u["lat"], u["lng"], order.lat, order.lng) > LEARN_MAX_KM:
-        return
-    place_store().learn(order.phone, u["lat"], u["lng"])
-
-
-def _snap_to_learned(phone, lat, lng):
-    """Move a sloppy pin onto the spot drivers really delivered to. Returns (lat, lng, snapped)."""
-    from geo import haversine_km
-    spot = place_store().get(phone) if phone else None
-    if spot and haversine_km(spot[0], spot[1], lat, lng) <= SNAP_MAX_KM:
-        return round(spot[0], 6), round(spot[1], 6), True
-    return lat, lng, False
 
 
 # ---------- Customer live view: the driver coming, the road once they are next ----------
@@ -1631,6 +1159,10 @@ from routes.demo import DEMO_CUSTOMER_TTL, _cleanup_demo_customers, _ip_location
 
 import routes.driver  # noqa: E402,F401
 from routes.driver import _watch, gps_watch, late_now  # noqa: E402,F401
+
+
+import routes.orders  # noqa: E402,F401
+from routes.orders import PAY_METHODS, _learn_place, _snap_to_learned  # noqa: E402,F401
 
 
 if __name__ == "__main__":
