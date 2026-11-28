@@ -1,0 +1,24 @@
+#!/bin/sh
+# Refuses a push when work is left uncommitted or a test fails.
+# Enable once per clone with: git config core.hooksPath .githooks
+# Skip in an emergency with: git push --no-verify
+
+cd "$(git rev-parse --show-toplevel)" || exit 1
+
+# 1) Nothing left behind: modified tracked files or new files git does not ignore
+left=$(git status --porcelain)
+if [ -n "$left" ]; then
+  echo "❌ Push stopped: these changes are not committed yet:"
+  echo "$left"
+  echo "   Commit them (or stash them) first, then push again."
+  exit 1
+fi
+
+# 2) The full test suite must pass
+if [ -x .venv/bin/python ]; then PY=.venv/bin/python; else PY=python3; fi
+echo "🧪 Running tests before push..."
+if ! "$PY" -m pytest -q -x --no-header -p no:cacheprovider; then
+  echo "❌ Push stopped: a test failed. Fix it, commit, then push again."
+  exit 1
+fi
+echo "✅ All tests passed, pushing."

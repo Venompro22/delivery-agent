@@ -1667,7 +1667,8 @@ def retrain_model():
     return len(examples), real, len(examples) - len(DATA) - real
 
 
-if os.environ.get("SKIP_AUTO_RETRAIN") != "1":
+# Train on start; even when skipping is asked (tests), a fresh clone has no model file yet
+if os.environ.get("SKIP_AUTO_RETRAIN") != "1" or not os.path.exists(MODEL_PATH):
     try:   # on every start/deploy, include the feedback collected on this server
         _n, _fb, _syn = retrain_model()
         print(f"🧠 Intent model ready: {_n} examples ({_fb} real feedback + {_syn} synthetic)", flush=True)
