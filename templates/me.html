@@ -87,6 +87,7 @@
             next: 'You are next: the driver is heading to you', before: n => `${n} stop${n === 1 ? '' : 's'} before you`,
             arrived: 'Your driver is here! Please come down', arrivedShort: 'Here!', soon: 'Any moment', mins: m => `${m} min`,
             track: 'Track', me: 'You are here', other: '中文',
+            lastSeen: m => `Driver last seen ${m} min ago`, route: "Driver's route", noRoute: 'No route was recorded for this order',
             aiPh: 'Or just type it: 2 water to bldg 5 room 302', aiBtn: 'Read',
             aiGot: list => `Understood: ${list}. Check the cart below, then press Place order.`,
             aiNone: 'Sorry, I could not find these products. Pick them below.', aiSkip: t => ` Not found: ${t}.`,
@@ -103,6 +104,7 @@
             next: '下一站就是你，骑手正在赶来', before: n => `前面还有 ${n} 站`,
             arrived: '司机到啦，下楼取一下～', arrivedShort: '到啦！', soon: '马上到', mins: m => `${m} 分钟`,
             track: '查看进度', me: '你在这', other: 'EN',
+            lastSeen: m => `司机位置 ${m} 分钟前更新`, route: '配送路线', noRoute: '这个订单没有记录配送路线',
             aiPh: '或者直接打字：两桶水送到5号楼302', aiBtn: '识别',
             aiGot: list => `识别到：${list}。请核对下面的购物车，再点下单。`,
             aiNone: '没找到这些商品，请在下面选择～', aiSkip: t => ` 没找到：${t}。`,
@@ -167,7 +169,7 @@
       dLng = (dLng * 180) / (a / s * Math.cos(rad) * PI);
       return [lat + dLat, lng + dLng];
     }
-    let meDot = null, meRing = null, myPos = null;
+    let meDot = null, meRing = null, myPos = null, pastLn = null, pastHome = null;
     function showMe(lat, lng, acc) {
       myPos = [lat, lng];
       if (!meDot) {
@@ -185,13 +187,30 @@
       }, () => {}, { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 });
     }
     $('locate').onclick = () => { userMoved = true; locate(true); };
-    $('focus').onclick = () => { userMoved = false; lastFrame = ''; loadLive(); };
+    $('focus').onclick = () => {
+      userMoved = false; lastFrame = '';
+      [pastLn, pastHome].forEach(l => { if (l) map.removeLayer(l); });   // back from a history route
+      pastLn = pastHome = null;
+      loadLive();
+    };
     try {
       navigator.permissions.query({ name: 'geolocation' }).then(p => { if (p.state === 'granted') locate(false); }).catch(() => {});
     } catch (e) {}
 
     // ---------- Live: the order on its way, the driver moving, the road once you are next ----------
     let activeOrder = null, driverMk = null, homeMk = null, roadLn = null, trailLn = null, lastFrame = '';
+    let carHeading = null;
+    function bearing(a, b) {
+      const r = x => x * Math.PI / 180;
+      const y = Math.sin(r(b[1] - a[1])) * Math.cos(r(b[0]));
+      const x = Math.cos(r(a[0])) * Math.sin(r(b[0])) - Math.sin(r(a[0])) * Math.cos(r(b[0])) * Math.cos(r(b[1] - a[1]));
+      return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+    }
+    function turnCar(from, to) {
+      if (map.distance(from, to) > 3) carHeading = bearing([from.lat, from.lng], to);   // ignore GPS jitter
+      const arrow = driverMk && driverMk.getElement() && driverMk.getElement().querySelector('.mp-car-arrow');
+      if (arrow && carHeading !== null) arrow.style.transform = `rotate(${carHeading}deg)`;
+    }
     function glide(marker, to) {
       const from = marker.getLatLng(), t0 = performance.now();
       (function step(now) {
@@ -200,9 +219,15 @@
         if (k < 1) requestAnimationFrame(step);
       })(t0);
     }
+    function clearDriver() {
+      [driverMk, roadLn, trailLn].forEach(l => { if (l) map.removeLayer(l); });
+      driverMk = roadLn = trailLn = null;
+      carHeading = null;
+    }
     function clearLive() {
-      [driverMk, homeMk, roadLn, trailLn].forEach(l => { if (l) map.removeLayer(l); });
-      driverMk = homeMk = roadLn = trailLn = null;
+      clearDriver();
+      if (homeMk) map.removeLayer(homeMk);
+      homeMk = null;
     }
     function drawLive(o) {
       activeOrder = o;
@@ -210,9 +235,16 @@
       const dest = [o.lat, o.lng], drv = o.driver;
       if (!homeMk) homeMk = L.marker(dest, { icon: L.divIcon({ className: '', html: '<div class="mp-home"></div>', iconSize: [30, 30], iconAnchor: [15, 15] }) }).addTo(map);
       else homeMk.setLatLng(dest);
-      if (!drv) return;
-      if (!driverMk) driverMk = L.marker(drv, { zIndexOffset: 1000, icon: L.divIcon({ className: '', html: '<div class="mp-car"></div>', iconSize: [36, 36], iconAnchor: [18, 18] }) }).addTo(map);
-      else glide(driverMk, drv);
+      if (!drv) {                       // not next yet (or still at the last door): the server sends no driver
+        clearDriver();
+        const frame = 'h' + o.id;
+        if (!userMoved && frame !== lastFrame) { lastFrame = frame; map.setView(dest, 16); }
+        return;
+      }
+      if (!driverMk) driverMk = L.marker(drv, { zIndexOffset: 1000, icon: L.divIcon({ className: '',
+        html: '<div class="mp-car"><svg class="mp-car-arrow" viewBox="0 0 24 24"><path d="M12 4 18 19 12 15.5 6 19Z" fill="#fff"/></svg></div>',
+        iconSize: [36, 36], iconAnchor: [18, 18] }) }).addTo(map);
+      else { turnCar(driverMk.getLatLng(), drv); glide(driverMk, drv); }
       if (trailLn) { map.removeLayer(trailLn); trailLn = null; }
       if (roadLn) { map.removeLayer(roadLn); roadLn = null; }
       if (o.trail && o.trail.length) trailLn = L.polyline([...o.trail, drv], { color: '#94a3b8', weight: 4, dashArray: '2 9', lineCap: 'round', interactive: false }).addTo(map);
@@ -234,11 +266,12 @@
       const m = o.eta_epoch ? Math.round((o.eta_epoch - Date.now() / 1000) / 60) : null;
       const big = o.arrived ? T.arrivedShort : (m === null ? '--' : (m <= 1 ? T.soon : T.mins(m)));
       const sub = o.arrived ? T.arrived : (o.next ? T.next : (o.stops_before !== null && o.stops_before !== undefined ? T.before(o.stops_before) : T.onWay));
+      const seen = o.driver && o.driver_age_s > 60 ? `<div class="mp-seen">${T.lastSeen(Math.round(o.driver_age_s / 60))}</div>` : '';
       return `<div class="mp-live ${o.arrived ? 'here' : ''}">
         <div class="mp-live-top"><span class="mp-dot ${o.arrived ? 'green' : 'blue'}"></span><b>${T.onWay}</b>
           <span class="mp-at">${T.eta} ${esc(o.eta || '--')}</span></div>
         <div class="mp-big">${big}</div>
-        <div class="mp-sub">${sub}</div>
+        <div class="mp-sub">${sub}</div>${seen}
         ${o.note ? `<div class="mp-note">${esc(o.note)}</div>` : ''}
         <a class="mp-btn" href="${esc(o.track_url)}">${T.track}</a></div>`;
     }
@@ -263,11 +296,26 @@
             <div class="mp-time">${new Date(o.created_at * 1000).toLocaleString()}${o.price != null ? ' · ¥' + yuan(o.price) : ''}</div>
           </a>
           <div class="mp-item-side">
+            ${o.has_trail ? `<button class="mp-chip small" type="button" onclick="showRoute('${esc(o.id)}')">${T.route}</button>` : ''}
             ${o.items && o.items.length ? `<button class="mp-chip small" type="button" onclick="orderAgain('${esc(o.id)}')">${T.again}</button>` : ''}
             <span class="mp-tag ${esc(o.status)}">${T.st[o.status] || esc(o.status)}</span>
           </div>
         </div>`).join('') || `<div class="mp-empty">${T.empty}</div>`;
       if (!pin && !myPos && lastOrders.length) setPin(lastOrders[0].lat, lastOrders[0].lng);
+    }
+
+    async function showRoute(id) {
+      let d;
+      try { d = await (await fetch(`/api/me/orders/${encodeURIComponent(id)}/trail`)).json(); } catch (e) { return; }
+      [pastLn, pastHome].forEach(l => { if (l) map.removeLayer(l); });
+      pastLn = pastHome = null;
+      if (!d.ok || !d.trail.length) { alert(T.noRoute); return; }
+      const dest = [d.lat, d.lng];
+      pastLn = L.polyline([...d.trail, dest], { color: '#64748b', weight: 5, lineCap: 'round', lineJoin: 'round', interactive: false }).addTo(map);
+      pastHome = L.circleMarker(dest, { radius: 7, color: '#fff', weight: 3, fillColor: '#16a34a', fillOpacity: 1, interactive: false }).addTo(map);
+      userMoved = true;                                     // keep this view until "focus" is pressed
+      map.fitBounds(pastLn.getBounds().pad(0.2), { maxZoom: 17 });
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
     const qty = {};

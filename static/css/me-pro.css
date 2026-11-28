@@ -94,6 +94,9 @@ html, body { margin: 0; height: 100%; background: #0b1220; color: #e5e7eb;
 .mp-car { width: 36px; height: 36px; border-radius: 50%; border: 3px solid #fff; box-shadow: 0 6px 18px rgba(37, 99, 235, .55);
   background: radial-gradient(circle at 50% 40%, #60a5fa, #1d4ed8); animation: mp-car 1.6s ease-in-out infinite; }
 @keyframes mp-car { 50% { box-shadow: 0 0 0 10px rgba(37, 99, 235, .18), 0 6px 18px rgba(37, 99, 235, .55); } }
+.mp-car { display: flex; align-items: center; justify-content: center; }
+.mp-car-arrow { width: 18px; height: 18px; transition: transform .6s ease; }
+.mp-seen { margin-top: 4px; font-size: 12px; color: #f59e0b; }
 .mp-road { filter: drop-shadow(0 0 6px rgba(37, 99, 235, .55)); }
 @media (prefers-reduced-motion: reduce) { .mp-dot, .mp-car { animation: none; } }
 

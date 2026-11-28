@@ -176,12 +176,16 @@ class UserStore:
             con.close()
         return True
 
-    def set_location(self, user_id: str, lat: float, lng: float) -> None:
-        """📍 Only the latest position is kept — never a history of where a driver has been."""
+    def set_location(self, user_id: str, lat: float, lng: float, at: float | None = None) -> None:
+        """📍 Only the latest position is kept — never a history of where a driver has been.
+        `at` is when the phone measured it (offline batches arrive late); an older fix
+        never overwrites a newer one."""
+        at = at or time.time()
         con = self._connect()
         try:
-            con.execute("UPDATE users SET lat = ?, lng = ?, located_at = ? WHERE id = ?",
-                        (lat, lng, time.time(), user_id))
+            con.execute("UPDATE users SET lat = ?, lng = ?, located_at = ? "
+                        "WHERE id = ? AND (located_at IS NULL OR located_at <= ?)",
+                        (lat, lng, at, user_id, at))
             con.commit()
         finally:
             con.close()

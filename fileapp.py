@@ -592,6 +592,7 @@ def customer_order_view(order) -> dict:
     return {"id": order.id, "name": order.customer_name, "note": public_note(order),
             "status": order.status.value, "created_at": order.created_at,
             "lat": order.lat, "lng": order.lng, "price": order.price, "items": _order_items(order),
+            "has_trail": order.status == OrderStatus.DELIVERED and bool(order.trail),
             "track_url": f"/track/{order.id}?k={track_key(order.id)}"}
 
 
@@ -602,6 +603,23 @@ def my_orders_api():
         return jsonify({"ok": False, "error": "customers only"}), 403
     orders = [store.get(i) for i in users.customer_order_ids(session["uid"])]
     return jsonify({"ok": True, "orders": [customer_order_view(o) for o in orders if o]})
+
+
+@app.route("/api/me/orders/<order_id>/trail")
+@login_required
+def my_order_trail(order_id):
+    """The path the driver took for one of MY delivered orders. Any other order: the same 404."""
+    if current_role() != "customer":
+        return jsonify({"ok": False, "error": "customers only"}), 403
+    o = store.get(order_id) if order_id in users.customer_order_ids(session["uid"]) else None
+    if not o or o.status != OrderStatus.DELIVERED:
+        return jsonify({"ok": False, "error": "order not found"}), 404
+    try:
+        trail = json.loads(o.trail) if o.trail else []
+    except ValueError:
+        trail = []
+    return jsonify({"ok": True, "id": o.id, "lat": o.lat, "lng": o.lng,
+                    "delivered_at": o.delivered_at, "trail": trail})
 
 
 @app.route("/api/me/claim", methods=["POST"])
@@ -1198,8 +1216,7 @@ def deliver_order(order_id):
             return bad_request("order is not open")
         if order.driver_id is None and session.get("uid"):
             order.driver_id = session["uid"]      # a pool order belongs to whoever delivers it
-        order.status = OrderStatus.DELIVERED
-        order.delivered_at = time.time()
+        _mark_delivered(order)
         store.save()
         _learn_place(order)
         print(f"✅ Delivered: {order.customer_name}", flush=True)
@@ -1466,7 +1483,7 @@ def run_owner_action(a: dict) -> tuple[bool, str]:
         elif kind == "deliver":
             if order.status != OrderStatus.PENDING:
                 return False, "order is not open"
-            order.status, order.delivered_at = OrderStatus.DELIVERED, time.time()
+            _mark_delivered(order)
         elif kind == "paid":
             if a.get("method") not in PAY_METHODS:
                 return False, "unknown payment method"
@@ -1833,29 +1850,69 @@ def logout_all():
     print(f"🚪 Logged everyone out (session version {new})", flush=True)
     return jsonify({"ok": True})
 
+def _clean_gps_point(p, now):
+    """(lat, lng, at) for one batch point, or None when it is unusable.
+    ts is epoch milliseconds (what the phone's GPS gives); accuracy is optional, in metres."""
+    if not isinstance(p, dict):
+        return None
+    try:
+        lat, lng, at = float(p.get("lat")), float(p.get("lng")), float(p.get("ts")) / 1000
+        acc = float(p["accuracy"]) if p.get("accuracy") is not None else 0.0
+    except (TypeError, ValueError):
+        return None
+    if not (-90 <= lat <= 90 and -180 <= lng <= 180 and 0 <= acc <= 10000):   # also rejects nan
+        return None
+    if not (now - GPS_MAX_AGE_S <= at <= now + GPS_CLOCK_SKEW_S):
+        return None                              # too old, or in the future
+    return lat, lng, min(at, now)                # a drifting clock never stamps "later than now"
+
+
+GPS_MAX_POINTS = 100
+GPS_MAX_AGE_S = 600          # points older than 10 minutes are dropped
+GPS_CLOCK_SKEW_S = 30        # phone clocks drift a little: "the future" starts 30 s ahead
+
+
 @app.route("/api/driver/location", methods=["POST"])
 @login_required
 def update_driver_location():
-    """The driver's phone sends its GPS position; routes start from here."""
-    body = request.get_json(silent=True) or {}
-    try:
-        lat = float(body.get("lat"))
-        lng = float(body.get("lng"))
-    except (TypeError, ValueError):
-        return bad_request("lat and lng must be numbers")
-    if not (-90 <= lat <= 90 and -180 <= lng <= 180):
-        return bad_request("lat/lng out of range")
+    """The driver's phone sends its GPS position; routes start from here.
+    Two formats: the old single point {lat, lng}, or a batch {points: [{lat, lng, accuracy, ts}]}
+    (also a bare list) from the offline queue. Bad batch points are dropped and counted, so one
+    stale point never blocks the rest; the newest good point becomes the driver position."""
+    body = request.get_json(silent=True)
+    points = body if isinstance(body, list) else (body or {}).get("points") if isinstance(body, dict) else None
+    rejected = 0
+    if points is not None:
+        if not isinstance(points, list) or not 1 <= len(points) <= GPS_MAX_POINTS:
+            return bad_request(f"send between 1 and {GPS_MAX_POINTS} points")
+        now = time.time()
+        good = sorted((c for c in (_clean_gps_point(p, now) for p in points) if c), key=lambda c: c[2])
+        rejected = len(points) - len(good)
+        if not good:
+            return bad_request("no valid points")
+        lat, lng, at = good[-1]
+    else:
+        body = body if isinstance(body, dict) else {}
+        try:
+            lat = float(body.get("lat"))
+            lng = float(body.get("lng"))
+        except (TypeError, ValueError):
+            return bad_request("lat and lng must be numbers")
+        if not (-90 <= lat <= 90 and -180 <= lng <= 180):
+            return bad_request("lat/lng out of range")
+        good, at = [(lat, lng, None)], None
     uid = session.get("uid")
     if uid:
-        users.set_location(uid, lat, lng)        # 📍 this driver's own position
-        _remember_trail(uid, lat, lng)
+        users.set_location(uid, lat, lng, at)    # 📍 this driver's own position (newest point)
+        for p_lat, p_lng, p_at in good:          # every good point goes to the trail
+            _remember_trail(uid, p_lat, p_lng, p_at)
     else:
         session["here"] = [lat, lng]             # this browser's start point (survives restarts)
         if current_role() == "owner":
             driver.lat, driver.lng = lat, lng    # default start for drivers without GPS
             _remember_trail("default", lat, lng)
         _move_demo_near(lat, lng)
-    return jsonify({"ok": True})
+    return jsonify({"ok": True, "accepted": len(good), "rejected": rejected})
 
 
 @app.route("/api/driver/mark-seen", methods=["POST"])
@@ -2504,6 +2561,8 @@ def late_now(orders=None, now=None) -> list:
         user = users.get(uid) if uid else None
         # Orders without a promise still ride along: they push the others' ETAs back.
         for o in optimize_route(driver_for(uid), mine, geo, start_time=now):
+            if o.sequence != 1:
+                _NOT_NEXT_AT[o.id] = now         # trail safety: this order is not being driven to
             if o.promised_by and o.eta_epoch and o.eta_epoch > o.promised_by:
                 out.append({"id": o.id, "customer": o.customer_name,
                             "driver": user["name"] if user else None,
@@ -2653,28 +2712,79 @@ from collections import deque  # noqa: E402
 
 TRAIL_KEEP_S = 1800        # trail = the last 30 minutes of driving at most
 TRAIL_HIDE_KM = 0.25       # skip the start of the trail: it sits at the previous customer's door
+TRAIL_MAX_POINTS = 2000    # per driver in memory: 30 min at one point per second
+TRAIL_SAVE_MAX = 300       # points kept with a delivered order
+# order id -> last time this order was seen NOT being its driver's next stop (customer polls and the
+# minute GPS watch both record it). ponytail: in memory, like _TRAILS; a restart only shortens trails.
+_NOT_NEXT_AT = {}
 _TRAILS = {}               # driver id (or "default") -> deque of (time, lat, lng)
 _ROAD_LINES = OrderedDict()
 
 
-def _remember_trail(key, lat, lng) -> None:
-    q = _TRAILS.setdefault(key, deque(maxlen=400))
+def _remember_trail(key, lat, lng, at=None) -> None:
+    q = _TRAILS.setdefault(key, deque(maxlen=TRAIL_MAX_POINTS))
+    at = at or time.time()
+    if q and at < q[-1][0]:
+        return                                   # older than the trail's end: would draw a zigzag
     if not q or abs(q[-1][1] - lat) > 1e-5 or abs(q[-1][2] - lng) > 1e-5:
-        q.append((time.time(), lat, lng))
+        q.append((at, lat, lng))
 
 
-def _trail_for(driver_id, now) -> list:
-    """Where this driver passed since their last delivery, without the previous customer's door."""
+def _previous_door(order, now):
+    """(lat, lng) of the driver's previous delivery (the last 30 min), or None. Never shown:
+    the driver marker and the trail stay hidden near it, so it never reveals that address."""
+    done = [o for o in store.all() if o.driver_id == order.driver_id and o.id != order.id
+            and o.status == OrderStatus.DELIVERED and (o.delivered_at or 0) >= now - TRAIL_KEEP_S]
+    last = max(done, key=lambda o: o.delivered_at, default=None)
+    return (last.lat, last.lng) if last else None
+
+
+def _near(a, b) -> bool:
     from geo import haversine_km
+    return bool(a and b) and haversine_km(a[0], a[1], b[0], b[1]) < TRAIL_HIDE_KM
+
+
+def _trail_start(order) -> float:
+    """When this order's own trail begins: the driver's previous delivery, the order's creation,
+    or the last moment it was seen NOT being next, whichever is latest. So the trail never
+    contains the drive toward another customer's door."""
     last_done = max((o.delivered_at or 0 for o in store.all()
-                     if o.driver_id == driver_id and o.status == OrderStatus.DELIVERED), default=0)
-    since = max(last_done, now - TRAIL_KEEP_S)
-    pts = [(p[1], p[2]) for p in _TRAILS.get(driver_id or "default", ()) if p[0] >= since]
-    if not pts:
-        return []
-    start = pts[0]
-    pts = [p for p in pts if haversine_km(start[0], start[1], p[0], p[1]) >= TRAIL_HIDE_KM]
+                     if o.driver_id == order.driver_id and o.id != order.id
+                     and o.status == OrderStatus.DELIVERED), default=0)
+    return max(last_done, order.created_at or 0, _NOT_NEXT_AT.get(order.id, 0))
+
+
+def _order_trail(order, until) -> list:
+    """The assigned driver's path for THIS order only, without the previous customer's door."""
+    from geo import haversine_km
+    if not order.driver_id:
+        return []                                # pool order: nobody is driving to it yet
+    since = max(_trail_start(order), until - TRAIL_KEEP_S)
+    door = _previous_door(order, until)
+    pts = [(p[1], p[2]) for p in _TRAILS.get(order.driver_id, ())
+           if since <= p[0] <= until and not _near(door, (p[1], p[2]))]
+    if pts and not door:                         # previous door unknown: hide around where it starts
+        start = pts[0]
+        pts = [p for p in pts if haversine_km(start[0], start[1], p[0], p[1]) >= TRAIL_HIDE_KM]
     return [list(p) for p in pts]
+
+
+def _simplify(pts: list, n: int = TRAIL_SAVE_MAX) -> list:
+    """At most n points, first and last kept.
+    ponytail: even stride, not Douglas-Peucker; switch if saved trails cut corners visibly."""
+    if len(pts) <= n:
+        return pts
+    step = (len(pts) - 1) / (n - 1)
+    return [pts[round(i * step)] for i in range(n)]
+
+
+def _mark_delivered(order) -> None:
+    """Every delivery goes through here: status, time, and this order's own trail saved with it."""
+    now = time.time()
+    trail = _simplify(_order_trail(order, now))
+    order.status, order.delivered_at = OrderStatus.DELIVERED, now
+    order.trail = json.dumps([[round(a, 6), round(b, 6)] for a, b in trail]) if trail else ""
+    _NOT_NEXT_AT.pop(order.id, None)
 
 
 def _road_line(a, b) -> list:
@@ -2712,20 +2822,33 @@ def my_live():
         item = {"id": o.id, "status": o.status.value, "lat": o.lat, "lng": o.lng, "price": o.price,
                 "note": public_note(o), "track_url": f"/track/{o.id}?k={track_key(o.id)}"}
         if o.status == OrderStatus.PENDING:
-            d = driver_for(o.driver_id)
             same = [x for x in store.all() if x.driver_id == o.driver_id]
-            me = next((x for x in optimize_route(d, same, geo, start_time=now) if x.id == o.id), None)
-            is_next = bool(me and me.sequence == 1)
+            me = next((x for x in optimize_route(driver_for(o.driver_id), same, geo, start_time=now)
+                       if x.id == o.id), None)
+            # 🛡️ The driver, their road and their trail only for an assigned order that is the
+            # driver's next stop. Before that: how many stops, never where the driver is.
+            # A demo visitor's unassigned demo order is driven by the demo driver (the shop's
+            # default point, not a person), so the demo still shows a road at once.
+            demo = o.driver_id is None and (o.note or "").startswith(DEMO_TAG)
+            is_next = bool(me and me.sequence == 1 and (o.driver_id or demo))
+            if not is_next:
+                _NOT_NEXT_AT[o.id] = now
+            u = users.get(o.driver_id) if is_next and o.driver_id else None
+            drv = ([u["lat"], u["lng"]] if u and u.get("lat") is not None
+                   else [driver.lat, driver.lng] if is_next and demo else None)
+            if drv and o.driver_id and _near(_previous_door(o, now), drv):
+                drv = None                       # still at the previous customer's door: not shown
             item.update({
                 "eta": fmt(me.eta_epoch) if me else "--",
                 "eta_epoch": me.eta_epoch if me else None,
                 "stops_before": (me.sequence - 1) if me else None,
                 "promise": fmt(o.promised_by) if o.promised_by else None,
                 "arrived": driver_has_arrived(o, me),
-                "driver": [d.lat, d.lng],
                 "next": is_next,
-                "road": _road_line((d.lat, d.lng), (o.lat, o.lng)) if is_next else [],
-                "trail": _trail_for(o.driver_id, now) if is_next else [],
+                "driver": drv,
+                "driver_age_s": round(now - (u.get("located_at") or 0)) if u and drv else None,
+                "road": _road_line(tuple(drv), (o.lat, o.lng)) if drv else [],
+                "trail": _order_trail(o, now) if drv else [],
             })
         items.append(item)
     return jsonify({"ok": True, "orders": items})

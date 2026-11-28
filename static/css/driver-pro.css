@@ -75,3 +75,12 @@
 .dp-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 @media (min-width: 900px) { .dp-toast { bottom: 30px; } }
 @media (prefers-reduced-motion: reduce) { .dp-arrived, .dp-pin.next { animation: none; } }
+
+/* GPS health chip and the "permission denied" banner */
+.dp-health { pointer-events: none; }
+.dp-health::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; background: currentColor; }
+.dp-health.good { color: #16a34a; }
+.dp-health.weak { color: #d97706; }
+.dp-health.lost { color: #dc2626; }
+.dp-denied { background: #dc2626; }
+.dp-health[hidden] { display: none; }

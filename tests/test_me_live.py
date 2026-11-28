@@ -1,6 +1,6 @@
 # Customer live view: the driver coming, the road only when they are next, nothing about others.
 import fileapp
-from conftest import login, login_driver
+from conftest import login, login_driver  # noqa: F401
 from models import Order
 
 PW = "Str0ng!Pass2026"
@@ -9,15 +9,15 @@ PW = "Str0ng!Pass2026"
 def setup(client, monkeypatch, someone_first=False):
     monkeypatch.setattr(fileapp, "_road_line", lambda a, b: [list(a), list(b)])
     fileapp._TRAILS.clear()
-    login_driver(client)
+    phone = fileapp.app.test_client()                   # the driver's phone
+    login_driver(phone)
     uid = fileapp.users.by_phone("13900139000")["id"]
-    client.post("/api/driver/location", json={"lat": 30.2400, "lng": 119.7200})
-    client.post("/api/driver/location", json={"lat": 30.2450, "lng": 119.7200})
-    client.post("/logout")
     if someone_first:
         fileapp.store.add(Order(customer_name="Other", lat=30.2470, lng=119.7200, driver_id=uid,
                                 note="Secret street 9"))
     mine = fileapp.store.add(Order(customer_name="Me", lat=30.2600, lng=119.7200, driver_id=uid))
+    phone.post("/api/driver/location", json={"lat": 30.2400, "lng": 119.7200})
+    phone.post("/api/driver/location", json={"lat": 30.2450, "lng": 119.7200})
     client.post("/signup", data={"role": "customer", "phone": "13900000021", "name": "Kehu", "password": PW})
     client.post("/login", data={"phone": "13900000021", "password": PW})
     fileapp.users.link_order(fileapp.users.by_phone("13900000021")["id"], mine.id)

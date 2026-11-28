@@ -24,6 +24,7 @@
   <header class="mp-top">
     <div class="mp-brand"><img src="/static/logo.svg?v={{ asset_v }}" alt=""/><span>智送管家</span></div>
     <div class="mp-actions">
+      <span id="gps-health" class="mp-chip dp-health" role="status" hidden></span>
       <button id="gps-btn" class="mp-chip dp-gps" type="button"></button>
       <button id="lang" class="mp-chip" type="button"></button>
       {% if role in ("owner", "viewer") %}
@@ -42,6 +43,7 @@
 
   <section class="mp-sheet">
     <div class="mp-grip"></div>
+    <div id="gps-denied" class="dp-banner dp-denied" role="alert" hidden></div>
     <div id="new-banner" class="dp-banner" hidden></div>
     <div class="dp-day">
       <div><b id="d-done">-</b><span id="l-done"></span></div>
@@ -57,6 +59,7 @@
   <div class="dp-toast" id="toast"></div>
 
   <script src="/static/vendor/leaflet/leaflet.js?v={{ asset_v }}"></script>
+  <script src="/static/driver-gps.js?v={{ asset_v }}"></script>
   <script>
     let lang = 'zh';
     try { lang = localStorage.getItem('lang') || (navigator.language.startsWith('zh') ? 'zh' : 'en'); } catch (e) {}
@@ -66,6 +69,9 @@
             great: 'Great job!', upNext: 'Up next', newOrders: n => n === 1 ? '1 new order' : `${n} new orders`,
             gpsOn: 'GPS on', gpsOff: 'Start GPS', gpsHttps: 'GPS needs a secure (HTTPS) connection',
             gpsFail: 'Could not get your location', sent: a => `Location sent ±${a} m · ${new Date().toLocaleTimeString()}`,
+            queued: n => `Offline · ${n} points waiting to send`,
+            gpsDenied: 'Location permission is off. Allow location for this site in your phone settings, then tap Start GPS.',
+            health: { good: 'GPS good', weak: 'GPS weak', lost: 'GPS lost' },
             done: 'Delivered', left: 'Left', km: 'km', cash: 'Cash', collect: 'Collect', paid: 'Paid',
             payFail: 'Could not save the payment', deliveredToast: n => `${n} delivered`,
             photoOk: n => `${n} delivered with photo`, photoFail: 'Delivered, but the photo failed to upload',
@@ -76,6 +82,9 @@
             great: '辛苦啦！', upNext: '接下来', newOrders: n => `${n} 个新订单`,
             gpsOn: '定位已开', gpsOff: '开启定位', gpsHttps: '定位需要 HTTPS 安全连接',
             gpsFail: '获取位置失败', sent: a => `位置已发送 ±${a} 米 · ${new Date().toLocaleTimeString()}`,
+            queued: n => `离线 · ${n} 个位置待发送`,
+            gpsDenied: '定位权限已关闭。请在手机设置里允许本网站使用位置，然后点“开启定位”。',
+            health: { good: '定位良好', weak: '定位信号弱', lost: '定位丢失' },
             done: '已送', left: '剩余', km: '公里', cash: '现金', collect: '收款', paid: '已收',
             payFail: '收款记录失败', deliveredToast: n => `${n} 已送达`,
             photoOk: n => `${n} 已送达并上传照片`, photoFail: '已送达，照片上传失败',
@@ -224,6 +233,7 @@
       $('d-left').textContent = left;
       $('d-km').textContent = data.summary.total_km;
       $('bar').style.width = total ? `${Math.round(done / total * 100)}%` : '0%';
+      keepAwake(left > 0);
       const nc = data.summary.new_count || 0;
       $('new-banner').hidden = !nc;
       $('new-banner').textContent = nc ? T.newOrders(nc) : '';
@@ -320,28 +330,97 @@
       dLng = (dLng * 180) / (a / sm * Math.cos(rad) * PI);
       return [lat + dLat, lng + dLng];
     }
-    let watchId = null, lastSent = 0;
+    // GPS pipeline (logic in /static/driver-gps.js): drop bad fixes → Kalman smoothing →
+    // record every 5 s / 15 m while moving, 30 s when stopped → offline queue → batches.
+    const G = window.DriverGPS;
+    let storage = null;
+    try { storage = window.localStorage; } catch (e) {}
+    const queue = G.Queue(storage, async points => {
+      const res = await fetch('/api/driver/location', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                                        body: JSON.stringify({ points }) });
+      if (res.status === 401) location.href = '/login';
+      return res.status;
+    });
+    let watchId = null, kf = G.Kalman(), lastGood = null, lastSent = null, lastFix = null, jumps = 0;
     const gpsStatus = t => { $('gps-status').textContent = t; };
-    $('gps-btn').onclick = () => {
-      const btn = $('gps-btn');
-      if (watchId !== null) {
-        navigator.geolocation.clearWatch(watchId); watchId = null;
-        btn.classList.remove('on'); btn.textContent = T.gpsOff; gpsStatus('');
-        return;
+
+    async function flush() {
+      let moved = false;
+      while (await queue.flush()) moved = true;          // batch after batch until empty or failing
+      if (moved && lastSent) { gpsStatus(T.sent(Math.round(lastSent.acc))); load(); }
+      else if (queue.size && !queue.busy) gpsStatus(T.queued(queue.size));
+    }
+    window.addEventListener('online', flush);
+    setInterval(flush, 15000);                           // retry whatever is still queued
+
+    function showHealth() {
+      const chip = $('gps-health');
+      chip.hidden = watchId === null;
+      if (chip.hidden) return;
+      const h = G.health(lastFix, Date.now());
+      chip.className = `mp-chip dp-health ${h}`;
+      chip.textContent = T.health[h];
+    }
+    setInterval(showHealth, 5000);
+
+    function stopGps() {
+      if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+      watchId = null;
+      $('gps-btn').classList.remove('on'); $('gps-btn').textContent = T.gpsOff;
+      showHealth();
+    }
+    function onFix(pos) {
+      $('gps-denied').hidden = true;
+      const [lat, lng] = wgs2gcj(pos.coords.latitude, pos.coords.longitude);
+      const fix = { lat, lng, acc: pos.coords.accuracy, ts: pos.timestamp || Date.now() };
+      lastFix = { at: Date.now(), acc: fix.acc };
+      showHealth();
+      if (lastGood && fix.ts <= lastGood.ts) return;      // the same fix delivered twice
+      if (!G.plausible(lastGood, fix)) {
+        if (!(fix.acc <= G.C.MAX_ACC_M) || ++jumps < G.C.RESET_AFTER) return;
+        kf.reset();                                       // 3 "jumps" in a row: our old position was wrong
       }
+      jumps = 0;
+      lastGood = fix;
+      const pt = kf.update(fix);
+      movePuck([pt.lat, pt.lng]);                         // the puck follows the smoothed position at once
+      if (G.due(lastSent, pt)) { lastSent = pt; queue.push(pt); flush(); }
+    }
+    function onGpsError(err) {
+      if (err.code === 1) {                               // PERMISSION_DENIED
+        stopGps();
+        $('gps-denied').textContent = T.gpsDenied;
+        $('gps-denied').hidden = false;
+      } else gpsStatus(T.gpsFail);
+    }
+    $('gps-btn').onclick = () => {
+      if (watchId !== null) { stopGps(); gpsStatus(''); return; }
       if (!navigator.geolocation || !window.isSecureContext) { gpsStatus(T.gpsHttps); return; }
-      btn.classList.add('on'); btn.textContent = T.gpsOn;
-      watchId = navigator.geolocation.watchPosition(async pos => {
-        const [lat, lng] = wgs2gcj(pos.coords.latitude, pos.coords.longitude);
-        movePuck([lat, lng]);                                   // the puck follows you at once
-        if (Date.now() - lastSent < 15000) return;               // the server hears every 15 s
-        lastSent = Date.now();
-        await api('/api/driver/location', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-                                            body: JSON.stringify({ lat, lng }) });
-        gpsStatus(T.sent(Math.round(pos.coords.accuracy)));
-        load();
-      }, () => gpsStatus(T.gpsFail), { enableHighAccuracy: true, maximumAge: 10000 });
+      $('gps-btn').classList.add('on'); $('gps-btn').textContent = T.gpsOn;
+      kf = G.Kalman(); lastGood = null; jumps = 0;
+      watchId = navigator.geolocation.watchPosition(onFix, onGpsError,
+                                                    { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 });
+      showHealth();
     };
+
+    // ---------- Screen Wake Lock: the screen stays on while there are stops left ----------
+    let wake = null, wantWake = false, waking = false;
+    async function keepAwake(on) {
+      wantWake = on;
+      if (!('wakeLock' in navigator) || waking) return;
+      try {
+        if (on && !wake && document.visibilityState === 'visible') {
+          waking = true;
+          wake = await navigator.wakeLock.request('screen');
+          wake.addEventListener('release', () => { wake = null; });
+        } else if (!on && wake) {
+          await wake.release();
+          wake = null;
+        }
+      } catch (e) { wake = null; } finally { waking = false; }
+    }
+    // The browser drops the lock whenever the page is hidden: take it again on return.
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') keepAwake(wantWake); });
 
     load(); loadDay();
     setInterval(() => { if (!document.hidden) load(); }, 10000);

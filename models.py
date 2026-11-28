@@ -38,6 +38,7 @@ class Order:
     pay_method: str = ""              # "cash" / "wechat" / "alipay" once paid
     paid_at: Optional[float] = None   # when the money was received (None = unpaid)
     items: str = ""                   # JSON list of {id, name, unit, price, qty} (customer orders)
+    trail: str = ""                   # JSON [[lat, lng], ...]: the driver's path for THIS order, saved on delivery
     created_at: float = field(default_factory=time.time)
     id: str = field(default_factory=lambda: uuid.uuid4().hex[:8])
 
