@@ -128,7 +128,6 @@ def proof_response(name: str):
     return resp
 
 
-
 # 👀 In demo (viewer) sessions, every page gets a banner, controls a visitor can't
 # use are hidden, and writes outside the demo sandbox are stopped in the browser
 # with a clear message, instead of buttons that silently do nothing.
@@ -2594,37 +2593,6 @@ if os.environ.get("GPS_WATCH", "1") == "1" and "pytest" not in _sys.modules:
     _threading.Thread(target=_gps_watch_loop, daemon=True, name="gps-watch").start()
 
 
-# ---------- Installable app (PWA): manifest and service worker ----------
-@app.route("/manifest.webmanifest")
-def web_manifest():
-    """What the phone needs to install the app: name, colours, icons, start page."""
-    data = {
-        "name": "智送管家", "short_name": "智送管家",
-        "description": "Smart delivery: AI orders, routes and live tracking",
-        "start_url": "/", "scope": "/", "display": "standalone", "lang": "zh-CN",
-        "background_color": "#0b1220", "theme_color": "#1f5fd6",
-        "icons": [
-            {"src": "/static/icons/icon-192.png", "sizes": "192x192", "type": "image/png"},
-            {"src": "/static/icons/icon-512.png", "sizes": "512x512", "type": "image/png"},
-            {"src": "/static/icons/maskable-512.png", "sizes": "512x512", "type": "image/png",
-             "purpose": "maskable"},
-        ],
-    }
-    resp = app.response_class(json.dumps(data, ensure_ascii=False), mimetype="application/manifest+json")
-    resp.headers["Cache-Control"] = "no-cache"
-    return resp
-
-
-@app.route("/sw.js")
-def service_worker():
-    """Served from the root so it can look after every page of the app."""
-    resp = send_from_directory(os.path.join(HERE, "static"), "sw.js", max_age=0)
-    resp.headers["Content-Type"] = "application/javascript; charset=utf-8"
-    resp.headers["Service-Worker-Allowed"] = "/"
-    resp.headers["Cache-Control"] = "no-cache"
-    return resp
-
-
 # ---------- Separate demos: the driver's side and the customer's side ----------
 def _open_demo_session() -> None:
     """A fresh demo visitor (viewer): sandboxed, only ever touches demo orders."""
@@ -2857,6 +2825,14 @@ def my_live():
             })
         items.append(item)
     return jsonify({"ok": True, "orders": items})
+
+
+# Route modules do `import fileapp as core`. When this file runs as a script (__main__),
+# point that import at this module instead of loading a second copy of the app.
+import sys as _sys_mod  # noqa: E402
+_sys_mod.modules.setdefault("fileapp", _sys_mod.modules[__name__])
+
+from routes import pwa  # noqa: E402,F401
 
 
 if __name__ == "__main__":

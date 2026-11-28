@@ -28,7 +28,7 @@ else
     || { echo "❌ Vulnerable packages — NOT deploying (details: pip-audit -r /tmp/delivery-server-req.txt --desc)"; exit 1; }
 fi
 echo "📤 2/4 Uploading files..."
-scp -q -r templates static "$SERVER:$REMOTE_DIR/"
+scp -q -r templates static routes "$SERVER:$REMOTE_DIR/"
 rsync -a --delete static/ "$SERVER:/srv/delivery-static/"   # served by nginx directly
 scp -q "${FILES[@]}" "$SERVER:$REMOTE_DIR/"
 
