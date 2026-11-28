@@ -59,6 +59,10 @@ def _visitor_ip() -> str:
 from flask_compress import Compress  # noqa: E402
 Compress(app)   # ⚡ gzip/brotli: smaller pages on slow networks
 
+import alerts as _alerts_mod  # noqa: E402
+import error_alerts  # noqa: E402
+error_alerts.install(app, _alerts_mod._telegram)   # 🚨 unhandled errors → owner on Telegram
+
 DEV_MODE = os.environ.get("DEV_MODE", "1") == "1"   # set DEV_MODE=0 to hide demo tools   # demo / simulate tools — only on my Mac
 
 
